@@ -1,0 +1,1343 @@
+[
+  {
+    "id": 33223,
+    "symbol": "LAB",
+    "name": "LAB",
+    "contract": "0x7ec43Cf65F1663F820427C62A5780b8f2E25593A",
+    "market_cap": 3113115547.6899257,
+    "volume_24h": 21360433.44182642,
+    "price": 10.04385270370423
+  },
+  {
+    "id": 38837,
+    "symbol": "BEAT",
+    "name": "Audiera",
+    "contract": "0xcf3232B85b43BCa90E51D38cc06Cc8bB8C8A3E36",
+    "market_cap": 2004463719.3266954,
+    "volume_24h": 120603253.91504934,
+    "price": 6.959540734794477
+  },
+  {
+    "id": 36341,
+    "symbol": "ASTER",
+    "name": "Aster",
+    "contract": "0x000Ae314E2A2172a039B26378814C252734f556A",
+    "market_cap": 1705701597.5168464,
+    "volume_24h": 56536991.60868306,
+    "price": 0.6322614025979901
+  },
+  {
+    "id": 39120,
+    "symbol": "U",
+    "name": "United Stables",
+    "contract": "0xcE24439F2D9C6a2289F741120FE202248B666666",
+    "market_cap": 999798292.0235089,
+    "volume_24h": 85496571.26171109,
+    "price": 0.9998396023863623
+  },
+  {
+    "id": 38590,
+    "symbol": "\u5e01\u5b89\u4eba\u751f",
+    "name": "\u5e01\u5b89\u4eba\u751f",
+    "contract": "0x924fa68a0FC644485b8df8AbfA0A41C2e7744444",
+    "market_cap": 673321772.9205276,
+    "volume_24h": 7126038.13724527,
+    "price": 0.6733217729205276
+  },
+  {
+    "id": 39064,
+    "symbol": "NIGHT",
+    "name": "Midnight",
+    "contract": "0xfe930c2d63aed9b82fc4dbc801920dd2c1a3224f",
+    "market_cap": 537221199.6946008,
+    "volume_24h": 88781185.05961539,
+    "price": 0.032348303712274935
+  },
+  {
+    "id": 36300,
+    "symbol": "SKYAI",
+    "name": "SKYAI",
+    "contract": "0x92aa03137385F18539301349dcfC9EbC923fFb10",
+    "market_cap": 372223995.2403298,
+    "volume_24h": 40754600.38941813,
+    "price": 0.3722239952403298
+  },
+  {
+    "id": 33852,
+    "symbol": "DUCKY",
+    "name": "Ducky",
+    "contract": "0xaDB50D6a3f931E5b4A14D06A4A77fe71171A462f",
+    "market_cap": 267734899.24592146,
+    "volume_24h": 0,
+    "price": 0.0006460770769055198
+  },
+  {
+    "id": 36532,
+    "symbol": "B",
+    "name": "BUILDon",
+    "contract": "0x6bdcce4a559076e37755a78ce0c06214e59e4444",
+    "market_cap": 235521110.92122704,
+    "volume_24h": 6845898.4748479,
+    "price": 0.23552111092122704
+  },
+  {
+    "id": 7184,
+    "symbol": "KOGE",
+    "name": "48 Club Token",
+    "contract": "0xe6df05ce8c8301223373cf5b969afcb1498c5528",
+    "market_cap": 215963044.17449015,
+    "volume_24h": 97140.43712421,
+    "price": 63.73922202597484
+  },
+  {
+    "id": 37298,
+    "symbol": "VELVET",
+    "name": "Velvet",
+    "contract": "0x8b194370825E37b33373e74A41009161808C1488",
+    "market_cap": 214170285.25383008,
+    "volume_24h": 55356238.27521401,
+    "price": 0.5089916429569997
+  },
+  {
+    "id": 34261,
+    "symbol": "WFI",
+    "name": "WeFi",
+    "contract": "0x90c48855bb69f9d2c261efd0d8c7f35990f2dd6f",
+    "market_cap": 172648699.7382562,
+    "volume_24h": 1380818.64785113,
+    "price": 2.0444613792568274
+  },
+  {
+    "id": 5964,
+    "symbol": "TWT",
+    "name": "Trust Wallet Token",
+    "contract": "0x4b0f1812e5df2a09796481ff14017e6005508003",
+    "market_cap": 169353562.62126222,
+    "volume_24h": 9158407.53444061,
+    "price": 0.3939732925691826
+  },
+  {
+    "id": 39841,
+    "symbol": "GENIUS",
+    "name": "Genius Terminal",
+    "contract": "0x1F12B85aAC097E43Aa1555b2881E98a51090e9A6",
+    "market_cap": 148207661.37903807,
+    "volume_24h": 18286721.46287986,
+    "price": 0.441913534041212
+  },
+  {
+    "id": 30605,
+    "symbol": "ALE",
+    "name": "Ailey",
+    "contract": "0x9dCE13E71B11eb5Df66ca269bD657696587Fd4E2",
+    "market_cap": 125910951.16178675,
+    "volume_24h": 112818.33014371,
+    "price": 0.25879498954178265
+  },
+  {
+    "id": 36133,
+    "symbol": "HOME",
+    "name": "Defi App",
+    "contract": "0x4bfaa776991e85e5f8b1255461cbbd216cfc714f",
+    "market_cap": 122760003.8410471,
+    "volume_24h": 42526499.40352905,
+    "price": 0.03018753734515309
+  },
+  {
+    "id": 8119,
+    "symbol": "SFP",
+    "name": "SafePal",
+    "contract": "0xd41fdb03ba84762dd66a0af1a6c8540ff1ba5dfb",
+    "market_cap": 119947387.8834622,
+    "volume_24h": 1720004.28628307,
+    "price": 0.2398947757669244
+  },
+  {
+    "id": 35437,
+    "symbol": "USDF",
+    "name": "Aster USDF",
+    "contract": "0x5A110fC00474038f6c02E89C707D638602EA44B5",
+    "market_cap": 115365667.03143746,
+    "volume_24h": 51255.40253107,
+    "price": 0.9989994827030906
+  },
+  {
+    "id": 34958,
+    "symbol": "TAG",
+    "name": "Tagger",
+    "contract": "0x208bf3e7da9639f1eaefa2de78c23396b0682025",
+    "market_cap": 112306089.06162977,
+    "volume_24h": 3881930.90094157,
+    "price": 0.0010359903311665814
+  },
+  {
+    "id": 33280,
+    "symbol": "CHEEMS",
+    "name": "Cheems (cheems.pet)",
+    "contract": "0x0df0587216a4a1bb7d5082fdc491d93d2dd4b413",
+    "market_cap": 110441060.87537876,
+    "volume_24h": 2192726.72639017,
+    "price": 5.890345896768792e-07
+  },
+  {
+    "id": 3871,
+    "symbol": "AB",
+    "name": "AB",
+    "contract": "0x95034f653d5d161890836ad2b6b8cc49d14e029a",
+    "market_cap": 108003222.0801253,
+    "volume_24h": 1434595.66136555,
+    "price": 0.0010928882891150808
+  },
+  {
+    "id": 36044,
+    "symbol": "NXPC",
+    "name": "NEXPACE",
+    "contract": "0xf2b51cc1850fed939658317a22d73d3482767591",
+    "market_cap": 101526060.31033799,
+    "volume_24h": 12121487.63751344,
+    "price": 0.35624799379269945
+  },
+  {
+    "id": 36762,
+    "symbol": "DUSD",
+    "name": "StandX DUSD",
+    "contract": "0xaf44A1E76F56eE12ADBB7ba8acD3CbD474888122",
+    "market_cap": 100349348.1687644,
+    "volume_24h": 58140.40466216,
+    "price": 0.9989002331372636
+  },
+  {
+    "id": 10186,
+    "symbol": "SMILEK",
+    "name": "Smilek to the Bank",
+    "contract": "0x4f9d3AdbfAF4579518b1Ca7E06468A363897B997",
+    "market_cap": 97911204.2097784,
+    "volume_24h": 12.4365914,
+    "price": 4.998272046956423e-05
+  },
+  {
+    "id": 38489,
+    "symbol": "COAI",
+    "name": "ChainOpera AI",
+    "contract": "0x0A8D6C86e1bcE73fE4D0bD531e1a567306836EA5",
+    "market_cap": 92377670.28909267,
+    "volume_24h": 176145462.79018617,
+    "price": 0.4913703305042568
+  },
+  {
+    "id": 36542,
+    "symbol": "SOON",
+    "name": "SOON",
+    "contract": "0xb9E1Fd5A02D3A33b25a14d661414E6ED6954a721",
+    "market_cap": 90420905.09472968,
+    "volume_24h": 8210859.97051691,
+    "price": 0.17573799738686105
+  },
+  {
+    "id": 33249,
+    "symbol": "WIBE",
+    "name": "Wibegram",
+    "contract": "0x25d624E571d6d7B32729B11DdbbD96Fe89Af44E1",
+    "market_cap": 88318264.63368727,
+    "volume_24h": 196686.57585375,
+    "price": 4.332371250388865
+  },
+  {
+    "id": 4195,
+    "symbol": "FTT",
+    "name": "FTX Token",
+    "contract": "FTT-F11",
+    "market_cap": 87323832.12587875,
+    "volume_24h": 1874687.0920055,
+    "price": 0.2655066345270787
+  },
+  {
+    "id": 34118,
+    "symbol": "BANANAS31",
+    "name": "Banana For Scale",
+    "contract": "0x3d4f0513e8a29669b960f9dbca61861548a9a760",
+    "market_cap": 87248032.63115664,
+    "volume_24h": 19071534.67396482,
+    "price": 0.008724803263115664
+  },
+  {
+    "id": 23635,
+    "symbol": "FORM",
+    "name": "Four",
+    "contract": "0x5b73A93b4E5e4f1FD27D8b3F8C97D69908b5E284",
+    "market_cap": 86939943.95563307,
+    "volume_24h": 6990418.87515121,
+    "price": 0.22767059176812063
+  },
+  {
+    "id": 37387,
+    "symbol": "BAS",
+    "name": "BNB Attestation Service",
+    "contract": "0x0f0df6cb17ee5e883eddfef9153fc6036bdb4e37",
+    "market_cap": 84128290.71328123,
+    "volume_24h": 8535131.82377862,
+    "price": 0.03365131628531249
+  },
+  {
+    "id": 14721,
+    "symbol": "REAL",
+    "name": "RealLink",
+    "contract": "0x65e7a112dB1142EAE919201b1232f7aA488Ed83c",
+    "market_cap": 82998699.34106517,
+    "volume_24h": 6468930.60545433,
+    "price": 0.06040478698718987
+  },
+  {
+    "id": 38984,
+    "symbol": "GUA",
+    "name": "SUPERFORTUNE",
+    "contract": "0xa5c8e1513b6a08334b479fe4d71f1253259469be",
+    "market_cap": 78200513.17798898,
+    "volume_24h": 1243226.03916504,
+    "price": 0.6256041054239118
+  },
+  {
+    "id": 36576,
+    "symbol": "HUMA",
+    "name": "Huma Finance",
+    "contract": "0x92516e0DDf1dDBF7FAB1b79CaC26689fDC5ba8e6",
+    "market_cap": 76311598.08537422,
+    "volume_24h": 8299273.43298369,
+    "price": 0.023402407103021928
+  },
+  {
+    "id": 21330,
+    "symbol": "lisUSD",
+    "name": "lisUSD",
+    "contract": "0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5",
+    "market_cap": 75232857.68743949,
+    "volume_24h": 427.16484552,
+    "price": 0.998215387376627
+  },
+  {
+    "id": 39071,
+    "symbol": "CYS",
+    "name": "Cysic",
+    "contract": "0x0C69199C1562233640e0Db5Ce2c399A88eB507C7",
+    "market_cap": 74533253.28894433,
+    "volume_24h": 4554546.42085091,
+    "price": 0.4635152567720419
+  },
+  {
+    "id": 36804,
+    "symbol": "LUR",
+    "name": "Lumera Health",
+    "contract": "0xc66B6f38aE5053A109cfd8639E0Ee17EC69cf788",
+    "market_cap": 73127433.71113248,
+    "volume_24h": 590435.87220919,
+    "price": 4.820362094161762
+  },
+  {
+    "id": 35269,
+    "symbol": "MY",
+    "name": "MetYa",
+    "contract": "0xf0ebb572643336834d516c485ad31d3299999999",
+    "market_cap": 72179343.56626207,
+    "volume_24h": 245356.10951549,
+    "price": 0.07317130099297618
+  },
+  {
+    "id": 35766,
+    "symbol": "SIREN",
+    "name": "siren",
+    "contract": "0x997a58129890bbda032231a52ed1ddc845fc18e1",
+    "market_cap": 70085118.2701981,
+    "volume_24h": 184167281.24020007,
+    "price": 0.09664513558829922
+  },
+  {
+    "id": 29743,
+    "symbol": "BRETT",
+    "name": "Brett (Based)",
+    "contract": "0xa7440029eca41deabd8775ef1d6086b37d4df8d6",
+    "market_cap": 66824604.16666391,
+    "volume_24h": 17559280.57520228,
+    "price": 0.006682462057395834
+  },
+  {
+    "id": 36302,
+    "symbol": "NILA",
+    "name": "MindWaveDAO",
+    "contract": "0x00f8Da33734FeB9b946fEC2228C25072D2e2E41f",
+    "market_cap": 66316568.06628716,
+    "volume_24h": 247969.11856218,
+    "price": 0.07868916659394755
+  },
+  {
+    "id": 38841,
+    "symbol": "UAI",
+    "name": "UnifAI Network",
+    "contract": "0x3e5d4f8aee0d9b3082d5f6da5d6e225d17ba9ea0",
+    "market_cap": 65476639.87485345,
+    "volume_24h": 4677225.65422838,
+    "price": 0.27396083629645795
+  },
+  {
+    "id": 7959,
+    "symbol": "vBUSD",
+    "name": "Venus BUSD",
+    "contract": "0x95c78222B3D6e262426483D42CfA53685A67Ab9D",
+    "market_cap": 60125939.941264495,
+    "volume_24h": 0,
+    "price": 0.022312082090340146
+  },
+  {
+    "id": 7127,
+    "symbol": "VELO",
+    "name": "Velo",
+    "contract": "0xf486ad071f3bee968384d2e39e2d8af0fcf6fd46",
+    "market_cap": 60029684.626808226,
+    "volume_24h": 1619620.78226322,
+    "price": 0.0034177925324548
+  },
+  {
+    "id": 36410,
+    "symbol": "MYX",
+    "name": "MYX Finance",
+    "contract": "0xD82544bf0dfe8385eF8FA34D67e6e4940CC63e16",
+    "market_cap": 58944283.334786974,
+    "volume_24h": 22671723.00230698,
+    "price": 0.17855081754782437
+  },
+  {
+    "id": 27750,
+    "symbol": "TOSHI",
+    "name": "Toshi",
+    "contract": "0x6a2608Dabe09bc1128EEC7275B92DFB939D5Db3f",
+    "market_cap": 56075821.880978405,
+    "volume_24h": 9167640.03441613,
+    "price": 0.00013330141175925604
+  },
+  {
+    "id": 35637,
+    "symbol": "BDCA",
+    "name": "BitDCA",
+    "contract": "0x0c8382719ef242cae2247e4decb2891fbf699818",
+    "market_cap": 56022773.36128661,
+    "volume_24h": 208454.05090354,
+    "price": 0.6833925210290235
+  },
+  {
+    "id": 38889,
+    "symbol": "BSB",
+    "name": "Block Street",
+    "contract": "0x595deaad1eb5476ff1e649fdb7efc36f1e4679cc",
+    "market_cap": 54524377.174376845,
+    "volume_24h": 35400873.65851645,
+    "price": 0.24488828733158252
+  },
+  {
+    "id": 37448,
+    "symbol": "AIH",
+    "name": "AIHub",
+    "contract": "0xbf70a52aef7822047076749b9ba63c4597d4626f",
+    "market_cap": 50922734.30688857,
+    "volume_24h": 0,
+    "price": 43.5237045358022
+  },
+  {
+    "id": 7653,
+    "symbol": "ROSE",
+    "name": "Oasis",
+    "contract": "0xF00600eBC7633462BC4F9C61eA2cE99F5AAEBd4a",
+    "market_cap": 49290200.14500191,
+    "volume_24h": 2186174.27609302,
+    "price": 0.0063351144442770225
+  },
+  {
+    "id": 38309,
+    "symbol": "HOLO",
+    "name": "Holoworld AI",
+    "contract": "0x1a5D7E4c3A7F940B240b7357a4bFED30D17f9497",
+    "market_cap": 48365329.983089544,
+    "volume_24h": 9642609.35293276,
+    "price": 0.06659153527696063
+  },
+  {
+    "id": 36238,
+    "symbol": "XPIN",
+    "name": "XPIN Network",
+    "contract": "0xD955c9bA56Fb1AB30e34766e252A97ccCE3D31A6",
+    "market_cap": 47756499.0856217,
+    "volume_24h": 4745793.32325291,
+    "price": 0.0012808444177996655
+  },
+  {
+    "id": 36296,
+    "symbol": "BANK",
+    "name": "Lorenzo Protocol",
+    "contract": "0x3AeE7602b612de36088F3ffEd8c8f10E86EbF2bF",
+    "market_cap": 46232462.77974824,
+    "volume_24h": 6656658.44228355,
+    "price": 0.03940650248582189
+  },
+  {
+    "id": 4805,
+    "symbol": "VNDC",
+    "name": "VNDC",
+    "contract": "0xA276DC434A366C62ef010585b3885D0C85154389",
+    "market_cap": 45436167.57962489,
+    "volume_24h": 0,
+    "price": 3.216796372596952e-05
+  },
+  {
+    "id": 37166,
+    "symbol": "CROSS",
+    "name": "CROSS",
+    "contract": "0x6bf62ca91e397B5A7d1D6bCe97D9092065d7A510",
+    "market_cap": 40583619.79743364,
+    "volume_24h": 2771110.97041636,
+    "price": 0.09336537893492228
+  },
+  {
+    "id": 36195,
+    "symbol": "AGT",
+    "name": "Alaya Governance Token",
+    "contract": "0x5dBde81fcE337FF4bcaaEe4Ca3466C00aeCaE274",
+    "market_cap": 38221775.13427613,
+    "volume_24h": 22830547.34005669,
+    "price": 0.016577608073926473
+  },
+  {
+    "id": 37414,
+    "symbol": "ESPORTS",
+    "name": "Yooldo",
+    "contract": "0xF39e4b21c84e737Df08e2C3b32541d856f508E48",
+    "market_cap": 38018689.91102346,
+    "volume_24h": 31071024.86492731,
+    "price": 0.06453016043419348
+  },
+  {
+    "id": 4687,
+    "symbol": "BUSD",
+    "name": "BUSD",
+    "contract": "BUSD-BD1",
+    "market_cap": 37852823.93097114,
+    "volume_24h": 242774.51790107,
+    "price": 1.0002791228861678
+  },
+  {
+    "id": 32193,
+    "symbol": "ALEO",
+    "name": "Aleo",
+    "contract": "0x6CFfFa5bFD4277a04D83307fEedFe2D18D944DD2",
+    "market_cap": 37499425.33470802,
+    "volume_24h": 1401856.55803266,
+    "price": 0.031518553120307345
+  },
+  {
+    "id": 36770,
+    "symbol": "AIN",
+    "name": "Infinity Ground",
+    "contract": "0x9558a9254890B2A8B057a789F413631B9084f4a3",
+    "market_cap": 37285307.01943048,
+    "volume_24h": 3435870.80526596,
+    "price": 0.1220600697316987
+  },
+  {
+    "id": 30460,
+    "symbol": "BURN",
+    "name": "Burnedfi",
+    "contract": "0x19c018e13cff682e729cc7b5fb68c8a641bf98a4",
+    "market_cap": 36910999.9494858,
+    "volume_24h": 54880.92511401,
+    "price": 2.9950094074299063
+  },
+  {
+    "id": 39172,
+    "symbol": "VAM",
+    "name": "Vitalum",
+    "contract": "0x009A0FbF4928362d79077b4f38da9B5fB2CE64e2",
+    "market_cap": 36371907.567847006,
+    "volume_24h": 658096.99123879,
+    "price": 0.10706472551214775
+  },
+  {
+    "id": 37615,
+    "symbol": "GLIDR",
+    "name": "Glidr",
+    "contract": "0xc2b1ddb75046c4915c641cc0dc0d0f160ef82be5",
+    "market_cap": 35920210.75740444,
+    "volume_24h": 73295.3596583,
+    "price": 1.012929459899267
+  },
+  {
+    "id": 38554,
+    "symbol": "KGEN",
+    "name": "KGeN",
+    "contract": "0xf3d5b4c34ed623478cc5141861776e6cf7ae3a1e",
+    "market_cap": 35560737.60212255,
+    "volume_24h": 2680922.34495676,
+    "price": 0.17294209195496776
+  },
+  {
+    "id": 35268,
+    "symbol": "GPS",
+    "name": "GoPlus Security",
+    "contract": "0x9a4a67721573f2c9209dfff972c52be4e3f6642e",
+    "market_cap": 34510456.30895067,
+    "volume_24h": 4529340.31905549,
+    "price": 0.007472136890441859
+  },
+  {
+    "id": 39797,
+    "symbol": "PRL",
+    "name": "Perle",
+    "contract": "0xd20fB09A49a8e75Fef536A2dBc68222900287BAc",
+    "market_cap": 34129412.72393354,
+    "volume_24h": 95629437.29569274,
+    "price": 0.1950252155653345
+  },
+  {
+    "id": 39800,
+    "symbol": "OPG",
+    "name": "OpenGradient",
+    "contract": "0x5feCcD17C393CaF1001D18164236A37E731FCb9d",
+    "market_cap": 33646218.45492204,
+    "volume_24h": 44426753.97839075,
+    "price": 0.1770853602890634
+  },
+  {
+    "id": 37562,
+    "symbol": "AIO",
+    "name": "OLAXBT",
+    "contract": "0x81a7DA4074b8e0eD51beA40f9dCbDF4d9d4832b4",
+    "market_cap": 33235648.464430463,
+    "volume_24h": 4408132.54942865,
+    "price": 0.14434592166962198
+  },
+  {
+    "id": 37340,
+    "symbol": "C",
+    "name": "Chainbase",
+    "contract": "0xc32cc70741c3A8433dCbcB5adE071c299B55FfC8",
+    "market_cap": 32676869.905706737,
+    "volume_24h": 7075990.69867241,
+    "price": 0.09298296352429951
+  },
+  {
+    "id": 37614,
+    "symbol": "PM",
+    "name": "PumpMeme",
+    "contract": "0x652fcafea5a2da18e8947748b7849b72148b4543",
+    "market_cap": 32442440.92150994,
+    "volume_24h": 124378.72470672,
+    "price": 1.0135724105824726
+  },
+  {
+    "id": 36102,
+    "symbol": "PARTI",
+    "name": "Particle Network",
+    "contract": "0x59264f02D301281f3393e1385c0aEFd446Eb0F00",
+    "market_cap": 31723699.022902783,
+    "volume_24h": 19327733.75346339,
+    "price": 0.05886227302171522
+  },
+  {
+    "id": 36775,
+    "symbol": "IDOL",
+    "name": "MEET48",
+    "contract": "0x3B4de3c7855C03bB9F50ea252cD2c9FA1125Ab07",
+    "market_cap": 31414268.34816699,
+    "volume_24h": 4660903.03689636,
+    "price": 0.03002128091376815
+  },
+  {
+    "id": 36063,
+    "symbol": "BR",
+    "name": "Bedrock",
+    "contract": "0xff7d6a96ae471bbcd7713af9cb1feeb16cf56b41",
+    "market_cap": 31270696.925999578,
+    "volume_24h": 5873482.82418159,
+    "price": 0.11969644756363475
+  },
+  {
+    "id": 36552,
+    "symbol": "LUSD",
+    "name": "LUSD",
+    "contract": "0x5bb4d589467c25A5Ac8db930372dc5dA30C3410E",
+    "market_cap": 30756644.535547655,
+    "volume_24h": 37273.52735678,
+    "price": 0.9993444619674428
+  },
+  {
+    "id": 20700,
+    "symbol": "WKC",
+    "name": "Wiki Cat",
+    "contract": "0x6Ec90334d89dBdc89E08A133271be3d104128Edb",
+    "market_cap": 29872897.351366162,
+    "volume_24h": 217531.82049733,
+    "price": 5.5590167582460976e-08
+  },
+  {
+    "id": 36352,
+    "symbol": "B2",
+    "name": "BSquared Network",
+    "contract": "0x783c3f003f172c6Ac5AC700218a357d2D66Ee2a2",
+    "market_cap": 29167799.388402082,
+    "volume_24h": 32076261.3023662,
+    "price": 0.4330562730328428
+  },
+  {
+    "id": 39170,
+    "symbol": "COLLECT",
+    "name": "Collect on Fanable",
+    "contract": "0x4B3D30992f003c8167699735F5Ab2831B2A087D3",
+    "market_cap": 29015491.355076697,
+    "volume_24h": 3544340.03708587,
+    "price": 0.054032572355822525
+  },
+  {
+    "id": 38470,
+    "symbol": "GIGGLE",
+    "name": "Giggle Fund",
+    "contract": "0x20d6015660b3fe52e6690a889b5C51F69902cE0e",
+    "market_cap": 28029557.31852382,
+    "volume_24h": 15003949.95185591,
+    "price": 28.336931781683322
+  },
+  {
+    "id": 37743,
+    "symbol": "STAR",
+    "name": "Starpower",
+    "contract": "0x8fce7206e3043dd360f115afa956ee31b90b787c",
+    "market_cap": 27285255.66869825,
+    "volume_24h": 4800159.36717015,
+    "price": 0.14662465192013396
+  },
+  {
+    "id": 23081,
+    "symbol": "UNS",
+    "name": "UNS TOKEN",
+    "contract": "0xEcf99aB23C11ddc6520252105308C251001AEfBB",
+    "market_cap": 26370478.104766138,
+    "volume_24h": 1665.79161706,
+    "price": 0.24971050493035446
+  },
+  {
+    "id": 37016,
+    "symbol": "KLK",
+    "name": "Klickl Token",
+    "contract": "0x411049c6046be1be13ce80262fca723cccb67798",
+    "market_cap": 24433697.30148466,
+    "volume_24h": 444632.10648234,
+    "price": 0.24433697301484658
+  },
+  {
+    "id": 38634,
+    "symbol": "CLO",
+    "name": "Yei Finance",
+    "contract": "0x81D3A238b02827F62B9f390f947D36d4A5bf89D2",
+    "market_cap": 23899631.756011195,
+    "volume_24h": 15847249.27533909,
+    "price": 0.18512495550744537
+  },
+  {
+    "id": 24613,
+    "symbol": "EDU",
+    "name": "Open Campus",
+    "contract": "0xBdEAe1cA48894A1759A8374D63925f21f2Ee2639",
+    "market_cap": 23349318.957989585,
+    "volume_24h": 6212039.30282655,
+    "price": 0.030143008902428145
+  },
+  {
+    "id": 36319,
+    "symbol": "AIOT",
+    "name": "OKZOO",
+    "contract": "0x55ad16bd573b3365f43a9daeb0cc66a73821b4a5",
+    "market_cap": 23164293.661429185,
+    "volume_24h": 4541471.26702049,
+    "price": 0.0789916240082551
+  },
+  {
+    "id": 37430,
+    "symbol": "TA",
+    "name": "Trusta.AI",
+    "contract": "0x539ae81a166e5e80aed211731563e549c411b140",
+    "market_cap": 22938356.54861058,
+    "volume_24h": 3027120.39123403,
+    "price": 0.07416083172530821
+  },
+  {
+    "id": 3217,
+    "symbol": "ONG",
+    "name": "Ontology Gas",
+    "contract": "0x308bfaeAaC8BDab6e9Fc5Ead8EdCb5f95b0599d9",
+    "market_cap": 22598799.019755106,
+    "volume_24h": 829930.34974407,
+    "price": 0.04782702282176265
+  },
+  {
+    "id": 5947,
+    "symbol": "TPT",
+    "name": "TokenPocket",
+    "contract": "0xeca41281c24451168a37211f0bc2b8645af45092",
+    "market_cap": 22049469.93202464,
+    "volume_24h": 57120.10162996,
+    "price": 0.0063608079914741315
+  },
+  {
+    "id": 23054,
+    "symbol": "CHEEL",
+    "name": "Cheelee",
+    "contract": "0x1F1C90aEb2fd13EA972F0a71e35c0753848e3DB0",
+    "market_cap": 21725946.693194088,
+    "volume_24h": 914977.76438316,
+    "price": 0.38230982157365895
+  },
+  {
+    "id": 36511,
+    "symbol": "SLT",
+    "name": "SLT",
+    "contract": "0x28ba6ef35f27f1ed3873cc788698d2ddb28d2a82",
+    "market_cap": 21358516.86364575,
+    "volume_24h": 28191.05875995,
+    "price": 2.5127666898406766
+  },
+  {
+    "id": 21533,
+    "symbol": "LISTA",
+    "name": "Lista DAO",
+    "contract": "0xFceB31A79F71AC9CBDCF853519c1b12D379EdC46",
+    "market_cap": 20960054.92934785,
+    "volume_24h": 3395332.06290056,
+    "price": 0.05124767966019298
+  },
+  {
+    "id": 37649,
+    "symbol": "ORI",
+    "name": "Orizon",
+    "contract": "0xDA033999bB6165e64DB01Bd9be14B40f5653092E",
+    "market_cap": 20761072.424109038,
+    "volume_24h": 361805.79193777,
+    "price": 55.0812671988776
+  },
+  {
+    "id": 38838,
+    "symbol": "SENTIS",
+    "name": "SentismAI",
+    "contract": "0x8Fd0d741e09a98e82256C63F25f90301eA71A83e",
+    "market_cap": 20217451.688633766,
+    "volume_24h": 2867042.07267479,
+    "price": 0.09791060326075834
+  },
+  {
+    "id": 32232,
+    "symbol": "PMT",
+    "name": "Public Masterpiece Token",
+    "contract": "0x68ae2f202799be2008c89e2100257e66f77da1f3",
+    "market_cap": 19478433.01011003,
+    "volume_24h": 290372.38507592,
+    "price": 0.10634061442580311
+  },
+  {
+    "id": 38359,
+    "symbol": "STBL",
+    "name": "STBL",
+    "contract": "0x8dedf84656fa932157e27c060d8613824e7979e3",
+    "market_cap": 19146363.064464074,
+    "volume_24h": 4865486.50798015,
+    "price": 0.027351947234948677
+  },
+  {
+    "id": 4206,
+    "symbol": "WIN",
+    "name": "WINkLink",
+    "contract": "0xaef0d72a118ce24fee3cd1d43d383897d05b4e99",
+    "market_cap": 17601509.038211722,
+    "volume_24h": 6116593.31558579,
+    "price": 1.771306852717097e-05
+  },
+  {
+    "id": 38468,
+    "symbol": "HANA",
+    "name": "Hana Network",
+    "contract": "0x6261963ebe9ff014aad10ecc3b0238d4d04e8353",
+    "market_cap": 17416060.60636511,
+    "volume_24h": 4146458.5944076,
+    "price": 0.030426603428157745
+  },
+  {
+    "id": 32068,
+    "symbol": "GCB",
+    "name": "Global Commercial Business",
+    "contract": "0x84f70be4DEb029d5f8AACBeAcC74c4dC10737342",
+    "market_cap": 17235138.78826814,
+    "volume_24h": 5425.35568312,
+    "price": 0.014340570061373287
+  },
+  {
+    "id": 38495,
+    "symbol": "MIRA",
+    "name": "Mira",
+    "contract": "0x7839Fbfd09DaE4d0F15BfB36b8f16f7898FBE684",
+    "market_cap": 16316609.89814376,
+    "volume_24h": 7022492.78808631,
+    "price": 0.05506599580687158
+  },
+  {
+    "id": 36935,
+    "symbol": "MGO",
+    "name": "Mango Network",
+    "contract": "0x5e0d6791EdbEEBa6a14D1d38e2b8233257118EB1",
+    "market_cap": 16119935.341178738,
+    "volume_24h": 631471.73545537,
+    "price": 0.010056336127373017
+  },
+  {
+    "id": 32968,
+    "symbol": "AIC",
+    "name": "AI Companions",
+    "contract": "0xbe6ad1eb9876cf3d3f9b85feecfb400298e80143",
+    "market_cap": 15989073.044622235,
+    "volume_24h": 1619871.12054335,
+    "price": 0.021318772587005347
+  },
+  {
+    "id": 38219,
+    "symbol": "ARARA",
+    "name": "Araracoin",
+    "contract": "0xDa05cA5303D75f14e298FB8aEFF51fD2F2105803",
+    "market_cap": 15851149.516713921,
+    "volume_24h": 13629.22908508,
+    "price": 0.0004372730901162461
+  },
+  {
+    "id": 39150,
+    "symbol": "RTX",
+    "name": "RateX",
+    "contract": "0x4829a1d1fb6ded1f81d26868ab8976648baf9893",
+    "market_cap": 15671557.003981084,
+    "volume_24h": 1558673.53057763,
+    "price": 0.8956408510613212
+  },
+  {
+    "id": 33439,
+    "symbol": "LUMIA",
+    "name": "Lumia",
+    "contract": "0x7F39BcdCa8E0E581c1d43aaa1cB862AA1c8C2047",
+    "market_cap": 15667698.19315762,
+    "volume_24h": 2776941.76290096,
+    "price": 0.09054977397717424
+  },
+  {
+    "id": 38717,
+    "symbol": "BLUAI",
+    "name": "Bluwhale",
+    "contract": "0xed9Ae3DEF8d6F052971Bb8b6d1975FF267Cf9aaD",
+    "market_cap": 15324676.870504286,
+    "volume_24h": 9359646.39169755,
+    "price": 0.012479378559042579
+  },
+  {
+    "id": 36933,
+    "symbol": "XNY",
+    "name": "Codatta",
+    "contract": "0xE3225e11Cab122F1a126A28997788E5230838ab9",
+    "market_cap": 15137036.10225733,
+    "volume_24h": 2297313.73641547,
+    "price": 0.006054814440902932
+  },
+  {
+    "id": 38433,
+    "symbol": "AOP",
+    "name": "Ark of Panda",
+    "contract": "0xd5dF4d260D7a0145F655bcBf3B398076F21016C7",
+    "market_cap": 14977786.294140877,
+    "volume_24h": 1136911.00126546,
+    "price": 0.030776273333616624
+  },
+  {
+    "id": 35647,
+    "symbol": "TST",
+    "name": "Test",
+    "contract": "0x86Bb94DdD16Efc8bc58e6b056e8df71D9e666429",
+    "market_cap": 14490049.610194145,
+    "volume_24h": 11469788.09725185,
+    "price": 0.01541272965723721
+  },
+  {
+    "id": 19590,
+    "symbol": "DFG",
+    "name": "Defigram",
+    "contract": "0xb661f4576d5e0b622fee6ab041fd5451fe02ba4c",
+    "market_cap": 13641706.929785402,
+    "volume_24h": 0,
+    "price": 1.3641706929785402
+  },
+  {
+    "id": 22331,
+    "symbol": "FAR",
+    "name": "FAR Labs",
+    "contract": "0xC44F9f08E524669E5DEeEBC9EB142c81edfAd178",
+    "market_cap": 13533239.967743402,
+    "volume_24h": 254988.24236799,
+    "price": 0.002800527268648309
+  },
+  {
+    "id": 35728,
+    "symbol": "DIAM",
+    "name": "DIAM",
+    "contract": "0x1FA0f5ed24a1a2b43741E88F8FEc19633e67082B",
+    "market_cap": 13242994.442023633,
+    "volume_24h": 450527.86834122,
+    "price": 0.006680564078795792
+  },
+  {
+    "id": 38679,
+    "symbol": "\u54c8\u57fa\u7c73",
+    "name": "\u54c8\u57fa\u7c73",
+    "contract": "0x82Ec31D69b3c289E541b50E30681FD1ACAd24444",
+    "market_cap": 13219487.070726963,
+    "volume_24h": 2248678.4911563,
+    "price": 0.013219487070726963
+  },
+  {
+    "id": 36255,
+    "symbol": "LUCIC",
+    "name": "Lucidum Coin",
+    "contract": "0xE054017a2F0ECFa294b08a74AF319bce0b985A39",
+    "market_cap": 13028404.200071929,
+    "volume_24h": 21852.42533603,
+    "price": 0.07939046854658209
+  },
+  {
+    "id": 35749,
+    "symbol": "BROCCOLI",
+    "name": "CZ's Dog",
+    "contract": "0x6d5AD1592ed9D6D1dF9b93c793AB759573Ed6714",
+    "market_cap": 12900120.067786431,
+    "volume_24h": 6082307.79243837,
+    "price": 0.013337386363440383
+  },
+  {
+    "id": 38542,
+    "symbol": "SLX",
+    "name": "SLIMEX",
+    "contract": "0x8A063A9ff4dE28dcB87117cc759BE6cE70e09F81",
+    "market_cap": 12440241.598157804,
+    "volume_24h": 397293.92220872,
+    "price": 0.007178442930269939
+  },
+  {
+    "id": 28846,
+    "symbol": "AI",
+    "name": "Sleepless AI",
+    "contract": "0xBDA011D7F8EC00F66C1923B049B94c67d148d8b2",
+    "market_cap": 12281717.061263468,
+    "volume_24h": 10033403.66565444,
+    "price": 0.02207701084935549
+  },
+  {
+    "id": 30953,
+    "symbol": "SBBTC",
+    "name": "ShibaBitcoin",
+    "contract": "0x13bA349ECbE6d78590587f12eE19f50d8F8CD627",
+    "market_cap": 12114039.867362322,
+    "volume_24h": 0,
+    "price": 103.9086453509339
+  },
+  {
+    "id": 39671,
+    "symbol": "\u9f99\u867e",
+    "name": "\u9f99\u867e (Lobster)",
+    "contract": "0xeccbb861c0dda7efd964010085488b69317e4444",
+    "market_cap": 12062277.028267981,
+    "volume_24h": 4834142.66285764,
+    "price": 0.012062277028267981
+  },
+  {
+    "id": 36761,
+    "symbol": "EGL1",
+    "name": "EGL1",
+    "contract": "0xf4b385849f2e817e92bffbfb9aeb48f950ff4444",
+    "market_cap": 11717890.77579369,
+    "volume_24h": 1401313.96847221,
+    "price": 0.01171789077579369
+  },
+  {
+    "id": 40073,
+    "symbol": "QAIT",
+    "name": "QAIT",
+    "contract": "0x4d41A5d412f4Ef44A35b9f53b06DB65edE249493",
+    "market_cap": 11597034.811587876,
+    "volume_24h": 1098754751.1986754,
+    "price": 0.023194069623175752
+  },
+  {
+    "id": 32724,
+    "symbol": "CAT",
+    "name": "Simon's Cat",
+    "contract": "0x6894CDe390a3f51155ea41Ed24a33A4827d3063D",
+    "market_cap": 11385904.093531601,
+    "volume_24h": 2177263.18315889,
+    "price": 1.5047398941878406e-06
+  },
+  {
+    "id": 39415,
+    "symbol": "VEREM",
+    "name": "Verified Emeralds",
+    "contract": "0x862829e8dcf0fd939d61d1b0d4a3aaf983ee4f73",
+    "market_cap": 11213175.482417095,
+    "volume_24h": 3931166.65517138,
+    "price": 4.485270192966838
+  },
+  {
+    "id": 38430,
+    "symbol": "AIA",
+    "name": "DeAgentAI",
+    "contract": "0x53EC33Cd4fA46b9ecED9cA3f6dB626C5FfCd55cC",
+    "market_cap": 11138389.602464512,
+    "volume_24h": 10613343.49337154,
+    "price": 0.05894840529164633
+  },
+  {
+    "id": 36041,
+    "symbol": "MUBARAK",
+    "name": "Mubarak",
+    "contract": "0x5c85d6c6825ab4032337f11ee92a72df936b46f6",
+    "market_cap": 10666461.159258725,
+    "volume_24h": 3539629.29472728,
+    "price": 0.010666461159258725
+  },
+  {
+    "id": 40217,
+    "symbol": "SPCXB",
+    "name": "SpaceX Tokenized bStocks",
+    "contract": "0xbe9d156892e55e7154bcd3cb0fea677f9d3103e1",
+    "market_cap": 10661920.899373628,
+    "volume_24h": 3752940.98034249,
+    "price": 167.42964839070677
+  },
+  {
+    "id": 38102,
+    "symbol": "ARIA",
+    "name": "AriaAI",
+    "contract": "0x5d3A12c42E5372B2CC3264AB3cdcF660a1555238",
+    "market_cap": 10369320.432170311,
+    "volume_24h": 3125898.90568508,
+    "price": 0.03018725014358552
+  },
+  {
+    "id": 15248,
+    "symbol": "SANTOS",
+    "name": "Santos FC Fan Token",
+    "contract": "0xA64455a4553C9034236734FadDAddbb64aCE4Cc7",
+    "market_cap": 10279421.907020995,
+    "volume_24h": 1966942.59914945,
+    "price": 0.638677537603957
+  },
+  {
+    "id": 38466,
+    "symbol": "BLESS",
+    "name": "Bless",
+    "contract": "0x7C8217517ed4711fe2DECCdFefFE8d906b9Ae11F",
+    "market_cap": 10195070.677541852,
+    "volume_24h": 2744451.84571394,
+    "price": 0.005250765007655179
+  },
+  {
+    "id": 8938,
+    "symbol": "EPS",
+    "name": "Ellipsis",
+    "contract": "0xa7f552078dcc247c2684336020c03648500c6d9f",
+    "market_cap": 9904691.38293529,
+    "volume_24h": 0,
+    "price": 0.01368615430570795
+  },
+  {
+    "id": 16334,
+    "symbol": "APX",
+    "name": "APX",
+    "contract": "0x78f5d389f5cdccfc41594abab4b0ed02f31398b3",
+    "market_cap": 9759703.442304345,
+    "volume_24h": 0,
+    "price": 0.2210284433794703
+  },
+  {
+    "id": 21870,
+    "symbol": "MPLX",
+    "name": "Metaplex",
+    "contract": "0x75a5863A19aF60ec0098d62ED8C34cc594fB470f",
+    "market_cap": 9631629.957080847,
+    "volume_24h": 570992.46573944,
+    "price": 0.018791529533659833
+  },
+  {
+    "id": 12814,
+    "symbol": "DESU",
+    "name": "Dexsport",
+    "contract": "0x32f1518baace69e85b9e5ff844ebd617c52573ac",
+    "market_cap": 9603048.540372448,
+    "volume_24h": 18359.41915129,
+    "price": 0.016005080900620746
+  },
+  {
+    "id": 20672,
+    "symbol": "COL",
+    "name": "Clash of Lilliput",
+    "contract": "0x9ce116224459296abc7858627abd5879514bc629",
+    "market_cap": 9597266.349731006,
+    "volume_24h": 0,
+    "price": 0.11693373755679
+  },
+  {
+    "id": 38561,
+    "symbol": "LYN",
+    "name": "Everlyn AI",
+    "contract": "0x302DFaF2CDbE51a18d97186A7384e87CF599877D",
+    "market_cap": 8984394.242647184,
+    "volume_24h": 1265203.81153917,
+    "price": 0.03514490885568318
+  },
+  {
+    "id": 23335,
+    "symbol": "THE",
+    "name": "THENA",
+    "contract": "0xF4C8E32EaDEC4BFe97E0F595AdD0f4450a863a11",
+    "market_cap": 8950832.980040526,
+    "volume_24h": 3204323.10369452,
+    "price": 0.0673243648185426
+  },
+  {
+    "id": 35892,
+    "symbol": "TUT",
+    "name": "Tutorial",
+    "contract": "0xCAAE2A2F939F51d97CdFa9A86e79e3F085b799f3",
+    "market_cap": 8885125.687281493,
+    "volume_24h": 3958618.50068031,
+    "price": 0.010649213117804137
+  },
+  {
+    "id": 35214,
+    "symbol": "BMT",
+    "name": "Bubblemaps",
+    "contract": "0x7d814b9eD370Ec0a502EdC3267393bF62d891B62",
+    "market_cap": 8777528.818477742,
+    "volume_24h": 1934093.72825084,
+    "price": 0.012980405244566555
+  },
+  {
+    "id": 9020,
+    "symbol": "TKO",
+    "name": "Toko Token",
+    "contract": "0x9f589e3eabe42ebc94a44727b3f3531c0c877809",
+    "market_cap": 8772649.952947482,
+    "volume_24h": 725713.04343938,
+    "price": 0.05172690067660585
+  },
+  {
+    "id": 38557,
+    "symbol": "4",
+    "name": "4",
+    "contract": "0x0A43fC31a73013089DF59194872Ecae4cAe14444",
+    "market_cap": 8748814.69670396,
+    "volume_24h": 4145188.51628827,
+    "price": 0.00874881469670396
+  },
+  {
+    "id": 37453,
+    "symbol": "ASP",
+    "name": "Aspecta",
+    "contract": "0xad8c787992428cD158E451aAb109f724B6bc36de",
+    "market_cap": 8589629.272119915,
+    "volume_24h": 1051269.82215707,
+    "price": 0.02551375028796633
+  },
+  {
+    "id": 38435,
+    "symbol": "NETX",
+    "name": "NetX",
+    "contract": "0x4c32964715e9a42F8d119bFA8917d57822d3aDF1",
+    "market_cap": 8566631.180402497,
+    "volume_24h": 161584.76249334,
+    "price": 0.3704920888002451
+  },
+  {
+    "id": 28674,
+    "symbol": "ACE",
+    "name": "Fusionist",
+    "contract": "0xc27A719105A987b4c34116223CAE8bd8F4B5def4",
+    "market_cap": 8537652.416641798,
+    "volume_24h": 2508250.81098966,
+    "price": 0.08391879346324223
+  },
+  {
+    "id": 39322,
+    "symbol": "\u6211\u8e0f\u9a6c\u6765\u4e86",
+    "name": "\u6211\u8e0f\u9a6c\u6765\u4e86",
+    "contract": "0xc51A9250795c0186a6FB4A7D20A90330651e4444",
+    "market_cap": 8394024.074825585,
+    "volume_24h": 3785324.32481583,
+    "price": 0.008394024074825585
+  },
+  {
+    "id": 36649,
+    "symbol": "CREPE",
+    "name": "CREPE",
+    "contract": "0xeb2B7d5691878627eff20492cA7c9a71228d931D",
+    "market_cap": 8197856.244443015,
+    "volume_24h": 433553.65114882,
+    "price": 1.4114492319794184e-05
+  },
+  {
+    "id": 5161,
+    "symbol": "WRX",
+    "name": "WazirX",
+    "contract": "WRX-ED1",
+    "market_cap": 8197673.178177354,
+    "volume_24h": 5836.80696863,
+    "price": 0.02146792102470265
+  },
+  {
+    "id": 36369,
+    "symbol": "HAEDAL",
+    "name": "Haedal Protocol",
+    "contract": "0x3D9bE0aC1001cd81c32464276D863d2FFdCa4967",
+    "market_cap": 8137867.408302482,
+    "volume_24h": 5916407.73501323,
+    "price": 0.0191479233136529
+  },
+  {
+    "id": 37482,
+    "symbol": "DORA",
+    "name": "DORA",
+    "contract": "0x23fe903be385832fd7bb82bf1fee93f696278888",
+    "market_cap": 7933884.254671556,
+    "volume_24h": 340387.75589436,
+    "price": 0.008013331715848938
+  },
+  {
+    "id": 38376,
+    "symbol": "EVAA",
+    "name": "EVAA Protocol",
+    "contract": "0xaa036928c9c0Df07d525B55ea8EE690Bb5a628C1",
+    "market_cap": 7759747.951767834,
+    "volume_24h": 1692764.3377276,
+    "price": 0.4346141534471482
+  },
+  {
+    "id": 36737,
+    "symbol": "TRADOOR",
+    "name": "Tradoor",
+    "contract": "0x9123400446a56176eb1b6be9ee5cf703e409f492",
+    "market_cap": 7570663.425940285,
+    "volume_24h": 16717842.99393056,
+    "price": 0.527609131363878
+  },
+  {
+    "id": 18112,
+    "symbol": "ALPINE",
+    "name": "Alpine F1 Team Fan Token",
+    "contract": "0x287880Ea252b52b63Cc5f40a2d3E5A44aa665a76",
+    "market_cap": 7455566.368351983,
+    "volume_24h": 2885883.10226261,
+    "price": 0.34944485098197553
+  }
+]

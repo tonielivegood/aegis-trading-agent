@@ -1,0 +1,13 @@
+# BNB Hack 2026 — Track 1 Trading Agent
+web3==7.16.0
+eth-account>=0.13
+pydantic>=2.10
+python-dotenv>=1.0
+requests>=2.32
+structlog>=24.4
+APScheduler>=3.10
+anthropic>=0.40
+
+# dev / test
+pytest>=8.3
+pytest-mock>=3.14

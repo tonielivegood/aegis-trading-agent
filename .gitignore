@@ -1,0 +1,37 @@
+# Secrets — NEVER commit
+.env
+env.txt
+*.key
+*.pem
+wallet*.json
+keystore/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs / runtime data
+*.log
+logs/
+data/runtime/
+data/historical/
+*.db
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Nested/unrelated
+agent-skills/
+.claude/

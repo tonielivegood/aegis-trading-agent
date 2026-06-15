@@ -1,0 +1,14 @@
+[project]
+name = "bnbhack-track1-agent"
+version = "0.1.0"
+description = "Autonomous AI trading agent for BNB Hack 2026 — Track 1"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

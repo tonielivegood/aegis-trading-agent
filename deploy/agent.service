@@ -1,0 +1,24 @@
+[Unit]
+Description=BNB Hack 2026 Track1 Trading Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run as a dedicated non-root user (create with: adduser --disabled-password agent)
+User=agent
+WorkingDirectory=/home/agent/Track1-trade-onchain
+# Use the project's virtualenv python
+ExecStart=/home/agent/Track1-trade-onchain/.venv/bin/python -m src.agent run --live
+# Auto-restart on crash or after reboot — state is persisted, so it resumes safely
+Restart=always
+RestartSec=15
+# Logs (also viewable via: journalctl -u agent -f)
+StandardOutput=append:/home/agent/Track1-trade-onchain/logs/agent.log
+StandardError=append:/home/agent/Track1-trade-onchain/logs/agent.log
+# Harden
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
