@@ -1,7 +1,8 @@
 """CoinMarketCap Data API client — quotes for the tradable universe.
 
-Thin, cached, rate-aware wrapper. Free plan = 15k credits/month, so we cache
-quotes for a short TTL and batch all symbols into one request.
+Thin, cached, rate-aware wrapper. Plan = Professional (5M credits/month, 1200
+req/min), so credits are not a constraint; we still cache for a short TTL and
+batch all symbols into one request to avoid redundant calls within a tick.
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from ..monitor.logger import get_logger
 log = get_logger(__name__)
 
 _CACHE: dict[str, tuple[float, dict]] = {}
-_CACHE_TTL = 60.0  # seconds
+_CACHE_TTL = 15.0  # seconds — fresher quotes; Pro plan has ample credit headroom
 
 
 def _headers() -> dict[str, str]:
