@@ -137,3 +137,16 @@ def test_walk_forward_aggregate_distribution():
 def test_walk_forward_aggregate_empty_safe():
     from src.agent.backtest.walk_forward import aggregate
     assert aggregate([]) == {"windows": 0}
+
+
+def test_walk_forward_passes_breaker_threshold_to_engine(mocker):
+    """The breaker level must flow through so we can sweep it in validation."""
+    from src.agent.backtest import walk_forward
+    spy = mocker.patch.object(walk_forward.engine, "run_backtest",
+                              wraps=walk_forward.engine.run_backtest)
+    series = {"CAKE": [10.0] * 60}
+    times = list(range(60))
+    walk_forward.walk_forward(series, times, lambda p, s, h: [],
+                              window=7, warmup=14, step=10, drawdown_alert=0.12)
+    assert spy.call_count > 0
+    assert all(c.kwargs["drawdown_alert"] == 0.12 for c in spy.call_args_list)

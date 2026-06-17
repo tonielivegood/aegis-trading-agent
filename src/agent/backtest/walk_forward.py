@@ -15,7 +15,8 @@ DQ_DRAWDOWN = 0.30
 
 
 def walk_forward(series, times, decide_fn, *, window=168, warmup=168, step=24,
-                 start_cash=100.0, fee_bps=25, slippage_bps=50) -> list[dict]:
+                 start_cash=100.0, fee_bps=25, slippage_bps=50,
+                 drawdown_alert=0.20, drawdown_cap=0.30) -> list[dict]:
     n = len(times)
     outcomes: list[dict] = []
     for start in range(warmup, n - window, step):
@@ -23,7 +24,8 @@ def walk_forward(series, times, decide_fn, *, window=168, warmup=168, step=24,
         sub = {s: series[s][lo:start + window] for s in series}
         subt = times[lo:start + window]
         r = engine.run_backtest(sub, subt, decide_fn, start_cash=start_cash,
-                                fee_bps=fee_bps, slippage_bps=slippage_bps)
+                                fee_bps=fee_bps, slippage_bps=slippage_bps,
+                                drawdown_alert=drawdown_alert, drawdown_cap=drawdown_cap)
         eq = r.equity_curve[warmup:]  # measure only the contest slice
         if len(eq) < 2:
             continue
