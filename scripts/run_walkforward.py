@@ -27,6 +27,12 @@ STRATEGIES = {
     "Preservation-first": adapters.preservation_first_decide,
     "Hold + breaker (-20%)": adapters.hold_with_breaker_decide,
     "Fractional 50% + breaker": adapters.fractional_hold_decide,
+    "Concentr top-2 (80%)": lambda p, s, h: adapters.concentrated_momentum_decide(
+        p, s, h, top_n=2, deploy_frac=0.80),
+    "Concentr top-2 (60%)": lambda p, s, h: adapters.concentrated_momentum_decide(
+        p, s, h, top_n=2, deploy_frac=0.60),
+    "Concentr top-1 (50%cap)": lambda p, s, h: adapters.concentrated_momentum_decide(
+        p, s, h, top_n=1, deploy_frac=0.80),
 }
 
 # Resolution-agnostic subset for the DAILY cross-check: these depend only on
@@ -37,6 +43,10 @@ DAILY_STRATEGIES = {
     "Buy & Hold (market)": adapters.buy_and_hold_decide,
     "Hold + breaker (-20%)": adapters.hold_with_breaker_decide,
     "Fractional 50% + breaker": adapters.fractional_hold_decide,
+    "Concentr top-2 (80%)": lambda p, s, h: adapters.concentrated_momentum_decide(
+        p, s, h, top_n=2, deploy_frac=0.80),
+    "Concentr top-1 (50%cap)": lambda p, s, h: adapters.concentrated_momentum_decide(
+        p, s, h, top_n=1, deploy_frac=0.80),
 }
 
 

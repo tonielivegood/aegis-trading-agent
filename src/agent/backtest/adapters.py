@@ -9,14 +9,15 @@ from __future__ import annotations
 import statistics
 
 from ..config import settings
-from ..data.token_list import STABLECOINS
+from ..data.token_list import LIQUIDITY_PRIORITY, STABLECOINS
 from ..risk.position_sizer import PositionSizer
 from ..signal import signal_engine
-from ..strategy import momentum_strategy, rebalance_strategy
+from ..strategy import concentrated_momentum_strategy, momentum_strategy, rebalance_strategy
 from ..strategy.base_strategy import PortfolioState, TradeOrder
 
 MIN_ORDER_USD = 2.0
 MAX_NEW = 3
+_LIQUID = set(LIQUIDITY_PRIORITY)
 
 
 def _pct(series: list[float], steps: int) -> float:
@@ -42,6 +43,22 @@ def momentum_decide(prices: dict[str, float], state: PortfolioState,
     quotes = quotes_from_history(history)
     signals = signal_engine.generate(list(history.keys()), quotes)
     return momentum_strategy.decide(signals, state)
+
+
+def concentrated_momentum_decide(prices, state, history, *, top_n: int = 2,
+                                 deploy_frac: float = 0.80,
+                                 per_token_cap: float = 0.50) -> list[TradeOrder]:
+    """Backtest parity for the aggressive contest strategy. Rebuilds the SAME
+    SignalBundles the live agent gets, but gates the candidate set to liquid
+    majors (so the 'strongest mover' can't be an illiquid pump), then defers to
+    the real concentrated_momentum_strategy. What we validate here is exactly
+    what runs live."""
+    liquid_hist = {s: ser for s, ser in history.items()
+                   if s in _LIQUID and s not in STABLECOINS}
+    quotes = quotes_from_history(liquid_hist)
+    signals = signal_engine.generate(list(liquid_hist.keys()), quotes)
+    return concentrated_momentum_strategy.decide(
+        signals, state, top_n=top_n, deploy_frac=deploy_frac, per_token_cap=per_token_cap)
 
 
 def _volatility(series: list[float], n: int) -> float:

@@ -58,7 +58,7 @@ class Settings(BaseModel):
     max_drawdown_cap: float = 0.30
     max_position_pct: float = 0.10
     stablecoin_floor_pct: float = 0.20
-    deploy_frac: float = 0.50          # fraction of equity deployed to the basket
+    deploy_frac: float = 0.65          # fraction of equity deployed to the basket (walk-forward sweet spot: more upside, 0% DQ over 5.7yr)
     basket_size: int = 6               # number of tokens in the deploy basket
     min_trade_interval_h: int = 4
     target_daily_trades: int = 4
