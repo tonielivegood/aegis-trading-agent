@@ -1,24 +1,31 @@
-"""Alternative execution backend via the Trust Wallet Agent Kit (TWAK) CLI.
+"""Alternative execution backend via the Trust Wallet Agent Kit (TWAK) CLI v0.19.1+.
 
-This wraps `twak swap ... --chain bsc --json` as a drop-in alternative to the
-PancakeSwap router path: same `.swap(token_in, token_out, amount)` signature and
-the same safety rails (whitelist, distinct tokens, positive amount, slippage,
-DRY_RUN never broadcasts). It exists so the agent can execute on-chain through
-the contest's intended Trust Wallet stack.
+Wraps `twak swap <amount> <fromSymbol> <toSymbol> --chain bsc --json` as a
+drop-in alternative to the PancakeSwap router path: same `.swap()` signature
+and the same safety rails (whitelist, distinct tokens, positive amount,
+slippage, DRY_RUN never broadcasts). Exists so the agent can demonstrate the
+full Trust Wallet stack for the BNB Hack special-prize "technical execution"
+criterion.
 
-Design notes / safety:
-  - subprocess is invoked with an ARGUMENT LIST (never shell=True) so token
-    values cannot inject shell commands.
-  - the wallet password is passed via the TWAK_WALLET_PASSWORD env var, never on
-    the command line (argv is visible to other processes).
-  - tokens are passed as contract ADDRESSES (from the curated set) to avoid
-    symbol ambiguity across chains.
-  - JSON output is parsed defensively: the exact field names are not contractual
-    across CLI versions, so the tx-hash extractor tries several. The exact schema
-    must be confirmed against a live `twak swap --json` run before go-live.
+CLI schema (confirmed v0.19.1):
+  twak swap <amount> <fromSymbol> <toSymbol> --chain bsc --json
+            --slippage <pct_float>
+            [--quote-only]                   # dry-run: quote only, no broadcast
+            [--password <pw>]                # required for live execution
+  Auth: TWAK_ACCESS_ID + TWAK_HMAC_SECRET env vars (set in .env)
 
-Opt-in: the default execution backend remains PancakeSwap on the registered
-wallet. See config `execution_backend`.
+Safety:
+  - subprocess called with an ARGUMENT LIST (never shell=True).
+  - wallet password is passed via --password flag only for live swaps;
+    dry-run (--quote-only) never touches the password.
+  - TWAK auth credentials passed via environment, never logged.
+  - tokens are passed as SYMBOLS (TWAK has its own BSC registry); internal
+    symbols are mapped via _TO_TWAK before being passed to the CLI.
+  - JSON output parsed defensively: tx-hash extractor tries several field
+    names to tolerate minor schema changes across CLI versions.
+
+Opt-in: default backend remains PancakeSwap on the registered contest wallet.
+See config `execution_backend`.
 """
 from __future__ import annotations
 
@@ -38,6 +45,9 @@ _TX_HASH_KEYS = ("txHash", "tx_hash", "hash", "transactionHash")
 _CLI = "twak"
 _TIMEOUT_S = 180
 
+# TWAK BSC registry uses "BNB" for wrapped BNB (WBNB in our internal naming).
+_TO_TWAK: dict[str, str] = {"WBNB": "BNB", "BTCB": "BTC"}
+
 
 class TwakError(RuntimeError):
     """Raised when the TWAK CLI fails or returns unparseable output."""
@@ -56,28 +66,37 @@ class TwakExecutor:
     def __init__(self, dry_run: bool | None = None, password: str | None = None) -> None:
         self.dry_run = settings.dry_run if dry_run is None else dry_run
         self.slippage_bps = settings.slippage_bps
-        # Password is read from the environment if not supplied; never logged.
         self._password = password if password is not None else os.getenv("TWAK_WALLET_PASSWORD", "")
 
     # --- command construction ---
     def _build_args(self, token_in: str, token_out: str, amount_human: float,
                     quote_only: bool) -> list[str]:
-        addr_in = get_token(token_in).address   # KeyError if not whitelisted
-        addr_out = get_token(token_out).address
+        get_token(token_in)   # KeyError if not whitelisted
+        get_token(token_out)
+        sym_in = _TO_TWAK.get(token_in.upper(), token_in.upper())
+        sym_out = _TO_TWAK.get(token_out.upper(), token_out.upper())
         args = [
-            _CLI, "swap", _fmt_amount(amount_human), addr_in, addr_out,
+            _CLI, "swap", _fmt_amount(amount_human), sym_in, sym_out,
             "--chain", "bsc", "--json",
             "--slippage", _fmt_amount(self.slippage_bps / 100),  # bps -> percent
         ]
         if quote_only:
             args.append("--quote-only")
+        elif self._password:
+            # Password is required for live execution; omitted for quote-only.
+            args.extend(["--password", self._password])
         return args
 
     # --- subprocess boundary ---
     def _run(self, args: list[str]) -> dict:
         env = dict(os.environ)
-        if self._password:
-            env["TWAK_WALLET_PASSWORD"] = self._password
+        # TWAK auth credentials injected via environment (Access ID + HMAC Secret).
+        access_id = getattr(settings, "twak_access_id", "") or os.getenv("TWAK_ACCESS_ID", "")
+        hmac_secret = getattr(settings, "twak_hmac_secret", "") or os.getenv("TWAK_HMAC_SECRET", "")
+        if access_id:
+            env["TWAK_ACCESS_ID"] = access_id
+        if hmac_secret:
+            env["TWAK_HMAC_SECRET"] = hmac_secret
         try:
             proc = subprocess.run(
                 args, capture_output=True, text=True, timeout=_TIMEOUT_S,

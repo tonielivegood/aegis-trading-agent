@@ -64,7 +64,7 @@ def test_get_quotes_parses_and_caches(mocker):
 
     cmc_client._CACHE.clear()
     q1 = cmc_client.get_quotes(["CAKE"])
-    q2 = cmc_client.get_quotes(["CAKE"])  # served from cache
+    cmc_client.get_quotes(["CAKE"])  # served from cache — second call must not hit network
 
     assert q1["CAKE"]["price"] == 2.5
     assert q1["CAKE"]["percent_change_24h"] == -1.2

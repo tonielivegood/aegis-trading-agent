@@ -69,6 +69,10 @@ class Settings(BaseModel):
     # --- Execution backend: "pancake" (default, registered wallet) or "twak" ---
     execution_backend: str = "pancake"
 
+    # --- TWAK credentials (optional; only needed when execution_backend="twak") ---
+    twak_access_id: str = Field(default="", repr=False)
+    twak_hmac_secret: str = Field(default="", repr=False)
+
     # --- Mode ---
     dry_run: bool = True
 
@@ -123,6 +127,8 @@ def get_settings() -> Settings:
         min_portfolio_value_usd=float(_get("MIN_PORTFOLIO_VALUE_USD", "1.50")),
         strategy_tick_min=int(_get("STRATEGY_TICK_MIN", "15")),
         execution_backend=_get("EXECUTION_BACKEND", "pancake"),
+        twak_access_id=_get("TWAK_ACCESS_ID", ""),
+        twak_hmac_secret=_get("TWAK_HMAC_SECRET", ""),
         dry_run=_get("DRY_RUN", "true").lower() in ("1", "true", "yes"),
     )
 

@@ -54,7 +54,8 @@ def _flat_series(symbols, n, price=10.0):
 def test_flat_market_no_trades_preserves_cash():
     series = _flat_series(["CAKE"], 200)
     ts = list(range(200))
-    no_op = lambda prices, state, history: []
+    def no_op(prices, state, history):
+        return []
     result = engine.run_backtest(series, ts, no_op, start_cash=100.0)
     assert result.equity_curve[-1] == pytest.approx(100.0)
 

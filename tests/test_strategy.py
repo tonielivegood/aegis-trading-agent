@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.agent.strategy.base_strategy import PortfolioState, TradeOrder
+from src.agent.strategy.base_strategy import PortfolioState
 from src.agent.strategy import momentum_strategy, rebalance_strategy
 from src.agent.signal.signal_schema import SignalBundle
 
