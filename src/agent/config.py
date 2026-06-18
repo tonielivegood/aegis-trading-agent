@@ -73,6 +73,11 @@ class Settings(BaseModel):
     twak_access_id: str = Field(default="", repr=False)
     twak_hmac_secret: str = Field(default="", repr=False)
 
+    # --- Binance Wallet Web3 API (optional; quote/connectivity layer only, never signs) ---
+    binance_web3_api_key: str = Field(default="", repr=False)
+    binance_web3_api_secret: str = Field(default="", repr=False)
+    binance_web3_api_base: str = "https://api.binance.com"
+
     # --- Mode ---
     dry_run: bool = True
 
@@ -129,6 +134,9 @@ def get_settings() -> Settings:
         execution_backend=_get("EXECUTION_BACKEND", "pancake"),
         twak_access_id=_get("TWAK_ACCESS_ID", ""),
         twak_hmac_secret=_get("TWAK_HMAC_SECRET", ""),
+        binance_web3_api_key=_get("BINANCE_WEB3_API_KEY", ""),
+        binance_web3_api_secret=_get("BINANCE_WEB3_API_SECRET", ""),
+        binance_web3_api_base=_get("BINANCE_WEB3_API_BASE", "https://api.binance.com"),
         dry_run=_get("DRY_RUN", "true").lower() in ("1", "true", "yes"),
     )
 

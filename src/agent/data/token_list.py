@@ -1,7 +1,18 @@
-"""Token universe: the verified curated core we actually trade.
+"""Token universe.
 
-Loads `curated_core.json` (20 on-chain-verified blue chips) as the tradable set,
-and `eligible_tokens.json` (CMC-derived 149) as a reference eligibility check.
+Three layers:
+  - `curated_core.json`  — 20 on-chain-verified blue chips (used for stable/WBNB
+    valuation infrastructure and as the original majors set).
+  - `eligible_tokens.json` — the OFFICIAL contest allowlist (149 BEP-20 tokens).
+    Eligibility is matched strictly by CONTRACT ADDRESS — there is no "majors are
+    always eligible" assumption (that was the root bug that aimed the agent at a
+    non-scoring universe).
+  - `tradable_alpha.json` — the liquid subset of the allowlist that actually has
+    a deep enough PancakeSwap route to trade (built by scripts/build_alpha_universe.py).
+    This is the universe the contest strategy deploys into.
+
+`get_token` resolves across core ∪ tradable-alpha, so pricing/execution work for
+any eligible contract (no more KeyError outside the majors).
 """
 from __future__ import annotations
 
@@ -15,6 +26,7 @@ from web3 import Web3
 DATA_DIR = Path(__file__).resolve().parent
 CORE_PATH = DATA_DIR / "curated_core.json"
 ELIGIBLE_PATH = DATA_DIR / "eligible_tokens.json"
+ALPHA_PATH = DATA_DIR / "tradable_alpha.json"
 
 # Stablecoins among the core — used by the risk layer for the "safe" floor.
 STABLECOINS = {"USDT", "USDC", "BUSD", "DAI"}
@@ -48,14 +60,34 @@ def _core() -> dict[str, Token]:
 
 
 @lru_cache(maxsize=1)
+def _alpha() -> dict[str, Token]:
+    """The liquid, tradable subset of the official allowlist (built offline).
+    Keyed by UPPER-cased symbol; non-ASCII symbols upper-case to themselves."""
+    if not ALPHA_PATH.exists():
+        return {}
+    raw = json.loads(ALPHA_PATH.read_text(encoding="utf-8"))
+    out: dict[str, Token] = {}
+    for t in raw:
+        tok = Token(symbol=t["symbol"], contract=t["contract"], decimals=t.get("decimals", 18))
+        out[t["symbol"].upper()] = tok
+    return out
+
+
+@lru_cache(maxsize=1)
+def _by_address() -> dict[str, Token]:
+    out: dict[str, Token] = {}
+    for tok in list(_core().values()) + list(_alpha().values()):
+        out[tok.contract.lower()] = tok
+    return out
+
+
+@lru_cache(maxsize=1)
 def _eligible_addrs() -> set[str]:
+    """The OFFICIAL allowlist addresses — strictly, with no majors shortcut."""
     if not ELIGIBLE_PATH.exists():
         return set()
     raw = json.loads(ELIGIBLE_PATH.read_text(encoding="utf-8"))
-    addrs = {t["contract"].lower() for t in raw if t.get("contract")}
-    # Core tokens are always considered eligible.
-    addrs |= {t.contract.lower() for t in _core().values()}
-    return addrs
+    return {t["contract"].lower() for t in raw if t.get("contract")}
 
 
 def tradable_tokens() -> list[Token]:
@@ -76,11 +108,30 @@ def basket_symbols(n: int) -> list[str]:
     return ordered[:n]
 
 
+def alpha_symbols() -> list[str]:
+    """Liquid, tradable eligible tokens — the contest deploy universe."""
+    return list(_alpha().keys())
+
+
+def tradable_alpha_tokens() -> list[Token]:
+    return list(_alpha().values())
+
+
 def get_token(symbol: str) -> Token:
-    try:
-        return _core()[symbol.upper()]
-    except KeyError as e:
-        raise KeyError(f"{symbol} not in curated tradable set") from e
+    """Resolve a token across core ∪ tradable-alpha (core wins on overlap)."""
+    key = symbol.upper()
+    core = _core()
+    if key in core:
+        return core[key]
+    alpha = _alpha()
+    if key in alpha:
+        return alpha[key]
+    raise KeyError(f"{symbol} not in tradable set (core or eligible-alpha)")
+
+
+def get_token_by_address(address: str) -> Token | None:
+    """Resolve a token by its (case-insensitive) contract address, or None."""
+    return _by_address().get(address.lower())
 
 
 def stablecoins() -> list[Token]:

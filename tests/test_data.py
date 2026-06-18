@@ -41,8 +41,10 @@ def test_unknown_token_raises():
 
 
 def test_eligibility_check():
-    usdt = token_list.get_token("USDT").contract
-    assert token_list.is_eligible(usdt)
+    # Eligibility is strict to the official allowlist (matched by address).
+    # TWT is in the official 149; a random address is not.
+    twt = token_list.get_token("TWT").contract
+    assert token_list.is_eligible(twt)
     assert not token_list.is_eligible("0x000000000000000000000000000000000000dead")
 
 
