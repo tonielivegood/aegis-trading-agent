@@ -15,6 +15,22 @@ def _state(equity, risk, stable, holdings=None):
                           token_values_usd=holdings or {})
 
 
+# --- _make_executor (backend selection) ---
+
+def test_make_executor_defaults_to_pancake(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "pancake")
+    ps = mocker.patch.object(al, "PancakeSwap")
+    al._make_executor(dry_run=True)
+    ps.assert_called_once()
+
+
+def test_make_executor_selects_twak(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "twak")
+    tw = mocker.patch("src.agent.execution.twak_executor.TwakExecutor")
+    al._make_executor(dry_run=True)
+    tw.assert_called_once()
+
+
 # --- _amount_in_tokens ---
 
 def test_amount_in_tokens_converts_usd_to_token():

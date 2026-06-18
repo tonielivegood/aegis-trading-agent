@@ -164,14 +164,24 @@ def _compliance_orders(state: PortfolioState) -> list[TradeOrder]:
     return []
 
 
-def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
-    if not orders:
-        return []
+def _make_executor(dry_run: bool):
+    """Select the execution backend. Default PancakeSwap on the registered wallet
+    (battle-tested); 'twak' routes through the Trust Wallet Agent Kit CLI, which
+    drives its OWN local wallet (use only if that wallet is the registered one)."""
+    if settings.execution_backend == "twak":
+        from .execution.twak_executor import TwakExecutor
+        return TwakExecutor(dry_run=dry_run)
     account = None
     if not dry_run:
         from eth_account import Account
         account = Account.from_key(settings.agent_private_key)
-    dex = PancakeSwap(account=account, dry_run=dry_run)
+    return PancakeSwap(account=account, dry_run=dry_run)
+
+
+def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
+    if not orders:
+        return []
+    dex = _make_executor(dry_run)
 
     results = []
     for o in orders:

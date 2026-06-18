@@ -1,0 +1,146 @@
+"""TWAK executor tests — written test-first (TDD).
+
+The TWAK executor is an alternative execution backend that signs/broadcasts via
+the Trust Wallet Agent Kit CLI (`twak swap ... --chain bsc --json`). It must keep
+the SAME safety rails as the PancakeSwap path:
+  - only curated/whitelisted tokens (KeyError otherwise)
+  - positive amount, distinct tokens
+  - dry-run NEVER broadcasts (uses --quote-only)
+  - no shell=True; args passed as a list (no command injection)
+  - defensive JSON parsing (tolerate schema variation across CLI versions)
+No test touches the network, the CLI, or real credentials.
+"""
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from src.agent.data import token_list
+from src.agent.execution.twak_executor import TwakExecutor, TwakError
+
+
+def _exec(dry_run=True):
+    return TwakExecutor(dry_run=dry_run, password="x")
+
+
+# ----------------------------- arg building -----------------------------
+
+def test_build_args_uses_addresses_chain_and_json():
+    ex = _exec()
+    args = ex._build_args("USDT", "WBNB", 3.5, quote_only=True)
+    # no shell — first token is the binary, rest are flags/values
+    assert args[0] == "twak" and args[1] == "swap"
+    assert "--chain" in args and "bsc" in args
+    assert "--json" in args
+    assert "--quote-only" in args
+    # tokens passed as contract addresses (avoids symbol ambiguity)
+    assert token_list.get_token("USDT").address in args
+    assert token_list.get_token("WBNB").address in args
+    assert "3.5" in args
+
+
+def test_build_args_passes_slippage_as_percent():
+    ex = _exec()
+    ex.slippage_bps = 50  # 0.5%
+    args = ex._build_args("USDT", "WBNB", 1.0, quote_only=False)
+    assert "--slippage" in args
+    i = args.index("--slippage")
+    assert float(args[i + 1]) == pytest.approx(0.5)
+    assert "--quote-only" not in args  # live execution
+
+
+# ----------------------------- validation -----------------------------
+
+def test_rejects_unknown_token():
+    ex = _exec()
+    with pytest.raises(KeyError):
+        ex.swap("NOTAREAL", "USDT", 1.0)
+
+
+def test_rejects_same_token():
+    ex = _exec()
+    with pytest.raises(ValueError):
+        ex.swap("USDT", "USDT", 1.0)
+
+
+def test_rejects_nonpositive_amount():
+    ex = _exec()
+    with pytest.raises(ValueError):
+        ex.swap("USDT", "WBNB", 0.0)
+    with pytest.raises(ValueError):
+        ex.swap("USDT", "WBNB", -1.0)
+
+
+# ----------------------------- dry-run safety -----------------------------
+
+def test_dry_run_uses_quote_only_and_does_not_broadcast(mocker):
+    ex = _exec(dry_run=True)
+    run = mocker.patch.object(ex, "_run", return_value={"amountOut": "1.0"})
+    result = ex.swap("USDT", "WBNB", 2.0)
+    assert result.simulated is True
+    assert result.tx_hash is None
+    # the call it made must be a quote, never a broadcast
+    args = run.call_args.args[0]
+    assert "--quote-only" in args
+
+
+# ----------------------------- live execution -----------------------------
+
+def test_live_swap_broadcasts_and_parses_tx_hash(mocker):
+    ex = _exec(dry_run=False)
+    mocker.patch.object(ex, "_run",
+                        return_value={"txHash": "0xabc", "status": "success"})
+    result = ex.swap("USDT", "WBNB", 2.0)
+    assert result.simulated is False
+    assert result.tx_hash == "0xabc"
+    args = ex._run.call_args.args[0]
+    assert "--quote-only" not in args
+
+
+@pytest.mark.parametrize("field", ["txHash", "tx_hash", "hash", "transactionHash"])
+def test_tx_hash_parsed_from_alternate_field_names(field):
+    ex = _exec(dry_run=False)
+    assert ex._extract_tx_hash({field: "0xdead"}) == "0xdead"
+
+
+def test_extract_tx_hash_none_when_absent():
+    ex = _exec(dry_run=False)
+    assert ex._extract_tx_hash({"status": "success"}) is None
+
+
+# ----------------------------- subprocess hardening -----------------------------
+
+def test_run_rejects_nonzero_exit(mocker):
+    ex = _exec(dry_run=False)
+    proc = mocker.Mock(returncode=1, stdout="", stderr="boom")
+    mocker.patch("src.agent.execution.twak_executor.subprocess.run", return_value=proc)
+    with pytest.raises(TwakError):
+        ex._run(["twak", "swap"])
+
+
+def test_run_rejects_non_json_output(mocker):
+    ex = _exec(dry_run=False)
+    proc = mocker.Mock(returncode=0, stdout="not json", stderr="")
+    mocker.patch("src.agent.execution.twak_executor.subprocess.run", return_value=proc)
+    with pytest.raises(TwakError):
+        ex._run(["twak", "swap"])
+
+
+def test_run_parses_json_and_never_uses_shell(mocker):
+    ex = _exec(dry_run=False)
+    proc = mocker.Mock(returncode=0, stdout=json.dumps({"txHash": "0x1"}), stderr="")
+    run = mocker.patch("src.agent.execution.twak_executor.subprocess.run", return_value=proc)
+    out = ex._run(["twak", "swap", "--json"])
+    assert out == {"txHash": "0x1"}
+    assert run.call_args.kwargs.get("shell", False) is False
+
+
+def test_password_passed_via_env_not_argv(mocker):
+    ex = TwakExecutor(dry_run=False, password="secret-pw")
+    proc = mocker.Mock(returncode=0, stdout=json.dumps({"txHash": "0x1"}), stderr="")
+    run = mocker.patch("src.agent.execution.twak_executor.subprocess.run", return_value=proc)
+    ex._run(["twak", "swap", "--json"])
+    # password must go through the environment, never the command line
+    assert "secret-pw" not in run.call_args.args[0]
+    assert run.call_args.kwargs["env"]["TWAK_WALLET_PASSWORD"] == "secret-pw"

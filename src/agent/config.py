@@ -66,8 +66,19 @@ class Settings(BaseModel):
     min_portfolio_value_usd: float = 1.50
     strategy_tick_min: int = 15
 
+    # --- Execution backend: "pancake" (default, registered wallet) or "twak" ---
+    execution_backend: str = "pancake"
+
     # --- Mode ---
     dry_run: bool = True
+
+    @field_validator("execution_backend")
+    @classmethod
+    def _check_backend(cls, v: str) -> str:
+        v = v.lower()
+        if v not in ("pancake", "twak"):
+            raise ValueError("EXECUTION_BACKEND must be 'pancake' or 'twak'")
+        return v
 
     @field_validator("agent_private_key")
     @classmethod
@@ -111,6 +122,7 @@ def get_settings() -> Settings:
         slippage_bps=int(_get("SLIPPAGE_BPS", "50")),
         min_portfolio_value_usd=float(_get("MIN_PORTFOLIO_VALUE_USD", "1.50")),
         strategy_tick_min=int(_get("STRATEGY_TICK_MIN", "15")),
+        execution_backend=_get("EXECUTION_BACKEND", "pancake"),
         dry_run=_get("DRY_RUN", "true").lower() in ("1", "true", "yes"),
     )
 
