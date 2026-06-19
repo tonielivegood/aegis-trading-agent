@@ -1,1031 +1,1178 @@
 [
   {
-    "id": 1027,
     "symbol": "ETH",
+    "id": 1027,
     "name": "Ethereum",
     "contract": "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
+    "vol24h": 11801401752,
     "token_class": "major"
   },
   {
-    "id": 825,
     "symbol": "USDT",
+    "id": 825,
     "name": "Tether USDt",
     "contract": "0x55d398326f99059ff775485246999027b3197955",
+    "vol24h": 63295681702,
     "token_class": "meme"
   },
   {
-    "id": 3408,
     "symbol": "USDC",
+    "id": 3408,
     "name": "USDC",
     "contract": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+    "vol24h": 10081711322,
     "token_class": "major"
   },
   {
-    "id": 52,
     "symbol": "XRP",
+    "id": 52,
     "name": "XRP",
     "contract": "0x1d2f0da169ceb9fc7b3144628db156f3f6c60dbe",
+    "vol24h": 1838767208,
     "token_class": "major"
   },
   {
-    "id": 1958,
     "symbol": "TRX",
+    "id": 1958,
     "name": "TRON",
     "contract": "0xCE7de646e7208a4Ef112cb6ed5038FA6cC6b12e3",
+    "vol24h": 482179641,
     "token_class": "major"
   },
   {
-    "id": 74,
     "symbol": "DOGE",
+    "id": 74,
     "name": "Dogecoin",
     "contract": "0xba2ae424d960c26247dd6c32edc70b295c744c43",
+    "vol24h": 516941120,
     "token_class": "major"
   },
   {
-    "id": 1437,
     "symbol": "ZEC",
+    "id": 1437,
     "name": "Zcash",
     "contract": "0x1ba42e5193dfa8b03d15dd1b86a3113bbbef8eeb",
+    "vol24h": 459790116,
     "token_class": "major"
   },
   {
-    "id": 2010,
     "symbol": "ADA",
+    "id": 2010,
     "name": "Cardano",
     "contract": "0x3ee2200efb3400fabb9aacf31297cbdd1d435d47",
+    "vol24h": 344171615,
     "token_class": "major"
   },
   {
-    "id": 1975,
     "symbol": "LINK",
+    "id": 1975,
     "name": "Chainlink",
     "contract": "0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd",
+    "vol24h": 246395839,
     "token_class": "major"
   },
   {
-    "id": 1831,
     "symbol": "BCH",
+    "id": 1831,
     "name": "Bitcoin Cash",
     "contract": "0x8fF795a6F4D97E7887C79beA79aba5cc76444aDf",
+    "vol24h": 185853914,
     "token_class": "major"
   },
   {
-    "id": 4943,
     "symbol": "DAI",
+    "id": 4943,
     "name": "Dai",
     "contract": "0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3",
+    "vol24h": 54811899,
     "token_class": "major"
   },
   {
-    "id": 39249,
     "symbol": "TON",
+    "id": 39249,
     "name": "AT&T Tokenized Stock (Ondo)",
     "contract": "0x4255279af47cf10efb9a5c8839f90170f4ef759f",
+    "vol24h": 921,
     "token_class": "major"
   },
   {
-    "id": 36148,
     "symbol": "USD1",
+    "id": 36148,
     "name": "World Liberty Financial USD",
     "contract": "0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d",
+    "vol24h": 1785621410,
     "token_class": "major"
   },
   {
-    "id": 29470,
     "symbol": "USDe",
+    "id": 29470,
     "name": "Ethena USDe",
     "contract": "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34",
+    "vol24h": 72399286,
     "token_class": "major"
   },
   {
-    "id": 35491,
     "symbol": "M",
+    "id": 35491,
     "name": "MemeCore",
     "contract": "0x22b1458e780f8fa71e2f84502cee8b5a3cc731fa",
+    "vol24h": 10205613,
     "token_class": "meme"
   },
   {
-    "id": 2,
     "symbol": "LTC",
+    "id": 2,
     "name": "Litecoin",
     "contract": "0x4338665cbb7b2485a8855a139b75d5e34ab0db94",
+    "vol24h": 180088555,
     "token_class": "major"
   },
   {
-    "id": 5805,
     "symbol": "AVAX",
+    "id": 5805,
     "name": "Avalanche",
     "contract": "0x1ce0c2827e2ef14d5c4f29a091d735a204794041",
+    "vol24h": 431220406,
     "token_class": "major"
   },
   {
-    "id": 5994,
     "symbol": "SHIB",
+    "id": 5994,
     "name": "Shiba Inu",
     "contract": "0x2859e4544c4bb03966803b044a93563bd2d0dd4d",
+    "vol24h": 57964818,
     "token_class": "major"
   },
   {
-    "id": 5176,
     "symbol": "XAUt",
+    "id": 5176,
     "name": "Tether Gold",
     "contract": "0x21cAef8A43163Eea865baeE23b9C2E327696A3bf",
+    "vol24h": 196215951,
     "token_class": "major"
   },
   {
-    "id": 33251,
     "symbol": "WLFI",
+    "id": 33251,
     "name": "World Liberty Financial",
     "contract": "0x47474747477b199288bF72a1D702f7Fe0Fb1DEeA",
+    "vol24h": 30083995,
     "token_class": "major"
   },
   {
-    "id": 6636,
     "symbol": "DOT",
+    "id": 6636,
     "name": "Polkadot",
     "contract": "0x7083609fce4d1d8dc0c979aab8c869ea2c873402",
+    "vol24h": 87771632,
     "token_class": "major"
   },
   {
-    "id": 7083,
     "symbol": "UNI",
+    "id": 7083,
     "name": "Uniswap",
     "contract": "0xbf5140a22578168fd562dccf235e5d43a02ce9b1",
+    "vol24h": 298234766,
     "token_class": "major"
   },
   {
-    "id": 36341,
     "symbol": "ASTER",
+    "id": 36341,
     "name": "Aster",
     "contract": "0x000Ae314E2A2172a039B26378814C252734f556A",
+    "vol24h": 154853850,
     "token_class": "major"
   },
   {
-    "id": 7326,
     "symbol": "DEXE",
+    "id": 7326,
     "name": "DeXe",
     "contract": "0x6E88056E8376Ae7709496Ba64d37fa2f8015ce3e",
+    "vol24h": 28041621,
     "token_class": "major"
   },
   {
-    "id": 19891,
     "symbol": "USDD",
+    "id": 19891,
     "name": "USDD",
     "contract": "0x45e51bc23d592eb2dba86da3985299f7895d66ba",
+    "vol24h": 55424140,
     "token_class": "meme"
   },
   {
-    "id": 1321,
     "symbol": "ETC",
+    "id": 1321,
     "name": "Ethereum Classic",
     "contract": "0x3d6545b08693dae087e957cb1180ee38b9e3c25e",
+    "vol24h": 37962740,
     "token_class": "major"
   },
   {
-    "id": 7278,
     "symbol": "AAVE",
+    "id": 7278,
     "name": "Aave",
     "contract": "0xfb6115445bff7b52feb98650c87f44907e58f802",
+    "vol24h": 161199560,
     "token_class": "major"
   },
   {
-    "id": 3794,
     "symbol": "ATOM",
+    "id": 3794,
     "name": "Cosmos",
     "contract": "0x0eb3a705fc54725037cc9e008bdede697f62f335",
+    "vol24h": 34319758,
     "token_class": "major"
   },
   {
-    "id": 39120,
     "symbol": "U",
+    "id": 39120,
     "name": "United Stables",
     "contract": "0xcE24439F2D9C6a2289F741120FE202248B666666",
+    "vol24h": 173687156,
     "token_class": "major"
   },
   {
-    "id": 38892,
     "symbol": "STABLE",
+    "id": 38892,
     "name": "Stable",
     "contract": "0x011EBe7d75E2C9D1E0bD0be0bEf5C36f0A90075F",
+    "vol24h": 14617828,
     "token_class": "meme"
   },
   {
-    "id": 2280,
     "symbol": "FIL",
+    "id": 2280,
     "name": "Filecoin",
     "contract": "0x0d8ce2a99bb6e3b7db580ed848240e4a0f9ae153",
+    "vol24h": 83652303,
     "token_class": "major"
   },
   {
-    "id": 7226,
     "symbol": "INJ",
+    "id": 7226,
     "name": "Injective",
     "contract": "0xa2b726b1145a4773f68593cf171187d8ebe4d495",
+    "vol24h": 88972416,
     "token_class": "major"
   },
   {
-    "id": 38590,
     "symbol": "币安人生",
+    "id": 38590,
     "name": "币安人生",
     "contract": "0x924fa68a0FC644485b8df8AbfA0A41C2e7744444",
+    "vol24h": 19643535,
     "token_class": "meme"
   },
   {
-    "id": 39064,
     "symbol": "NIGHT",
+    "id": 39064,
     "name": "Midnight",
     "contract": "0xfe930c2d63aed9b82fc4dbc801920dd2c1a3224f",
+    "vol24h": 342984329,
     "token_class": "major"
   },
   {
-    "id": 3773,
     "symbol": "FET",
+    "id": 3773,
     "name": "Artificial Superintelligence Alliance",
     "contract": "0x031b41e504677879370e9dbcf937283a8691fa7f",
+    "vol24h": 121429297,
     "token_class": "major"
   },
   {
-    "id": 2563,
     "symbol": "TUSD",
+    "id": 2563,
     "name": "TrueUSD",
     "contract": "0x40af3827F39D0EAcBF4A168f8D4ee67c121D11c9",
+    "vol24h": 17993312,
     "token_class": "major"
   },
   {
-    "id": 23095,
     "symbol": "BONK",
+    "id": 23095,
     "name": "Bonk",
     "contract": "0xA697e272a73744b343528C3Bc4702F2565b2F422",
+    "vol24h": 27470168,
     "token_class": "major"
   },
   {
-    "id": 34466,
     "symbol": "PENGU",
+    "id": 34466,
     "name": "Pudgy Penguins",
     "contract": "0x6418c0dd099a9fda397c766304cdd918233e8847",
+    "vol24h": 72519084,
     "token_class": "major"
   },
   {
-    "id": 7186,
     "symbol": "CAKE",
+    "id": 7186,
     "name": "PancakeSwap",
     "contract": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82",
+    "vol24h": 21474751,
     "token_class": "major"
   },
   {
-    "id": 35766,
     "symbol": "SIREN",
+    "id": 35766,
     "name": "siren",
     "contract": "0x997a58129890bbda032231a52ed1ddc845fc18e1",
+    "vol24h": 22127229,
     "token_class": "meme"
   },
   {
-    "id": 4172,
     "symbol": "LUNC",
+    "id": 4172,
     "name": "Terra Classic",
     "contract": "0x156ab3346823B651294766e23e6Cf87254d68962",
+    "vol24h": 14694733,
     "token_class": "major"
   },
   {
-    "id": 26997,
     "symbol": "ZRO",
+    "id": 26997,
     "name": "LayerZero",
     "contract": "0x6985884c4392d348587b19cb9eaaf157f13271cd",
+    "vol24h": 26492950,
     "token_class": "major"
   },
   {
-    "id": 38828,
     "symbol": "KITE",
+    "id": 38828,
     "name": "Kite",
     "contract": "0x904567252D8F48555b7447c67dCA23F0372E16be",
+    "vol24h": 19541369,
     "token_class": "major"
   },
   {
-    "id": 26081,
     "symbol": "FDUSD",
+    "id": 26081,
     "name": "First Digital USD",
     "contract": "0xc5f0f7b66764F6ec8C8Dff7BA683102295E16409",
+    "vol24h": 178172337,
     "token_class": "major"
   },
   {
-    "id": 38837,
     "symbol": "BEAT",
+    "id": 38837,
     "name": "Audiera",
     "contract": "0xcf3232B85b43BCa90E51D38cc06Cc8bB8C8A3E36",
+    "vol24h": 82936509,
     "token_class": "meme"
   },
   {
-    "id": 38849,
     "symbol": "PIEVERSE",
+    "id": 38849,
     "name": "Pieverse",
     "contract": "0x0e63b9c287e32a05e6b9ab8ee8df88a2760225a9",
+    "vol24h": 24970064,
     "token_class": "meme"
   },
   {
-    "id": 16086,
     "symbol": "BTT",
+    "id": 16086,
     "name": "BitTorrent [New]",
     "contract": "0x352Cb5E19b12FC216548a2677bD0fce83BaE434B",
+    "vol24h": 6294194,
     "token_class": "major"
   },
   {
-    "id": 9816,
     "symbol": "NFT",
+    "id": 9816,
     "name": "AINFT",
     "contract": "0x20ee7b720f4e4c4ffcb00c4065cdae55271aecca",
+    "vol24h": 8496991,
     "token_class": "meme"
   },
   {
-    "id": 39720,
     "symbol": "EDGE",
+    "id": 39720,
     "name": "edgeX",
     "contract": "0x70f2eadf1ca1969ff42b0c78e9da519e8937cbaf",
+    "vol24h": 8713150,
     "token_class": "meme"
   },
   {
-    "id": 10804,
     "symbol": "FLOKI",
+    "id": 10804,
     "name": "FLOKI",
     "contract": "0xfb5b838b6cfeedc2873ab27866079ac55363d37e",
+    "vol24h": 46837856,
     "token_class": "major"
   },
   {
-    "id": 8000,
     "symbol": "LDO",
+    "id": 8000,
     "name": "Lido DAO",
     "contract": "0x986854779804799C1d68867F5E03e601E781e41b",
+    "vol24h": 44402589,
     "token_class": "major"
   },
   {
-    "id": 36532,
     "symbol": "B",
+    "id": 36532,
     "name": "BUILDon",
     "contract": "0x6bdcce4a559076e37755a78ce0c06214e59e4444",
+    "vol24h": 4276524,
     "token_class": "meme"
   },
   {
-    "id": 38482,
     "symbol": "FF",
+    "id": 38482,
     "name": "Falcon Finance",
     "contract": "0xac23b90a79504865d52b49b327328411a23d4db2",
+    "vol24h": 18497169,
     "token_class": "major"
   },
   {
-    "id": 9481,
     "symbol": "PENDLE",
+    "id": 9481,
     "name": "Pendle",
     "contract": "0xb3Ed0A426155B79B898849803E3B36552f7ED507",
+    "vol24h": 38432650,
     "token_class": "major"
   },
   {
-    "id": 39965,
     "symbol": "NEX",
+    "id": 39965,
     "name": "Nexus",
     "contract": "0x365de036a1f7dccb621530d517133521debb2013",
+    "vol24h": 9498251,
     "token_class": "meme"
   },
   {
-    "id": 18934,
     "symbol": "STG",
+    "id": 18934,
     "name": "Stargate Finance",
     "contract": "0xb0d502e938ed5f4df2e681fe6e419ff29631d62b",
+    "vol24h": 26054948,
     "token_class": "major"
   },
   {
-    "id": 6783,
     "symbol": "AXS",
+    "id": 6783,
     "name": "Axie Infinity",
     "contract": "0x715d400f88c167884bbcc41c5fea407ed4d2f8a0",
+    "vol24h": 17909199,
     "token_class": "major"
   },
   {
-    "id": 5964,
     "symbol": "TWT",
+    "id": 5964,
     "name": "Trust Wallet Token",
     "contract": "0x4b0f1812e5df2a09796481ff14017e6005508003",
+    "vol24h": 6550732,
     "token_class": "major"
   },
   {
-    "id": 36133,
     "symbol": "HOME",
+    "id": 36133,
     "name": "Defi App",
     "contract": "0x4bfaa776991e85e5f8b1255461cbbd216cfc714f",
+    "vol24h": 64608117,
     "token_class": "major"
   },
   {
-    "id": 8526,
     "symbol": "RAY",
+    "id": 8526,
     "name": "Raydium",
     "contract": "0x13b6A55662f6591f8B8408Af1C73B017E32eEdB8",
+    "vol24h": 15703082,
     "token_class": "major"
   },
   {
-    "id": 5692,
     "symbol": "COMP",
+    "id": 5692,
     "name": "Compound",
     "contract": "0x52ce071bd9b1c4b00a0b92d298c512478cad67e8",
+    "vol24h": 7906445,
     "token_class": "major"
   },
   {
-    "id": 39379,
     "symbol": "GWEI",
+    "id": 39379,
     "name": "ETHGas",
     "contract": "0x30117E4bC17d7B044194b76A38365C53b72F7D49",
+    "vol24h": 81701577,
     "token_class": "meme"
   },
   {
-    "id": 18679,
     "symbol": "XCN",
+    "id": 18679,
     "name": "Onyxcoin",
     "contract": "0x7324c7C0d95CEBC73eEa7E85CbAac0dBdf88a05b",
+    "vol24h": 6281583,
     "token_class": "meme"
   },
   {
-    "id": 39841,
     "symbol": "GENIUS",
+    "id": 39841,
     "name": "Genius Terminal",
     "contract": "0x1F12B85aAC097E43Aa1555b2881E98a51090e9A6",
+    "vol24h": 26461047,
     "token_class": "major"
   },
   {
-    "id": 36645,
     "symbol": "XPL",
+    "id": 36645,
     "name": "Plasma",
     "contract": "0x405FBc9004D857903bFD6b3357792D71a50726b0",
+    "vol24h": 202016058,
     "token_class": "major"
   },
   {
-    "id": 1697,
     "symbol": "BAT",
+    "id": 1697,
     "name": "Basic Attention Token",
     "contract": "0x101d82428437127bf1608f699cd651e6abf9766e",
+    "vol24h": 10988310,
     "token_class": "major"
   },
   {
-    "id": 36300,
     "symbol": "SKYAI",
+    "id": 36300,
     "name": "SKYAI",
     "contract": "0x92aa03137385F18539301349dcfC9EbC923fFb10",
+    "vol24h": 30455670,
     "token_class": "meme"
   },
   {
-    "id": 18876,
     "symbol": "APE",
+    "id": 18876,
     "name": "ApeCoin",
     "contract": "0x8f86a15EC17cb3369d8b3E666dAdBC11daA82b79",
+    "vol24h": 20961669,
     "token_class": "major"
   },
   {
-    "id": 35626,
     "symbol": "IP",
+    "id": 35626,
     "name": "Story",
     "contract": "0x4d6394bc3031f751edce368c189b0e060b527107",
+    "vol24h": 42470616,
     "token_class": "meme"
   },
   {
-    "id": 8119,
     "symbol": "SFP",
+    "id": 8119,
     "name": "SafePal",
     "contract": "0xd41fdb03ba84762dd66a0af1a6c8540ff1ba5dfb",
+    "vol24h": 3431215,
     "token_class": "major"
   },
   {
-    "id": 34958,
     "symbol": "TAG",
+    "id": 34958,
     "name": "Tagger",
     "contract": "0x208bf3e7da9639f1eaefa2de78c23396b0682025",
+    "vol24h": 4443781,
     "token_class": "meme"
   },
   {
-    "id": 36044,
     "symbol": "NXPC",
+    "id": 36044,
     "name": "NEXPACE",
     "contract": "0xf2b51cc1850fed939658317a22d73d3482767591",
+    "vol24h": 9150136,
     "token_class": "major"
   },
   {
-    "id": 3871,
     "symbol": "AB",
+    "id": 3871,
     "name": "AB",
     "contract": "0x95034f653d5d161890836ad2b6b8cc49d14e029a",
+    "vol24h": 1108531,
     "token_class": "meme"
   },
   {
-    "id": 36671,
     "symbol": "SAHARA",
+    "id": 36671,
     "name": "Sahara AI",
     "contract": "0xFDFfB411C4A70AA7C95D5C981a6Fb4Da867e1111",
+    "vol24h": 26318717,
     "token_class": "major"
   },
   {
-    "id": 8104,
     "symbol": "1INCH",
+    "id": 8104,
     "name": "1inch",
     "contract": "0x111111111117dc0aa78b770fa6a738034120c302",
+    "vol24h": 8185858,
     "token_class": "major"
   },
   {
-    "id": 33280,
     "symbol": "CHEEMS",
+    "id": 33280,
     "name": "Cheems (cheems.pet)",
     "contract": "0x0df0587216a4a1bb7d5082fdc491d93d2dd4b413",
+    "vol24h": 1814399,
     "token_class": "meme"
   },
   {
-    "id": 34118,
     "symbol": "BANANAS31",
+    "id": 34118,
     "name": "Banana For Scale",
     "contract": "0x3d4f0513e8a29669b960f9dbca61861548a9a760",
+    "vol24h": 12848005,
     "token_class": "major"
   },
   {
-    "id": 38417,
     "symbol": "RIVER",
+    "id": 38417,
     "name": "River",
     "contract": "0xdA7AD9dea9397cffdDAE2F8a052B82f1484252B3",
+    "vol24h": 7451292,
     "token_class": "meme"
   },
   {
-    "id": 36410,
     "symbol": "MYX",
+    "id": 36410,
     "name": "MYX Finance",
     "contract": "0xD82544bf0dfe8385eF8FA34D67e6e4940CC63e16",
+    "vol24h": 30060209,
     "token_class": "meme"
   },
   {
-    "id": 38967,
     "symbol": "RAVE",
+    "id": 38967,
     "name": "RaveDAO",
     "contract": "0x97693439ea2f0ecdeb9135881e49f354656a911c",
+    "vol24h": 10596399,
     "token_class": "meme"
   },
   {
-    "id": 2586,
     "symbol": "SNX",
+    "id": 2586,
     "name": "Synthetix",
     "contract": "0x9ac983826058b8a9c7aa1c9171441191232e8404",
+    "vol24h": 4497953,
     "token_class": "major"
   },
   {
-    "id": 23635,
     "symbol": "FORM",
+    "id": 23635,
     "name": "Four",
     "contract": "0x5b73A93b4E5e4f1FD27D8b3F8C97D69908b5E284",
+    "vol24h": 6983576,
     "token_class": "major"
   },
   {
-    "id": 33223,
     "symbol": "LAB",
+    "id": 33223,
     "name": "LAB",
     "contract": "0x7ec43Cf65F1663F820427C62A5780b8f2E25593A",
+    "vol24h": 62357892,
     "token_class": "meme"
   },
   {
-    "id": 29160,
     "symbol": "HTX",
+    "id": 29160,
     "name": "HTX",
     "contract": "0x61ec85ab89377db65762e234c946b5c25a56e99e",
+    "vol24h": 17082427,
     "token_class": "meme"
   },
   {
-    "id": 35721,
     "symbol": "USDf",
+    "id": 35721,
     "name": "Falcon USD",
     "contract": "0xb3b02e4a9fb2bd28cc2ff97b0ab3f6b3ec1ee9d2",
+    "vol24h": 916537,
     "token_class": "meme"
   },
   {
-    "id": 37745,
     "symbol": "CTM",
+    "id": 37745,
     "name": "c8ntinuum",
     "contract": "0xc8Fb80fCc03f699C70ff0CC08C09106288888888",
+    "vol24h": 14337611,
     "token_class": "meme"
   },
   {
-    "id": 3987,
     "symbol": "BDX",
+    "id": 3987,
     "name": "Beldex",
     "contract": "0x6ad12E761b438beA3EA09F6C6266556Bb24C2181",
+    "vol24h": 9266747,
     "token_class": "meme"
   },
   {
-    "id": 40047,
     "symbol": "SLX",
+    "id": 40047,
     "name": "Solstice",
     "contract": "0x02bcC4C181B83a8c0A342BC003389CbEcb4BC54D",
+    "vol24h": 17365541,
     "token_class": "meme"
   },
   {
-    "id": 38339,
     "symbol": "UB",
+    "id": 38339,
     "name": "Unibase",
     "contract": "0x40b8129B786D766267A7a118cF8C07E31CDB6Fde",
+    "vol24h": 6679547,
     "token_class": "meme"
   },
   {
-    "id": 33852,
     "symbol": "DUCKY",
+    "id": 33852,
     "name": "Ducky",
     "contract": "0xaDB50D6a3f931E5b4A14D06A4A77fe71171A462f",
+    "vol24h": 46901,
     "token_class": "meme"
   },
   {
-    "id": 6953,
     "symbol": "FRAX",
+    "id": 6953,
     "name": "Frax (prev. FXS)",
     "contract": "0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE",
+    "vol24h": 622790,
     "token_class": "major"
   },
   {
-    "id": 39545,
     "symbol": "BILL",
+    "id": 39545,
     "name": "Billions Network",
     "contract": "0xDf24f8c21Cb404B3031a450D8e049D6E39FC1fA5",
+    "vol24h": 296441230,
     "token_class": "meme"
   },
   {
-    "id": 34261,
     "symbol": "WFI",
+    "id": 34261,
     "name": "WeFi",
     "contract": "0x90c48855bb69f9d2c261efd0d8c7f35990f2dd6f",
+    "vol24h": 1492612,
     "token_class": "meme"
   },
   {
-    "id": 7184,
     "symbol": "KOGE",
+    "id": 7184,
     "name": "48 Club Token",
     "contract": "0xe6df05ce8c8301223373cf5b969afcb1498c5528",
+    "vol24h": 123972,
     "token_class": "meme"
   },
   {
-    "id": 30605,
     "symbol": "ALE",
+    "id": 30605,
     "name": "Ailey",
     "contract": "0x9dCE13E71B11eb5Df66ca269bD657696587Fd4E2",
+    "vol24h": 113533,
     "token_class": "meme"
   },
   {
-    "id": 36039,
     "symbol": "FRXUSD",
+    "id": 36039,
     "name": "Frax USD",
     "contract": "0x80Eede496655FB9047dd39d9f418d5483ED600df",
+    "vol24h": 2449885,
     "token_class": "meme"
   },
   {
-    "id": 35721,
     "symbol": "USDF",
+    "id": 35721,
     "name": "Falcon USD",
     "contract": "0xb3b02e4a9fb2bd28cc2ff97b0ab3f6b3ec1ee9d2",
+    "vol24h": 916537,
     "token_class": "meme"
   },
   {
-    "id": 10180,
     "symbol": "GOMINING",
+    "id": 10180,
     "name": "GoМining",
     "contract": "0x7Ddc52c4De30e94Be3A6A0A2b259b2850f421989",
+    "vol24h": 11480101,
     "token_class": "meme"
   },
   {
-    "id": 28656,
     "symbol": "VCNT",
+    "id": 28656,
     "name": "ViciCoin",
     "contract": "0xc6BDFC4f2E90196738873E824a9eFa03F7c64176",
+    "vol24h": 77168,
     "token_class": "meme"
   },
   {
-    "id": 38984,
     "symbol": "GUA",
+    "id": 38984,
     "name": "SUPERFORTUNE",
     "contract": "0xa5c8e1513b6a08334b479fe4d71f1253259469be",
+    "vol24h": 2580189,
     "token_class": "meme"
   },
   {
-    "id": 36762,
     "symbol": "DUSD",
+    "id": 36762,
     "name": "StandX DUSD",
     "contract": "0xaf44A1E76F56eE12ADBB7ba8acD3CbD474888122",
+    "vol24h": 1365876,
     "token_class": "meme"
   },
   {
-    "id": 10186,
     "symbol": "SMILEK",
+    "id": 10186,
     "name": "Smilek to the Bank",
     "contract": "0x4f9d3AdbfAF4579518b1Ca7E06468A363897B997",
+    "vol24h": 36031,
     "token_class": "meme"
   },
   {
-    "id": 38337,
     "symbol": "0G",
+    "id": 38337,
     "name": "0G",
     "contract": "0x4B948d64dE1F71fCd12fB586f4c776421a35b3eE",
+    "vol24h": 9823364,
     "token_class": "major"
   },
   {
-    "id": 28298,
     "symbol": "BEAM",
+    "id": 28298,
     "name": "Beam",
     "contract": "0x62D0A8458eD7719FDAF978fe5929C6D342B0bFcE",
+    "vol24h": 3029803,
     "token_class": "major"
   },
   {
-    "id": 35269,
     "symbol": "MY",
+    "id": 35269,
     "name": "MetYa",
     "contract": "0xf0ebb572643336834d516c485ad31d3299999999",
+    "vol24h": 151423,
     "token_class": "meme"
   },
   {
-    "id": 36542,
     "symbol": "SOON",
+    "id": 36542,
     "name": "SOON",
     "contract": "0xb9E1Fd5A02D3A33b25a14d661414E6ED6954a721",
+    "vol24h": 8872624,
     "token_class": "meme"
   },
   {
-    "id": 14721,
     "symbol": "REAL",
+    "id": 14721,
     "name": "RealLink",
     "contract": "0x65e7a112dB1142EAE919201b1232f7aA488Ed83c",
+    "vol24h": 6406214,
     "token_class": "meme"
   },
   {
-    "id": 38236,
     "symbol": "Q",
+    "id": 38236,
     "name": "Quack AI",
     "contract": "0xc07e1300dc138601FA6B0b59f8D0FA477e690589",
+    "vol24h": 4355490,
     "token_class": "meme"
   },
   {
-    "id": 9104,
     "symbol": "AIOZ",
+    "id": 9104,
     "name": "AIOZ Network",
     "contract": "0x33d08D8C7a168333a85285a68C0042b39fC3741D",
+    "vol24h": 4557374,
     "token_class": "meme"
   },
   {
-    "id": 9260,
     "symbol": "ZIG",
+    "id": 9260,
     "name": "ZIGChain",
     "contract": "0x8C907e0a72C3d55627E853f4ec6a96b0C8771145",
+    "vol24h": 1896840,
     "token_class": "meme"
   },
   {
-    "id": 5864,
     "symbol": "YFI",
+    "id": 5864,
     "name": "Yearn",
     "contract": "0x88f1a5ae2a3bf98aeaf342d26b30a79438c9142e",
+    "vol24h": 3256085,
     "token_class": "major"
   },
   {
-    "id": 37338,
     "symbol": "TAC",
+    "id": 37338,
     "name": "TAC Protocol",
     "contract": "0x1219c409fabe2c27bd0d1a565daeed9bd9f271de",
+    "vol24h": 8194310,
     "token_class": "meme"
   },
   {
-    "id": 21330,
     "symbol": "lisUSD",
+    "id": 21330,
     "name": "lisUSD",
     "contract": "0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5",
+    "vol24h": 1028,
     "token_class": "meme"
   },
   {
-    "id": 39071,
     "symbol": "CYS",
+    "id": 39071,
     "name": "Cysic",
     "contract": "0x0C69199C1562233640e0Db5Ce2c399A88eB507C7",
+    "vol24h": 3399745,
     "token_class": "meme"
   },
   {
-    "id": 39332,
     "symbol": "ZAMA",
+    "id": 39332,
     "name": "Zama",
     "contract": "0x6907a5986c4950bdaf2f81828ec0737ce787519f",
+    "vol24h": 26830482,
     "token_class": "major"
   },
   {
-    "id": 39382,
     "symbol": "TRIA",
+    "id": 39382,
     "name": "Tria",
     "contract": "0xb0b92de23baa85fb06208277e925ced53edab482",
+    "vol24h": 6337832,
     "token_class": "meme"
   },
   {
-    "id": 36576,
     "symbol": "HUMA",
+    "id": 36576,
     "name": "Huma Finance",
     "contract": "0x92516e0DDf1dDBF7FAB1b79CaC26689fDC5ba8e6",
+    "vol24h": 8984193,
     "token_class": "major"
   },
   {
-    "id": 35364,
     "symbol": "PLUME",
+    "id": 35364,
     "name": "Plume",
     "contract": "0x5aFadCd1E8E3CA78Ee2D37100102f2aec8Bc0Aa8",
+    "vol24h": 16160715,
     "token_class": "major"
   },
   {
-    "id": 2469,
     "symbol": "ZIL",
+    "id": 2469,
     "name": "Zilliqa",
     "contract": "0xb86abcb37c3a4b64f74f59301aff131a1becc787",
+    "vol24h": 5578935,
     "token_class": "major"
   },
   {
-    "id": 5350,
     "symbol": "XPR",
+    "id": 5350,
     "name": "XPR Network",
     "contract": "0x5de3939b2f811a61d830e6f52d13b066881412ab",
+    "vol24h": 1230922,
     "token_class": "meme"
   },
   {
-    "id": 21259,
     "symbol": "ZETA",
+    "id": 21259,
     "name": "ZetaChain",
     "contract": "0x0000028a2eB8346cd5c0267856aB7594B7a55308",
+    "vol24h": 4858375,
     "token_class": "meme"
   },
   {
-    "id": 10407,
     "symbol": "BabyDoge",
+    "id": 10407,
     "name": "Baby Doge Coin",
     "contract": "0xc748673057861a797275cd8a068abb95a902e8de",
+    "vol24h": 3525767,
     "token_class": "meme"
   },
   {
-    "id": 36302,
     "symbol": "NILA",
+    "id": 36302,
     "name": "MindWaveDAO",
     "contract": "0x00f8Da33734FeB9b946fEC2228C25072D2e2E41f",
+    "vol24h": 224050,
     "token_class": "meme"
   },
   {
-    "id": 7653,
     "symbol": "ROSE",
+    "id": 7653,
     "name": "Oasis",
     "contract": "0xF00600eBC7633462BC4F9C61eA2cE99F5AAEBd4a",
+    "vol24h": 2757814,
     "token_class": "major"
   },
   {
-    "id": 7127,
     "symbol": "VELO",
+    "id": 7127,
     "name": "Velo",
     "contract": "0xf486ad071f3bee968384d2e39e2d8af0fcf6fd46",
+    "vol24h": 2240287,
     "token_class": "meme"
   },
   {
-    "id": 38841,
     "symbol": "UAI",
+    "id": 38841,
     "name": "UnifAI Network",
     "contract": "0x3e5d4f8aee0d9b3082d5f6da5d6e225d17ba9ea0",
+    "vol24h": 7502851,
     "token_class": "meme"
   },
   {
-    "id": 29743,
     "symbol": "BRETT",
+    "id": 29743,
     "name": "Brett (Based)",
     "contract": "0xa7440029eca41deabd8775ef1d6086b37d4df8d6",
+    "vol24h": 19398284,
     "token_class": "meme"
   },
   {
-    "id": 37456,
     "symbol": "OPEN",
+    "id": 37456,
     "name": "OpenLedger",
     "contract": "0xa227cc36938f0c9e09ce0e64dfab226cad739447",
+    "vol24h": 11412704,
     "token_class": "major"
   },
   {
-    "id": 38889,
     "symbol": "BSB",
+    "id": 38889,
     "name": "Block Street",
     "contract": "0x595deaad1eb5476ff1e649fdb7efc36f1e4679cc",
+    "vol24h": 58124622,
     "token_class": "meme"
   },
   {
-    "id": 27750,
     "symbol": "TOSHI",
+    "id": 27750,
     "name": "Toshi",
     "contract": "0x6a2608Dabe09bc1128EEC7275B92DFB939D5Db3f",
+    "vol24h": 7558513,
     "token_class": "meme"
   },
   {
-    "id": 37387,
     "symbol": "BAS",
+    "id": 37387,
     "name": "BNB Attestation Service",
     "contract": "0x0f0df6cb17ee5e883eddfef9153fc6036bdb4e37",
+    "vol24h": 4998636,
     "token_class": "meme"
   },
   {
-    "id": 6958,
     "symbol": "ACH",
+    "id": 6958,
     "name": "Alchemy Pay",
     "contract": "0xBc7d6B50616989655AfD682fb42743507003056D",
+    "vol24h": 6096981,
     "token_class": "major"
   },
   {
-    "id": 17799,
     "symbol": "AXL",
+    "id": 17799,
     "name": "Axelar",
     "contract": "0x8b1f4432F943c465A973FeDC6d7aa50Fc96f1f65",
+    "vol24h": 6400721,
     "token_class": "major"
   },
   {
-    "id": 36804,
     "symbol": "LUR",
+    "id": 36804,
     "name": "Lumera Health",
     "contract": "0xc66B6f38aE5053A109cfd8639E0Ee17EC69cf788",
+    "vol24h": 515184,
     "token_class": "meme"
   },
   {
-    "id": 2299,
     "symbol": "ELF",
+    "id": 2299,
     "name": "aelf",
     "contract": "0xa3f020a5c92e15be13caf0ee5c95cf79585eecc9",
+    "vol24h": 1051872,
     "token_class": "major"
   },
   {
-    "id": 4846,
     "symbol": "KAVA",
+    "id": 4846,
     "name": "Kava",
     "contract": "0x9BAFC8d4b487cEBff201721702507a3E2C67ad79",
+    "vol24h": 9549648,
     "token_class": "major"
   },
   {
-    "id": 38569,
     "symbol": "APR",
+    "id": 38569,
     "name": "aPriori",
     "contract": "0x299AD4299Da5b2b93Fba4c96967B040C7F611099",
+    "vol24h": 5973256,
     "token_class": "meme"
   },
   {
-    "id": 38978,
     "symbol": "IRYS",
+    "id": 38978,
     "name": "Irys",
     "contract": "0x91152B4Ef635403efBAe860edD0F8c321d7c035d",
+    "vol24h": 6301859,
     "token_class": "meme"
   },
   {
-    "id": 32644,
     "symbol": "EURI",
+    "id": 32644,
     "name": "Eurite",
     "contract": "0x9d1a7a3191102e9f900faa10540837ba84dcbae7",
+    "vol24h": 15721911,
     "token_class": "major"
   },
   {
-    "id": 32372,
     "symbol": "XUSD",
+    "id": 32372,
     "name": "StraitsX USD",
     "contract": "0xF81aC2E1A0373ddE1BcE01E2Fe694a9b7E3bfcB9",
+    "vol24h": 6038233,
     "token_class": "major"
   },
   {
-    "id": 38408,
     "symbol": "BARD",
+    "id": 38408,
     "name": "Lombard",
     "contract": "0xd23A186A78c0B3B805505E5f8ea4083295ef9f3a",
+    "vol24h": 7234788,
     "token_class": "major"
   },
   {
-    "id": 4092,
     "symbol": "DUSK",
+    "id": 4092,
     "name": "Dusk",
     "contract": "0xb2bd0749dbe21f623d9baba856d3b0f0e1bfec9c",
+    "vol24h": 5020902,
     "token_class": "major"
   },
   {
-    "id": 6758,
     "symbol": "SUSHI",
+    "id": 6758,
     "name": "SushiSwap",
     "contract": "0x947950BcC74888a40Ffa2593C5798F11Fc9124C4",
+    "vol24h": 7866483,
     "token_class": "major"
   },
   {
-    "id": 14588,
     "symbol": "PEAQ",
+    "id": 14588,
     "name": "peaq",
     "contract": "0x8b9Ee39195eA99d6ddD68030F44131116bc218F6",
+    "vol24h": 11265588,
     "token_class": "meme"
   },
   {
-    "id": 38489,
     "symbol": "COAI",
+    "id": 38489,
     "name": "ChainOpera AI",
     "contract": "0x0A8D6C86e1bcE73fE4D0bD531e1a567306836EA5",
+    "vol24h": 10451923,
     "token_class": "meme"
   },
   {
-    "id": 35637,
     "symbol": "BDCA",
+    "id": 35637,
     "name": "BitDCA",
     "contract": "0x0c8382719ef242cae2247e4decb2891fbf699818",
+    "vol24h": 162222,
     "token_class": "meme"
   },
   {
-    "id": 34212,
     "symbol": "XAUM",
+    "id": 34212,
     "name": "Matrixdock Gold",
     "contract": "0x23AE4fd8E7844cdBc97775496eBd0E8248656028",
+    "vol24h": 320021,
     "token_class": "meme"
   }
 ]

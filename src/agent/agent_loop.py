@@ -12,6 +12,7 @@ agent survives restarts during the live window.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from .config import settings
@@ -33,8 +34,166 @@ RUNTIME = Path(__file__).resolve().parents[2] / "data" / "runtime"
 DRAWDOWN_FILE = RUNTIME / "drawdown.json"
 TRADES_FILE = RUNTIME / "trades.json"
 BASELINE_FILE = RUNTIME / "baseline.json"
+POSITIONS_FILE = RUNTIME / "aegis_positions.json"
+COMPLIANCE_FILE = RUNTIME / "track1_compliance.json"
+COOLDOWN_FILE = RUNTIME / "aegis_cooldown.json"
+REGIME_FILE = RUNTIME / "regime.json"
 LOW_EQUITY_USD = max(5.0, settings.min_portfolio_value_usd * 2)
 COMPLIANCE_ORDER_USD = 2.0
+
+
+def _eligible_token_of(token_in: str, token_out: str) -> tuple[str, str, str] | None:
+    """For a USDT<->eligible swap, return (symbol, contract, side) if the traded
+    token is in the official allowlist by contract, else None."""
+    sym = token_out if token_in in STABLECOINS else token_in
+    side = "buy" if token_in in STABLECOINS else "sell"
+    if sym in STABLECOINS:
+        return None
+    try:
+        contract = token_list.get_token(sym).contract
+    except KeyError:
+        return None
+    return (sym, contract, side) if token_list.is_eligible(contract) else None
+
+
+def _apply_min_trade_compliance(orders, state, prices, now_ts):
+    """If Track-1 compliance is unmet for today and the strategy is idle late in
+    the day, append ONE fully risk-gated minimum trade in the safest eligible
+    token. Never bypasses gates; safe-skips if nothing is safe. Additive only."""
+    if not settings.track1_compliance_enabled:
+        return orders
+    from datetime import datetime, timezone
+
+    from .aegis.compliance import ComplianceTracker, pick_compliance_trade
+    from .aegis.market_feed import MarketFeed
+    from .aegis.positions import PositionBook
+    # Already have an eligible trade queued this tick? then today's minimum is in hand.
+    if any(_eligible_token_of(o.token_in, o.token_out) for o in orders):
+        return orders
+    tracker = ComplianceTracker.load(COMPLIANCE_FILE)
+    if tracker.valid_today(now_ts) >= settings.track1_min_trades_per_day:
+        return orders
+    hour = datetime.fromtimestamp(now_ts, tz=timezone.utc).hour
+    if hour < settings.track1_compliance_after_hour_utc:
+        return orders                              # let real signals trade first
+    held = set(PositionBook.load(POSITIONS_FILE).positions)
+    order, reason = pick_compliance_trade(state, prices, MarketFeed(volume_provider=None), held=held)
+    if order is not None:
+        log.info("min_trade_compliance_order", symbol=order.token_out, reason=reason)
+        return [*orders, order]
+    log.info("compliance_unmet_safe_skip", reason=reason)
+    return orders
+
+
+def _record_valid_trades(results, now_ts) -> None:
+    """Record executed eligible-by-contract trades into the compliance tracker."""
+    if not settings.track1_compliance_enabled:
+        return
+    from .aegis.compliance import ComplianceTracker
+    tracker = ComplianceTracker.load(COMPLIANCE_FILE)
+    changed = False
+    for r in results:
+        if "error" in r:
+            continue
+        info = _eligible_token_of(r.get("token_in", ""), r.get("token_out", ""))
+        if not info:
+            continue
+        sym, contract, side = info
+        source = "compliance" if r.get("order") == "MIN_TRADE_COMPLIANCE" else "event"
+        tracker.record_executed(symbol=sym, contract=contract,
+                                notional_usd=r.get("amount_usd", 0.0), side=side,
+                                source=source, reason=r.get("order", ""), now_ts=now_ts)
+        changed = True
+    if changed:
+        tracker.save(COMPLIANCE_FILE)
+
+
+def _event_mode() -> bool:
+    return settings.strategy_mode == "event_alpha" and settings.event_radar_enabled
+
+
+def _event_prices(symbols: list[str], balances: dict) -> dict[str, float]:
+    """On-chain USD prices for the alpha universe + anything held (for valuation)."""
+    want = list({*symbols, "WBNB", *balances.keys()})
+    prices = price_feed.get_prices([s for s in want if s != "BNB"])
+    for stable in STABLECOINS:
+        prices.setdefault(stable, 1.0)
+    if "BNB" in balances:
+        prices["BNB"] = prices.get("WBNB") or price_feed.onchain_price_usd("BNB") or 0.0
+    return prices
+
+
+def _clear_position_book() -> None:
+    from .aegis.positions import PositionBook
+    book = PositionBook.load(POSITIONS_FILE)
+    if book.positions:
+        for s in list(book.positions):
+            book.close(s)
+        book.save(POSITIONS_FILE)
+
+
+def _volume_provider():
+    """Class-routed volume: MAJORS use Binance spot klines, MEMES use Binance Alpha
+    klines. Returns a callable(symbol)->(vol, baseline); fail-safe (0,0) per token.
+    None only when the whole source is disabled."""
+    if settings.volume_source != "binance_alpha_klines":
+        return None
+    from .aegis.binance_alpha_volume import BinanceAlphaKlinesVolumeProvider
+    from .aegis.binance_spot_volume import BinanceSpotKlinesVolumeProvider
+    alpha = BinanceAlphaKlinesVolumeProvider()
+    majors = {s for s in token_list.alpha_symbols() if token_list.token_class(s) == "major"}
+    spot = BinanceSpotKlinesVolumeProvider(symbols=majors)
+
+    def provider(symbol: str) -> tuple[float, float]:
+        if token_list.token_class(symbol) == "major":
+            return spot.volume_tuple(symbol)
+        return alpha.volume_tuple(symbol)
+
+    return provider
+
+
+def _maybe_update_regime(now_ts: float):
+    """Refresh the regime flag at most once per `regime_update_seconds` (hourly).
+
+    Reads BTC momentum from CMC and classifies it (deterministic, robust, free).
+    On any failure we keep the last flag — `current_regime` downgrades to CAUTIOUS
+    if it goes stale, so a dead updater can never silently keep us aggressive.
+    """
+    from .aegis import regime as rg
+    st = rg.RegimeState.load(REGIME_FILE)
+    if now_ts - st.updated_at < settings.regime_update_seconds:
+        return st
+    try:
+        quote = cmc_client.get_quotes(["BTC"]).get("BTC", {})
+        flag, reason = rg.decide_regime(quote)
+        st = rg.RegimeState(flag=flag.value, updated_at=now_ts, reason=reason)
+        st.save(REGIME_FILE)
+        log.info("regime_updated", flag=flag.value, reason=reason)
+    except Exception as e:  # noqa: BLE001 — never let a data hiccup break the tick
+        log.info("regime_update_failed", error=type(e).__name__)
+    return st
+
+
+def _event_decision(state: PortfolioState, prices: dict, symbols: list[str]):
+    """Run the v2 sniper decision (volume breakout + regime valve + cooldown),
+    persisting the position book + cooldown. DRY_RUN-safe; never broadcasts here."""
+    from .aegis import regime as rg
+    from .aegis import sniper
+    from .aegis.cooldown import CooldownBook
+    from .aegis.market_feed import MarketFeed
+    from .aegis.positions import PositionBook
+    now_ts = time.time()
+    book = PositionBook.load(POSITIONS_FILE)
+    cooldowns = CooldownBook.load(COOLDOWN_FILE)
+    feed = MarketFeed(volume_provider=_volume_provider())
+    rstate = _maybe_update_regime(now_ts)
+    flag = rg.current_regime(rstate, max_age_s=settings.regime_max_age_seconds, now=now_ts)
+    orders, mode = sniper.run(state, prices, book=book, feed=feed, cooldowns=cooldowns,
+                              regime_flag=flag, universe=symbols, now=now_ts)
+    book.save(POSITIONS_FILE)
+    cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
+    cooldowns.save(COOLDOWN_FILE)
+    return orders, f"{mode}:{flag.value}"
 
 
 def _load_drawdown() -> DrawdownTracker:
@@ -79,11 +238,17 @@ def _amount_in_tokens(order: TradeOrder, prices: dict[str, float]) -> float:
 def tick(dry_run: bool | None = None) -> dict:
     dry_run = settings.dry_run if dry_run is None else dry_run
     now = utcnow()
-    symbols = token_list.tradable_symbols()
+    event_mode = _event_mode()
 
     balances = read_onchain_balances(settings.agent_wallet_address)
-    quotes = cmc_client.get_quotes([s for s in symbols if s != "WBNB"] + ["WBNB"])
-    prices = _build_prices(symbols, quotes, balances)
+    if event_mode:
+        # Primary strategy: trade the liquid eligible (Alpha) universe, priced on-chain.
+        symbols = token_list.alpha_symbols()
+        prices = _event_prices(symbols, balances)
+    else:
+        symbols = token_list.tradable_symbols()
+        quotes = cmc_client.get_quotes([s for s in symbols if s != "WBNB"] + ["WBNB"])
+        prices = _build_prices(symbols, quotes, balances)
 
     pf = Portfolio()
     equity = pf.equity(balances, prices)              # full wallet value (incl native BNB) for PnL
@@ -114,9 +279,17 @@ def tick(dry_run: bool | None = None) -> dict:
 
     if action.derisk:
         orders = rebalance_strategy.derisk_orders(state)
+        mode = "derisk"
+        if event_mode:
+            _clear_position_book()          # flatten simulated event positions too
+    elif event_mode:
+        # Layer B primary (event radar) with Layer A (eligible basket) fallback.
+        orders, mode = _event_decision(state, prices, symbols)
+        if action.halt_buys:
+            orders = [o for o in orders if o.token_in not in STABLECOINS]
     else:
-        # Validated production strategy: fractional diversified hold + breaker.
-        # Deploy into the concentrated top-liquidity basket (sized for capital).
+        # Baseline: fractional diversified hold + breaker on the majors basket.
+        mode = "baseline-hold"
         basket = token_list.basket_symbols(settings.basket_size)
         orders = adaptive_hold_strategy.decide(state, basket, settings.deploy_frac)
         if action.halt_buys:
@@ -124,17 +297,60 @@ def tick(dry_run: bool | None = None) -> dict:
         if action.needs_compliance_trade and not orders:
             orders = _compliance_orders(state)
 
+    # Track-1 min-trade compliance (additive; event mode only, never bypasses gates).
+    if event_mode and not action.derisk:
+        orders = _apply_min_trade_compliance(orders, state, prices, time.time())
+
+    # Gas guard: if native BNB is too low to reliably pay for EXITS, stop opening
+    # new positions (buys spend a stablecoin) so we never get stuck unable to sell.
+    if not action.derisk and balances.get("BNB", 0.0) < settings.min_gas_bnb:
+        buys = [o for o in orders if o.token_in in STABLECOINS]
+        if buys:
+            log.warning("low_gas_bnb_block_buys", bnb=round(balances.get("BNB", 0.0), 5),
+                        n_blocked=len(buys))
+            orders = [o for o in orders if o.token_in not in STABLECOINS]
+
     cum_return = pnl.cumulative_return(_baseline_equity(equity), equity)
     log.info("tick", equity=round(equity, 2), drawdown=round(drawdown.current_drawdown(), 4),
-             cumulative_return=round(cum_return, 4),
+             cumulative_return=round(cum_return, 4), strategy=mode,
              safeguard=action.reason, n_orders=len(orders), dry_run=dry_run)
 
     results = _execute(orders, prices, dry_run, trade_counter, now)
+    if event_mode:
+        _record_valid_trades(results, time.time())
 
     trade_counter.save(TRADES_FILE)
     _save_drawdown(drawdown)
     _notify(action, results, equity, drawdown, cum_return, now)
     return {"equity": equity, "action": action.reason, "orders": len(orders), "results": results}
+
+
+def flatten_to_cash(dry_run: bool | None = None) -> dict:
+    """KILL-SWITCH: immediately sell every non-stable holding to USDT and clear the
+    position + cooldown books. Independent of strategy and breaker — for a manual
+    emergency halt. Honors DRY_RUN unless explicitly overridden (CLI passes False)."""
+    dry_run = settings.dry_run if dry_run is None else dry_run
+    now = utcnow()
+    balances = read_onchain_balances(settings.agent_wallet_address)
+    prices = _event_prices(token_list.alpha_symbols(), balances)
+    pf = Portfolio()
+    # Value EVERY held token (not just the alpha universe) so nothing is left behind;
+    # native BNB stays as gas (it is not a directly swappable ERC-20).
+    token_values = {s: balances[s] * prices.get(s, 0.0)
+                    for s in balances if s != "BNB" and prices.get(s, 0.0) > 0}
+    state = PortfolioState(
+        equity_usd=pf.equity(balances, prices), risk_value_usd=0.0,
+        stable_value_usd=pf.stable_value(balances, prices), token_values_usd=token_values)
+    orders = rebalance_strategy.derisk_orders(state)
+    trade_counter = TradeCounter.load(TRADES_FILE)
+    results = _execute(orders, prices, dry_run, trade_counter, now)
+    trade_counter.save(TRADES_FILE)
+    _clear_position_book()
+    if COOLDOWN_FILE.exists():
+        COOLDOWN_FILE.unlink()
+    log.warning("flatten_to_cash", n_orders=len(orders), dry_run=dry_run,
+                equity=round(state.equity_usd, 2))
+    return {"orders": len(orders), "results": results, "dry_run": dry_run}
 
 
 _last_heartbeat_hour: dict = {"h": None}
@@ -156,11 +372,24 @@ def _notify(action, results, equity, drawdown, cum_return, now) -> None:
 
 
 def _compliance_orders(state: PortfolioState) -> list[TradeOrder]:
-    if state.stable_value_usd >= COMPLIANCE_ORDER_USD:
-        return [TradeOrder("USDT", "WBNB", COMPLIANCE_ORDER_USD, "min-trade compliance")]
+    """Fallback min-trade order. It MUST be an eligible-by-contract trade (in the
+    149 allowlist) or it does not count — so we sell a held ELIGIBLE token, or buy
+    the safest eligible token. NEVER WBNB, which is not in the 149 (the old bug)."""
+    # Prefer selling a held non-stable ELIGIBLE token back to USDT.
     for sym, val in state.token_values_usd.items():
-        if sym not in STABLECOINS and val >= COMPLIANCE_ORDER_USD:
+        if sym in STABLECOINS or val < COMPLIANCE_ORDER_USD:
+            continue
+        try:
+            contract = token_list.get_token(sym).contract
+        except KeyError:
+            continue
+        if token_list.is_eligible(contract):
             return [TradeOrder(sym, "USDT", COMPLIANCE_ORDER_USD, "min-trade compliance")]
+    # Else buy the safest eligible (liquid, tradable) token — first by liquidity.
+    if state.stable_value_usd >= COMPLIANCE_ORDER_USD:
+        eligible = token_list.alpha_symbols()
+        if eligible:
+            return [TradeOrder("USDT", eligible[0], COMPLIANCE_ORDER_USD, "min-trade compliance")]
     return []
 
 
@@ -192,8 +421,11 @@ def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
             r = dex.swap(o.token_in, o.token_out, amount_in)
             if not r.simulated:
                 trade_counter.record_trade(now)
-            results.append({"order": o.reason, "simulated": r.simulated, "tx": r.tx_hash})
+            results.append({"order": o.reason, "simulated": r.simulated, "tx": r.tx_hash,
+                            "token_in": o.token_in, "token_out": o.token_out,
+                            "amount_usd": o.amount_in_usd})
         except Exception as e:  # noqa: BLE001 — one failed swap must not abort the tick
             log.warning("swap_failed", reason=o.reason, error=str(e))
-            results.append({"order": o.reason, "error": str(e)})
+            results.append({"order": o.reason, "error": str(e),
+                            "token_in": o.token_in, "token_out": o.token_out})
     return results

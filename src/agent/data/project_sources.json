@@ -1,0 +1,1492 @@
+[
+  {
+    "symbol": "LAB",
+    "name": "LAB",
+    "bsc_contract": "0x7ec43Cf65F1663F820427C62A5780b8f2E25593A",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 33223,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BEAT",
+    "name": "Audiera",
+    "bsc_contract": "0xcf3232B85b43BCa90E51D38cc06Cc8bB8C8A3E36",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38837,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ASTER",
+    "name": "Aster",
+    "bsc_contract": "0x000Ae314E2A2172a039B26378814C252734f556A",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36341,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "U",
+    "name": "United Stables",
+    "bsc_contract": "0xcE24439F2D9C6a2289F741120FE202248B666666",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39120,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "币安人生",
+    "name": "币安人生",
+    "bsc_contract": "0x924fa68a0FC644485b8df8AbfA0A41C2e7744444",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38590,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "NIGHT",
+    "name": "Midnight",
+    "bsc_contract": "0xfe930c2d63aed9b82fc4dbc801920dd2c1a3224f",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39064,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SKYAI",
+    "name": "SKYAI",
+    "bsc_contract": "0x92aa03137385F18539301349dcfC9EbC923fFb10",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36300,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "DUCKY",
+    "name": "Ducky",
+    "bsc_contract": "0xaDB50D6a3f931E5b4A14D06A4A77fe71171A462f",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 33852,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "B",
+    "name": "BUILDon",
+    "bsc_contract": "0x6bdcce4a559076e37755a78ce0c06214e59e4444",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36532,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "KOGE",
+    "name": "48 Club Token",
+    "bsc_contract": "0xe6df05ce8c8301223373cf5b969afcb1498c5528",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 7184,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "VELVET",
+    "name": "Velvet",
+    "bsc_contract": "0x8b194370825E37b33373e74A41009161808C1488",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37298,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "WFI",
+    "name": "WeFi",
+    "bsc_contract": "0x90c48855bb69f9d2c261efd0d8c7f35990f2dd6f",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 34261,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "TWT",
+    "name": "Trust Wallet Token",
+    "bsc_contract": "0x4b0f1812e5df2a09796481ff14017e6005508003",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 5964,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "GENIUS",
+    "name": "Genius Terminal",
+    "bsc_contract": "0x1F12B85aAC097E43Aa1555b2881E98a51090e9A6",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39841,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ALE",
+    "name": "Ailey",
+    "bsc_contract": "0x9dCE13E71B11eb5Df66ca269bD657696587Fd4E2",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 30605,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "HOME",
+    "name": "Defi App",
+    "bsc_contract": "0x4bfaa776991e85e5f8b1255461cbbd216cfc714f",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36133,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SFP",
+    "name": "SafePal",
+    "bsc_contract": "0xd41fdb03ba84762dd66a0af1a6c8540ff1ba5dfb",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 8119,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "USDF",
+    "name": "Aster USDF",
+    "bsc_contract": "0x5A110fC00474038f6c02E89C707D638602EA44B5",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35437,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "TAG",
+    "name": "Tagger",
+    "bsc_contract": "0x208bf3e7da9639f1eaefa2de78c23396b0682025",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 34958,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "CHEEMS",
+    "name": "Cheems (cheems.pet)",
+    "bsc_contract": "0x0df0587216a4a1bb7d5082fdc491d93d2dd4b413",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 33280,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AB",
+    "name": "AB",
+    "bsc_contract": "0x95034f653d5d161890836ad2b6b8cc49d14e029a",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 3871,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "NXPC",
+    "name": "NEXPACE",
+    "bsc_contract": "0xf2b51cc1850fed939658317a22d73d3482767591",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36044,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "DUSD",
+    "name": "StandX DUSD",
+    "bsc_contract": "0xaf44A1E76F56eE12ADBB7ba8acD3CbD474888122",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36762,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SMILEK",
+    "name": "Smilek to the Bank",
+    "bsc_contract": "0x4f9d3AdbfAF4579518b1Ca7E06468A363897B997",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 10186,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "COAI",
+    "name": "ChainOpera AI",
+    "bsc_contract": "0x0A8D6C86e1bcE73fE4D0bD531e1a567306836EA5",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38489,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SOON",
+    "name": "SOON",
+    "bsc_contract": "0xb9E1Fd5A02D3A33b25a14d661414E6ED6954a721",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36542,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "WIBE",
+    "name": "Wibegram",
+    "bsc_contract": "0x25d624E571d6d7B32729B11DdbbD96Fe89Af44E1",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 33249,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "FTT",
+    "name": "FTX Token",
+    "bsc_contract": "FTT-F11",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 4195,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BANANAS31",
+    "name": "Banana For Scale",
+    "bsc_contract": "0x3d4f0513e8a29669b960f9dbca61861548a9a760",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 34118,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "FORM",
+    "name": "Four",
+    "bsc_contract": "0x5b73A93b4E5e4f1FD27D8b3F8C97D69908b5E284",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 23635,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BAS",
+    "name": "BNB Attestation Service",
+    "bsc_contract": "0x0f0df6cb17ee5e883eddfef9153fc6036bdb4e37",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37387,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "REAL",
+    "name": "RealLink",
+    "bsc_contract": "0x65e7a112dB1142EAE919201b1232f7aA488Ed83c",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 14721,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "GUA",
+    "name": "SUPERFORTUNE",
+    "bsc_contract": "0xa5c8e1513b6a08334b479fe4d71f1253259469be",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38984,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "HUMA",
+    "name": "Huma Finance",
+    "bsc_contract": "0x92516e0DDf1dDBF7FAB1b79CaC26689fDC5ba8e6",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36576,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "lisUSD",
+    "name": "lisUSD",
+    "bsc_contract": "0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 21330,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "CYS",
+    "name": "Cysic",
+    "bsc_contract": "0x0C69199C1562233640e0Db5Ce2c399A88eB507C7",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39071,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "LUR",
+    "name": "Lumera Health",
+    "bsc_contract": "0xc66B6f38aE5053A109cfd8639E0Ee17EC69cf788",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36804,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "MY",
+    "name": "MetYa",
+    "bsc_contract": "0xf0ebb572643336834d516c485ad31d3299999999",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35269,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SIREN",
+    "name": "siren",
+    "bsc_contract": "0x997a58129890bbda032231a52ed1ddc845fc18e1",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35766,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BRETT",
+    "name": "Brett (Based)",
+    "bsc_contract": "0xa7440029eca41deabd8775ef1d6086b37d4df8d6",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 29743,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "NILA",
+    "name": "MindWaveDAO",
+    "bsc_contract": "0x00f8Da33734FeB9b946fEC2228C25072D2e2E41f",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36302,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "UAI",
+    "name": "UnifAI Network",
+    "bsc_contract": "0x3e5d4f8aee0d9b3082d5f6da5d6e225d17ba9ea0",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38841,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "vBUSD",
+    "name": "Venus BUSD",
+    "bsc_contract": "0x95c78222B3D6e262426483D42CfA53685A67Ab9D",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 7959,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "VELO",
+    "name": "Velo",
+    "bsc_contract": "0xf486ad071f3bee968384d2e39e2d8af0fcf6fd46",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 7127,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "MYX",
+    "name": "MYX Finance",
+    "bsc_contract": "0xD82544bf0dfe8385eF8FA34D67e6e4940CC63e16",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36410,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "TOSHI",
+    "name": "Toshi",
+    "bsc_contract": "0x6a2608Dabe09bc1128EEC7275B92DFB939D5Db3f",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 27750,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BDCA",
+    "name": "BitDCA",
+    "bsc_contract": "0x0c8382719ef242cae2247e4decb2891fbf699818",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35637,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BSB",
+    "name": "Block Street",
+    "bsc_contract": "0x595deaad1eb5476ff1e649fdb7efc36f1e4679cc",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38889,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AIH",
+    "name": "AIHub",
+    "bsc_contract": "0xbf70a52aef7822047076749b9ba63c4597d4626f",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37448,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ROSE",
+    "name": "Oasis",
+    "bsc_contract": "0xF00600eBC7633462BC4F9C61eA2cE99F5AAEBd4a",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 7653,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "HOLO",
+    "name": "Holoworld AI",
+    "bsc_contract": "0x1a5D7E4c3A7F940B240b7357a4bFED30D17f9497",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38309,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "XPIN",
+    "name": "XPIN Network",
+    "bsc_contract": "0xD955c9bA56Fb1AB30e34766e252A97ccCE3D31A6",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36238,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BANK",
+    "name": "Lorenzo Protocol",
+    "bsc_contract": "0x3AeE7602b612de36088F3ffEd8c8f10E86EbF2bF",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36296,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "VNDC",
+    "name": "VNDC",
+    "bsc_contract": "0xA276DC434A366C62ef010585b3885D0C85154389",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 4805,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "CROSS",
+    "name": "CROSS",
+    "bsc_contract": "0x6bf62ca91e397B5A7d1D6bCe97D9092065d7A510",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37166,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AGT",
+    "name": "Alaya Governance Token",
+    "bsc_contract": "0x5dBde81fcE337FF4bcaaEe4Ca3466C00aeCaE274",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36195,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ESPORTS",
+    "name": "Yooldo",
+    "bsc_contract": "0xF39e4b21c84e737Df08e2C3b32541d856f508E48",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37414,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BUSD",
+    "name": "BUSD",
+    "bsc_contract": "BUSD-BD1",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 4687,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ALEO",
+    "name": "Aleo",
+    "bsc_contract": "0x6CFfFa5bFD4277a04D83307fEedFe2D18D944DD2",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 32193,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AIN",
+    "name": "Infinity Ground",
+    "bsc_contract": "0x9558a9254890B2A8B057a789F413631B9084f4a3",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36770,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BURN",
+    "name": "Burnedfi",
+    "bsc_contract": "0x19c018e13cff682e729cc7b5fb68c8a641bf98a4",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 30460,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "VAM",
+    "name": "Vitalum",
+    "bsc_contract": "0x009A0FbF4928362d79077b4f38da9B5fB2CE64e2",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39172,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "GLIDR",
+    "name": "Glidr",
+    "bsc_contract": "0xc2b1ddb75046c4915c641cc0dc0d0f160ef82be5",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37615,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "KGEN",
+    "name": "KGeN",
+    "bsc_contract": "0xf3d5b4c34ed623478cc5141861776e6cf7ae3a1e",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38554,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "GPS",
+    "name": "GoPlus Security",
+    "bsc_contract": "0x9a4a67721573f2c9209dfff972c52be4e3f6642e",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35268,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "PRL",
+    "name": "Perle",
+    "bsc_contract": "0xd20fB09A49a8e75Fef536A2dBc68222900287BAc",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39797,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "OPG",
+    "name": "OpenGradient",
+    "bsc_contract": "0x5feCcD17C393CaF1001D18164236A37E731FCb9d",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39800,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AIO",
+    "name": "OLAXBT",
+    "bsc_contract": "0x81a7DA4074b8e0eD51beA40f9dCbDF4d9d4832b4",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37562,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "C",
+    "name": "Chainbase",
+    "bsc_contract": "0xc32cc70741c3A8433dCbcB5adE071c299B55FfC8",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37340,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "PM",
+    "name": "PumpMeme",
+    "bsc_contract": "0x652fcafea5a2da18e8947748b7849b72148b4543",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37614,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "PARTI",
+    "name": "Particle Network",
+    "bsc_contract": "0x59264f02D301281f3393e1385c0aEFd446Eb0F00",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36102,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "IDOL",
+    "name": "MEET48",
+    "bsc_contract": "0x3B4de3c7855C03bB9F50ea252cD2c9FA1125Ab07",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36775,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BR",
+    "name": "Bedrock",
+    "bsc_contract": "0xff7d6a96ae471bbcd7713af9cb1feeb16cf56b41",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36063,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "LUSD",
+    "name": "LUSD",
+    "bsc_contract": "0x5bb4d589467c25A5Ac8db930372dc5dA30C3410E",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36552,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "WKC",
+    "name": "Wiki Cat",
+    "bsc_contract": "0x6Ec90334d89dBdc89E08A133271be3d104128Edb",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 20700,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "B2",
+    "name": "BSquared Network",
+    "bsc_contract": "0x783c3f003f172c6Ac5AC700218a357d2D66Ee2a2",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36352,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "COLLECT",
+    "name": "Collect on Fanable",
+    "bsc_contract": "0x4B3D30992f003c8167699735F5Ab2831B2A087D3",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39170,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "GIGGLE",
+    "name": "Giggle Fund",
+    "bsc_contract": "0x20d6015660b3fe52e6690a889b5C51F69902cE0e",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38470,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "STAR",
+    "name": "Starpower",
+    "bsc_contract": "0x8fce7206e3043dd360f115afa956ee31b90b787c",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37743,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "UNS",
+    "name": "UNS TOKEN",
+    "bsc_contract": "0xEcf99aB23C11ddc6520252105308C251001AEfBB",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 23081,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "KLK",
+    "name": "Klickl Token",
+    "bsc_contract": "0x411049c6046be1be13ce80262fca723cccb67798",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37016,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "CLO",
+    "name": "Yei Finance",
+    "bsc_contract": "0x81D3A238b02827F62B9f390f947D36d4A5bf89D2",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38634,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "EDU",
+    "name": "Open Campus",
+    "bsc_contract": "0xBdEAe1cA48894A1759A8374D63925f21f2Ee2639",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 24613,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AIOT",
+    "name": "OKZOO",
+    "bsc_contract": "0x55ad16bd573b3365f43a9daeb0cc66a73821b4a5",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36319,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "TA",
+    "name": "Trusta.AI",
+    "bsc_contract": "0x539ae81a166e5e80aed211731563e549c411b140",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37430,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ONG",
+    "name": "Ontology Gas",
+    "bsc_contract": "0x308bfaeAaC8BDab6e9Fc5Ead8EdCb5f95b0599d9",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 3217,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "TPT",
+    "name": "TokenPocket",
+    "bsc_contract": "0xeca41281c24451168a37211f0bc2b8645af45092",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 5947,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "CHEEL",
+    "name": "Cheelee",
+    "bsc_contract": "0x1F1C90aEb2fd13EA972F0a71e35c0753848e3DB0",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 23054,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SLT",
+    "name": "SLT",
+    "bsc_contract": "0x28ba6ef35f27f1ed3873cc788698d2ddb28d2a82",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36511,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "LISTA",
+    "name": "Lista DAO",
+    "bsc_contract": "0xFceB31A79F71AC9CBDCF853519c1b12D379EdC46",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 21533,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ORI",
+    "name": "Orizon",
+    "bsc_contract": "0xDA033999bB6165e64DB01Bd9be14B40f5653092E",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37649,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SENTIS",
+    "name": "SentismAI",
+    "bsc_contract": "0x8Fd0d741e09a98e82256C63F25f90301eA71A83e",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38838,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "PMT",
+    "name": "Public Masterpiece Token",
+    "bsc_contract": "0x68ae2f202799be2008c89e2100257e66f77da1f3",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 32232,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "STBL",
+    "name": "STBL",
+    "bsc_contract": "0x8dedf84656fa932157e27c060d8613824e7979e3",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38359,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "WIN",
+    "name": "WINkLink",
+    "bsc_contract": "0xaef0d72a118ce24fee3cd1d43d383897d05b4e99",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 4206,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "HANA",
+    "name": "Hana Network",
+    "bsc_contract": "0x6261963ebe9ff014aad10ecc3b0238d4d04e8353",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38468,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "GCB",
+    "name": "Global Commercial Business",
+    "bsc_contract": "0x84f70be4DEb029d5f8AACBeAcC74c4dC10737342",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 32068,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "MIRA",
+    "name": "Mira",
+    "bsc_contract": "0x7839Fbfd09DaE4d0F15BfB36b8f16f7898FBE684",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38495,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "MGO",
+    "name": "Mango Network",
+    "bsc_contract": "0x5e0d6791EdbEEBa6a14D1d38e2b8233257118EB1",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36935,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AIC",
+    "name": "AI Companions",
+    "bsc_contract": "0xbe6ad1eb9876cf3d3f9b85feecfb400298e80143",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 32968,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ARARA",
+    "name": "Araracoin",
+    "bsc_contract": "0xDa05cA5303D75f14e298FB8aEFF51fD2F2105803",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38219,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "RTX",
+    "name": "RateX",
+    "bsc_contract": "0x4829a1d1fb6ded1f81d26868ab8976648baf9893",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39150,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "LUMIA",
+    "name": "Lumia",
+    "bsc_contract": "0x7F39BcdCa8E0E581c1d43aaa1cB862AA1c8C2047",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 33439,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BLUAI",
+    "name": "Bluwhale",
+    "bsc_contract": "0xed9Ae3DEF8d6F052971Bb8b6d1975FF267Cf9aaD",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38717,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "XNY",
+    "name": "Codatta",
+    "bsc_contract": "0xE3225e11Cab122F1a126A28997788E5230838ab9",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36933,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AOP",
+    "name": "Ark of Panda",
+    "bsc_contract": "0xd5dF4d260D7a0145F655bcBf3B398076F21016C7",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38433,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "TST",
+    "name": "Test",
+    "bsc_contract": "0x86Bb94DdD16Efc8bc58e6b056e8df71D9e666429",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35647,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "DFG",
+    "name": "Defigram",
+    "bsc_contract": "0xb661f4576d5e0b622fee6ab041fd5451fe02ba4c",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 19590,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "FAR",
+    "name": "FAR Labs",
+    "bsc_contract": "0xC44F9f08E524669E5DEeEBC9EB142c81edfAd178",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 22331,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "DIAM",
+    "name": "DIAM",
+    "bsc_contract": "0x1FA0f5ed24a1a2b43741E88F8FEc19633e67082B",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35728,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "哈基米",
+    "name": "哈基米",
+    "bsc_contract": "0x82Ec31D69b3c289E541b50E30681FD1ACAd24444",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38679,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "LUCIC",
+    "name": "Lucidum Coin",
+    "bsc_contract": "0xE054017a2F0ECFa294b08a74AF319bce0b985A39",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36255,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BROCCOLI",
+    "name": "CZ's Dog",
+    "bsc_contract": "0x6d5AD1592ed9D6D1dF9b93c793AB759573Ed6714",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35749,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SLX",
+    "name": "SLIMEX",
+    "bsc_contract": "0x8A063A9ff4dE28dcB87117cc759BE6cE70e09F81",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38542,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AI",
+    "name": "Sleepless AI",
+    "bsc_contract": "0xBDA011D7F8EC00F66C1923B049B94c67d148d8b2",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 28846,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SBBTC",
+    "name": "ShibaBitcoin",
+    "bsc_contract": "0x13bA349ECbE6d78590587f12eE19f50d8F8CD627",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 30953,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "龙虾",
+    "name": "龙虾 (Lobster)",
+    "bsc_contract": "0xeccbb861c0dda7efd964010085488b69317e4444",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39671,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "EGL1",
+    "name": "EGL1",
+    "bsc_contract": "0xf4b385849f2e817e92bffbfb9aeb48f950ff4444",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36761,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "QAIT",
+    "name": "QAIT",
+    "bsc_contract": "0x4d41A5d412f4Ef44A35b9f53b06DB65edE249493",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 40073,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "CAT",
+    "name": "Simon's Cat",
+    "bsc_contract": "0x6894CDe390a3f51155ea41Ed24a33A4827d3063D",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 32724,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "VEREM",
+    "name": "Verified Emeralds",
+    "bsc_contract": "0x862829e8dcf0fd939d61d1b0d4a3aaf983ee4f73",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39415,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "AIA",
+    "name": "DeAgentAI",
+    "bsc_contract": "0x53EC33Cd4fA46b9ecED9cA3f6dB626C5FfCd55cC",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38430,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "MUBARAK",
+    "name": "Mubarak",
+    "bsc_contract": "0x5c85d6c6825ab4032337f11ee92a72df936b46f6",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36041,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SPCXB",
+    "name": "SpaceX Tokenized bStocks",
+    "bsc_contract": "0xbe9d156892e55e7154bcd3cb0fea677f9d3103e1",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 40217,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ARIA",
+    "name": "AriaAI",
+    "bsc_contract": "0x5d3A12c42E5372B2CC3264AB3cdcF660a1555238",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38102,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "SANTOS",
+    "name": "Santos FC Fan Token",
+    "bsc_contract": "0xA64455a4553C9034236734FadDAddbb64aCE4Cc7",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 15248,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BLESS",
+    "name": "Bless",
+    "bsc_contract": "0x7C8217517ed4711fe2DECCdFefFE8d906b9Ae11F",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38466,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "EPS",
+    "name": "Ellipsis",
+    "bsc_contract": "0xa7f552078dcc247c2684336020c03648500c6d9f",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 8938,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "APX",
+    "name": "APX",
+    "bsc_contract": "0x78f5d389f5cdccfc41594abab4b0ed02f31398b3",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 16334,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "MPLX",
+    "name": "Metaplex",
+    "bsc_contract": "0x75a5863A19aF60ec0098d62ED8C34cc594fB470f",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 21870,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "DESU",
+    "name": "Dexsport",
+    "bsc_contract": "0x32f1518baace69e85b9e5ff844ebd617c52573ac",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 12814,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "COL",
+    "name": "Clash of Lilliput",
+    "bsc_contract": "0x9ce116224459296abc7858627abd5879514bc629",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 20672,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "LYN",
+    "name": "Everlyn AI",
+    "bsc_contract": "0x302DFaF2CDbE51a18d97186A7384e87CF599877D",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38561,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "THE",
+    "name": "THENA",
+    "bsc_contract": "0xF4C8E32EaDEC4BFe97E0F595AdD0f4450a863a11",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 23335,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "TUT",
+    "name": "Tutorial",
+    "bsc_contract": "0xCAAE2A2F939F51d97CdFa9A86e79e3F085b799f3",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35892,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "BMT",
+    "name": "Bubblemaps",
+    "bsc_contract": "0x7d814b9eD370Ec0a502EdC3267393bF62d891B62",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 35214,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "TKO",
+    "name": "Toko Token",
+    "bsc_contract": "0x9f589e3eabe42ebc94a44727b3f3531c0c877809",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 9020,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "4",
+    "name": "4",
+    "bsc_contract": "0x0A43fC31a73013089DF59194872Ecae4cAe14444",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38557,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ASP",
+    "name": "Aspecta",
+    "bsc_contract": "0xad8c787992428cD158E451aAb109f724B6bc36de",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37453,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "NETX",
+    "name": "NetX",
+    "bsc_contract": "0x4c32964715e9a42F8d119bFA8917d57822d3aDF1",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38435,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ACE",
+    "name": "Fusionist",
+    "bsc_contract": "0xc27A719105A987b4c34116223CAE8bd8F4B5def4",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 28674,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "我踏马来了",
+    "name": "我踏马来了",
+    "bsc_contract": "0xc51A9250795c0186a6FB4A7D20A90330651e4444",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 39322,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "CREPE",
+    "name": "CREPE",
+    "bsc_contract": "0xeb2B7d5691878627eff20492cA7c9a71228d931D",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36649,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "WRX",
+    "name": "WazirX",
+    "bsc_contract": "WRX-ED1",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 5161,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "HAEDAL",
+    "name": "Haedal Protocol",
+    "bsc_contract": "0x3D9bE0aC1001cd81c32464276D863d2FFdCa4967",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36369,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "DORA",
+    "name": "DORA",
+    "bsc_contract": "0x23fe903be385832fd7bb82bf1fee93f696278888",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 37482,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "EVAA",
+    "name": "EVAA Protocol",
+    "bsc_contract": "0xaa036928c9c0Df07d525B55ea8EE690Bb5a628C1",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 38376,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "TRADOOR",
+    "name": "Tradoor",
+    "bsc_contract": "0x9123400446a56176eb1b6be9ee5cf703e409f492",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 36737,
+    "keywords": [],
+    "risk_notes": ""
+  },
+  {
+    "symbol": "ALPINE",
+    "name": "Alpine F1 Team Fan Token",
+    "bsc_contract": "0x287880Ea252b52b63Cc5f40a2d3E5A44aa665a76",
+    "official_website": "",
+    "official_x_handle": "",
+    "cmc_slug_or_id": 18112,
+    "keywords": [],
+    "risk_notes": ""
+  }
+]

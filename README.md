@@ -10,10 +10,124 @@ not a max-return race. The agent is built to *never get disqualified* and to
 
 ---
 
+## Why this matters (Aegis differentiator)
+
+Binance Wallet Web3 API was released during the hackathon window, and Aegis is
+designed to use it as a **native on-chain agent layer**: Binance Alpha 5-minute
+market data for volume confirmation, Binance Web3 quote/route readiness, unsigned
+transaction construction, MEV-aware routing where available, and Trust Wallet
+Agent Kit for self-custody signing. The result is **not a black-box trading bot**,
+but a **risk-managed autonomous agent** that can detect catalysts, verify live
+market confirmation, size small, and execute only when safety gates pass.
+
+Aegis combines five layers:
+
+1. **CoinMarketCap Pro** — signals and multi-year historical validation.
+2. **Binance Alpha / Binance Web3 market data** — live 5-minute volume + market confirmation.
+3. **Binance Wallet Web3 API** — quote / route / **unsigned**-transaction readiness (non-custodial).
+4. **Trust Wallet Agent Kit** — self-custody signing / execution safety.
+5. **Aegis risk engine** — position sizing, entry/exit, drawdown breaker, DRY_RUN safety.
+
+Signing stays **local / self-custody**; the Web3 layer returns unsigned transactions
+only, the agent never auto-broadcasts, and **`DRY_RUN=true` by default**. Setup:
+[`docs/BINANCE_WEB3_SETUP.md`](docs/BINANCE_WEB3_SETUP.md).
+
+---
+
+## Track 1 strategy — Event-Driven Alpha Momentum (primary)
+
+For Track 1, Aegis trades **only the official 149-token BEP-20 allowlist** (matched
+by **contract address**), concentrating on the liquid, routable subset. It is a
+catalyst-confirmed momentum strategy, not a buy-and-hold:
+
+**State model** (implemented as layered gates, not a black box):
+
+```
+SCANNING ─► WATCHLIST ─► ARMED ─► ENTERED ─► PROTECT_PROFIT ─► EXITED ─► COOLDOWN
+  catalyst    catalyst    +price   all gates   trailing / TP /   exit fired  no re-entry
+  scan        mapped to   +liquid   pass →      FOMO-defense                 (no pyramiding)
+  each tick   eligible    +real 5m  $10 entry   active
+                          volume
+```
+
+- **Entry** requires *all*: eligible (by contract) + liquid subset + catalyst
+  score ≥ 70 + price breakout + **real Binance Alpha 5m volume confirmation**
+  (or Tier-1 authority fast path) + slippage/liquidity OK + risk gates + DRY_RUN.
+  A Tier-3/unverified signal **can never enter alone**; a catalyst without volume
+  stays WATCHLIST.
+- **Exit** (priority): drawdown breaker → hard take-profit (**2×**) → stop-loss →
+  **max hold 5h (hard exit)** → **5× volume FOMO defense** → trailing stop.
+- **Meme/Alpha tokens are temporary instruments** to earn the stablecoin
+  settlement asset — never long-term holdings.
+
+> **Max hold = 5h is a hard exit.** **5× volume is NOT a blind sell** — it engages
+> FOMO defense: the trailing stop tightens and the position exits only if price is
+> *also* stalling/reversing; if price keeps rising, the position is held.
+
+Full detail: [`docs/STRATEGY_STATE_MACHINE.md`](docs/STRATEGY_STATE_MACHINE.md).
+The majors-hold strategy below is the **validated baseline/fallback**, used only
+when no high-confidence catalyst exists.
+
+## Why this can win Track 1
+
+- **Right universe, by contract address.** Many entries fail by trading
+  non-eligible majors; Aegis trades only the official allowlist and proves it
+  with an anti-DQ test (`tradable ⊆ eligible`).
+- **Real confirmation, not vibes.** Live Binance Alpha 5-minute volume (83/149
+  eligible tokens mapped) gates every entry; no faked volume, ever.
+- **Survival first.** A 30% drawdown disqualifies; Aegis caps risk with tiny $10
+  positions, a stablecoin floor, a 5h max hold, and a latched drawdown breaker.
+- **Self-custody + on-chain proof.** Keys stay local; execution via PancakeSwap /
+  Trust Wallet Agent Kit, with an on-chain proof transaction already on BscScan.
+- **Uses the newest BNB stack.** Built around the Binance Wallet Web3 API
+  (released during the hackathon window) for quote/route/unsigned-tx readiness.
+
+## What is live vs DRY_RUN
+
+| Capability | Status |
+|---|---|
+| Binance Alpha 5m volume (market data) | **LIVE** (read-only) — verified |
+| CoinMarketCap Pro signals + walk-forward validation | **LIVE** (read-only) |
+| Catalyst scanner (manual feed) | **LIVE**; Tier-1 network adapters off until creds/flags set |
+| On-chain pricing / route / slippage (PancakeSwap) | **LIVE** (read-only quotes) |
+| Trade execution | **DRY_RUN** — simulated, **no broadcast**, by default |
+| Binance Web3 API quote/route | adapter ready; **off** until `BINANCE_WEB3_ENABLED=true` |
+| Transaction signing / broadcast | **never automatic**; local/self-custody only |
+
+## Track 1 compliance (eligibility + minimum trades)
+
+- **Eligible universe:** a fixed **149-token BEP-20 allowlist** on CoinMarketCap.
+  **Trades outside the list do not count** — Aegis matches by **BSC contract
+  address**, never symbol alone, and a test enforces `tradable ⊆ eligible`.
+- **Minimum trades:** ≥**1 valid trade/day** and ≥**7 over the trading week**.
+  A `ComplianceTracker` counts only valid eligible-by-contract trades; as a
+  late-day safety net it makes ONE minimum-size, fully risk-gated eligible trade
+  (`MIN_TRADE_COMPLIANCE`) if a day would otherwise lapse — or safe-skips
+  (`COMPLIANCE_UNMET_SAFE_SKIP`) instead of forcing a bad trade. Report:
+  `python -m src.agent compliance`.
+- **Scoring (honest):** public sources say Track 1 ranks on total return with a
+  max-drawdown cap, minimum trade count, and simulated costs — but whether
+  scoring is total wallet NAV, only eligible-token holdings, or PnL from valid
+  eligible trades is **not fully confirmed**. Aegis therefore **does not
+  hard-code any stablecoin-NAV assumption**; it keeps all trade activity inside
+  the allowlist and treats stablecoin as configurable settlement/risk parking.
+
+## Safety constraints (anti-disqualification)
+
+- `DRY_RUN=true` by default — no transaction is broadcast.
+- Signing is local/self-custody; `BINANCE_WEB3_BROADCAST_ENABLED` defaults `false`.
+- Track-1 mode trades **only** the eligible allowlist (enforced by gates + test).
+- Drawdown breaker (latched) exits to stable well under the 30% DQ cap.
+- Secrets are read from the local environment only, masked in all output
+  (`abc123...xyz789`), never logged in full. `.env` and `data/runtime/` are gitignored.
+
+---
+
 ## Architecture
 
 ```
 data/      market data: RPC (multi-endpoint failover), CMC quotes, price feed, token universe
+aegis/     catalyst scanner + scoring, Binance Alpha 5m volume, market feed, positions, orchestrator
 risk/      drawdown breaker, position sizing, trade counter, portfolio valuation, input guards
 execution/ PancakeSwap V2 swaps + local tx signing (safety rails: whitelist, min_out, exact approval, DRY_RUN gate)
 signal/    momentum + Claude sentiment, behind a prompt-injection firewall (output = bounded number only)
@@ -25,7 +139,11 @@ scheduler.py   APScheduler: tick every STRATEGY_TICK_MIN
 __main__.py    CLI
 ```
 
-## The strategy (validated)
+## Baseline fallback strategy (validated)
+
+> This majors-hold strategy is the **Layer-A fallback** (used when no
+> high-confidence catalyst exists) and the original walk-forward-validated core.
+> The **primary Track-1 strategy is the Event-Driven Alpha Momentum radar above.**
 
 **Adaptive fractional hold + breaker** — chosen by walk-forward validation over
 111 weekly windows (~125 days of real Binance data):

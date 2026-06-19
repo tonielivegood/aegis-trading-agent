@@ -1,0 +1,6 @@
+[Unit]
+Description=BNB Hack go-live Telegram reminder (%i)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/golive-remind.sh %i

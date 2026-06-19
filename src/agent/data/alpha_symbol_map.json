@@ -1,0 +1,373 @@
+[
+  {
+    "symbol": "SLX",
+    "bsc_contract": "0x02bcc4c181b83a8c0a342bc003389cbecb4bc54d",
+    "alpha_symbol": "ALPHA_978USDT",
+    "alpha_id": "ALPHA_978",
+    "base_asset": "SLX"
+  },
+  {
+    "symbol": "NEX",
+    "bsc_contract": "0x365de036a1f7dccb621530d517133521debb2013",
+    "alpha_symbol": "ALPHA_971USDT",
+    "alpha_id": "ALPHA_971",
+    "base_asset": "NEX"
+  },
+  {
+    "symbol": "BILL",
+    "bsc_contract": "0xdf24f8c21cb404b3031a450d8e049d6e39fc1fa5",
+    "alpha_symbol": "ALPHA_953USDT",
+    "alpha_id": "ALPHA_953",
+    "base_asset": "BILL"
+  },
+  {
+    "symbol": "GENIUS",
+    "bsc_contract": "0x1f12b85aac097e43aa1555b2881e98a51090e9a6",
+    "alpha_symbol": "ALPHA_887USDT",
+    "alpha_id": "ALPHA_887",
+    "base_asset": "GENIUS"
+  },
+  {
+    "symbol": "EDGE",
+    "bsc_contract": "0x70f2eadf1ca1969ff42b0c78e9da519e8937cbaf",
+    "alpha_symbol": "ALPHA_838USDT",
+    "alpha_id": "ALPHA_838",
+    "base_asset": "EDGE"
+  },
+  {
+    "symbol": "CYS",
+    "bsc_contract": "0x0c69199c1562233640e0db5ce2c399a88eb507c7",
+    "alpha_symbol": "ALPHA_495USDT",
+    "alpha_id": "ALPHA_495",
+    "base_asset": "CYS"
+  },
+  {
+    "symbol": "LAB",
+    "bsc_contract": "0x7ec43cf65f1663f820427c62a5780b8f2e25593a",
+    "alpha_symbol": "ALPHA_428USDT",
+    "alpha_id": "ALPHA_428",
+    "base_asset": "LAB"
+  },
+  {
+    "symbol": "BSB",
+    "bsc_contract": "0x595deaad1eb5476ff1e649fdb7efc36f1e4679cc",
+    "alpha_symbol": "ALPHA_790USDT",
+    "alpha_id": "ALPHA_790",
+    "base_asset": "BSB"
+  },
+  {
+    "symbol": "GUA",
+    "bsc_contract": "0xa5c8e1513b6a08334b479fe4d71f1253259469be",
+    "alpha_symbol": "ALPHA_483USDT",
+    "alpha_id": "ALPHA_483",
+    "base_asset": "GUA"
+  },
+  {
+    "symbol": "IP",
+    "bsc_contract": "0x4d6394bc3031f751edce368c189b0e060b527107",
+    "alpha_symbol": "ALPHA_709USDT",
+    "alpha_id": "ALPHA_709",
+    "base_asset": "IP"
+  },
+  {
+    "symbol": "COAI",
+    "bsc_contract": "0x0a8d6c86e1bce73fe4d0bd531e1a567306836ea5",
+    "alpha_symbol": "ALPHA_391USDT",
+    "alpha_id": "ALPHA_391",
+    "base_asset": "COAI"
+  },
+  {
+    "symbol": "STABLE",
+    "bsc_contract": "0x011ebe7d75e2c9d1e0bd0be0bef5c36f0a90075f",
+    "alpha_symbol": "ALPHA_488USDT",
+    "alpha_id": "ALPHA_488",
+    "base_asset": "STABLE"
+  },
+  {
+    "symbol": "TRIA",
+    "bsc_contract": "0xb0b92de23baa85fb06208277e925ced53edab482",
+    "alpha_symbol": "ALPHA_669USDT",
+    "alpha_id": "ALPHA_669",
+    "base_asset": "TRIA"
+  },
+  {
+    "symbol": "ZAMA",
+    "bsc_contract": "0x6907a5986c4950bdaf2f81828ec0737ce787519f",
+    "alpha_symbol": "ALPHA_658USDT",
+    "alpha_id": "ALPHA_658",
+    "base_asset": "ZAMA"
+  },
+  {
+    "symbol": "GWEI",
+    "bsc_contract": "0x30117e4bc17d7b044194b76a38365c53b72f7d49",
+    "alpha_symbol": "ALPHA_588USDT",
+    "alpha_id": "ALPHA_588",
+    "base_asset": "GWEI"
+  },
+  {
+    "symbol": "Q",
+    "bsc_contract": "0xc07e1300dc138601fa6b0b59f8d0fa477e690589",
+    "alpha_symbol": "ALPHA_349USDT",
+    "alpha_id": "ALPHA_349",
+    "base_asset": "Q"
+  },
+  {
+    "symbol": "UB",
+    "bsc_contract": "0x40b8129b786d766267a7a118cf8c07e31cdb6fde",
+    "alpha_symbol": "ALPHA_370USDT",
+    "alpha_id": "ALPHA_370",
+    "base_asset": "UB"
+  },
+  {
+    "symbol": "BEAT",
+    "bsc_contract": "0xcf3232b85b43bca90e51d38cc06cc8bb8c8a3e36",
+    "alpha_symbol": "ALPHA_451USDT",
+    "alpha_id": "ALPHA_451",
+    "base_asset": "BEAT"
+  },
+  {
+    "symbol": "RAVE",
+    "bsc_contract": "0x97693439ea2f0ecdeb9135881e49f354656a911c",
+    "alpha_symbol": "ALPHA_497USDT",
+    "alpha_id": "ALPHA_497",
+    "base_asset": "RAVE"
+  },
+  {
+    "symbol": "NIGHT",
+    "bsc_contract": "0xfe930c2d63aed9b82fc4dbc801920dd2c1a3224f",
+    "alpha_symbol": "ALPHA_489USDT",
+    "alpha_id": "ALPHA_489",
+    "base_asset": "NIGHT"
+  },
+  {
+    "symbol": "SOON",
+    "bsc_contract": "0xb9e1fd5a02d3a33b25a14d661414e6ed6954a721",
+    "alpha_symbol": "ALPHA_199USDT",
+    "alpha_id": "ALPHA_199",
+    "base_asset": "SOON"
+  },
+  {
+    "symbol": "IRYS",
+    "bsc_contract": "0x91152b4ef635403efbae860edd0f8c321d7c035d",
+    "alpha_symbol": "ALPHA_479USDT",
+    "alpha_id": "ALPHA_479",
+    "base_asset": "IRYS"
+  },
+  {
+    "symbol": "PIEVERSE",
+    "bsc_contract": "0x0e63b9c287e32a05e6b9ab8ee8df88a2760225a9",
+    "alpha_symbol": "ALPHA_469USDT",
+    "alpha_id": "ALPHA_469",
+    "base_asset": "PIEVERSE"
+  },
+  {
+    "symbol": "UAI",
+    "bsc_contract": "0x3e5d4f8aee0d9b3082d5f6da5d6e225d17ba9ea0",
+    "alpha_symbol": "ALPHA_461USDT",
+    "alpha_id": "ALPHA_461",
+    "base_asset": "UAI"
+  },
+  {
+    "symbol": "KITE",
+    "bsc_contract": "0x904567252d8f48555b7447c67dca23f0372e16be",
+    "alpha_symbol": "ALPHA_454USDT",
+    "alpha_id": "ALPHA_454",
+    "base_asset": "KITE"
+  },
+  {
+    "symbol": "APR",
+    "bsc_contract": "0x299ad4299da5b2b93fba4c96967b040c7f611099",
+    "alpha_symbol": "ALPHA_442USDT",
+    "alpha_id": "ALPHA_442",
+    "base_asset": "APR"
+  },
+  {
+    "symbol": "MYX",
+    "bsc_contract": "0xd82544bf0dfe8385ef8fa34d67e6e4940cc63e16",
+    "alpha_symbol": "ALPHA_171USDT",
+    "alpha_id": "ALPHA_171",
+    "base_asset": "MYX"
+  },
+  {
+    "symbol": "币安人生",
+    "bsc_contract": "0x924fa68a0fc644485b8df8abfa0a41c2e7744444",
+    "alpha_symbol": "ALPHA_416USDT",
+    "alpha_id": "ALPHA_416",
+    "base_asset": "币安人生"
+  },
+  {
+    "symbol": "FF",
+    "bsc_contract": "0xac23b90a79504865d52b49b327328411a23d4db2",
+    "alpha_symbol": "ALPHA_398USDT",
+    "alpha_id": "ALPHA_398",
+    "base_asset": "FF"
+  },
+  {
+    "symbol": "XPL",
+    "bsc_contract": "0x405fbc9004d857903bfd6b3357792d71a50726b0",
+    "alpha_symbol": "ALPHA_392USDT",
+    "alpha_id": "ALPHA_392",
+    "base_asset": "XPL"
+  },
+  {
+    "symbol": "RIVER",
+    "bsc_contract": "0xda7ad9dea9397cffddae2f8a052b82f1484252b3",
+    "alpha_symbol": "ALPHA_381USDT",
+    "alpha_id": "ALPHA_381",
+    "base_asset": "RIVER"
+  },
+  {
+    "symbol": "0G",
+    "bsc_contract": "0x4b948d64de1f71fcd12fb586f4c776421a35b3ee",
+    "alpha_symbol": "ALPHA_388USDT",
+    "alpha_id": "ALPHA_388",
+    "base_asset": "0G"
+  },
+  {
+    "symbol": "ASTER",
+    "bsc_contract": "0x000ae314e2a2172a039b26378814c252734f556a",
+    "alpha_symbol": "ALPHA_380USDT",
+    "alpha_id": "ALPHA_380",
+    "base_asset": "ASTER"
+  },
+  {
+    "symbol": "BARD",
+    "bsc_contract": "0xd23a186a78c0b3b805505e5f8ea4083295ef9f3a",
+    "alpha_symbol": "ALPHA_379USDT",
+    "alpha_id": "ALPHA_379",
+    "base_asset": "BARD"
+  },
+  {
+    "symbol": "OPEN",
+    "bsc_contract": "0xa227cc36938f0c9e09ce0e64dfab226cad739447",
+    "alpha_symbol": "ALPHA_362USDT",
+    "alpha_id": "ALPHA_362",
+    "base_asset": "OPEN"
+  },
+  {
+    "symbol": "BAS",
+    "bsc_contract": "0x0f0df6cb17ee5e883eddfef9153fc6036bdb4e37",
+    "alpha_symbol": "ALPHA_328USDT",
+    "alpha_id": "ALPHA_328",
+    "base_asset": "BAS"
+  },
+  {
+    "symbol": "TOSHI",
+    "bsc_contract": "0x6a2608dabe09bc1128eec7275b92dfb939d5db3f",
+    "alpha_symbol": "ALPHA_303USDT",
+    "alpha_id": "ALPHA_303",
+    "base_asset": "TOSHI"
+  },
+  {
+    "symbol": "TAC",
+    "bsc_contract": "0x1219c409fabe2c27bd0d1a565daeed9bd9f271de",
+    "alpha_symbol": "ALPHA_277USDT",
+    "alpha_id": "ALPHA_277",
+    "base_asset": "TAC"
+  },
+  {
+    "symbol": "PEAQ",
+    "bsc_contract": "0x8b9ee39195ea99d6ddd68030f44131116bc218f6",
+    "alpha_symbol": "ALPHA_273USDT",
+    "alpha_id": "ALPHA_273",
+    "base_asset": "PEAQ"
+  },
+  {
+    "symbol": "M",
+    "bsc_contract": "0x22b1458e780f8fa71e2f84502cee8b5a3cc731fa",
+    "alpha_symbol": "ALPHA_257USDT",
+    "alpha_id": "ALPHA_257",
+    "base_asset": "M"
+  },
+  {
+    "symbol": "SAHARA",
+    "bsc_contract": "0xfdffb411c4a70aa7c95d5c981a6fb4da867e1111",
+    "alpha_symbol": "ALPHA_247USDT",
+    "alpha_id": "ALPHA_247",
+    "base_asset": "SAHARA"
+  },
+  {
+    "symbol": "TAG",
+    "bsc_contract": "0x208bf3e7da9639f1eaefa2de78c23396b0682025",
+    "alpha_symbol": "ALPHA_233USDT",
+    "alpha_id": "ALPHA_233",
+    "base_asset": "TAG"
+  },
+  {
+    "symbol": "VELO",
+    "bsc_contract": "0xf486ad071f3bee968384d2e39e2d8af0fcf6fd46",
+    "alpha_symbol": "ALPHA_229USDT",
+    "alpha_id": "ALPHA_229",
+    "base_asset": "VELO"
+  },
+  {
+    "symbol": "HOME",
+    "bsc_contract": "0x4bfaa776991e85e5f8b1255461cbbd216cfc714f",
+    "alpha_symbol": "ALPHA_221USDT",
+    "alpha_id": "ALPHA_221",
+    "base_asset": "HOME"
+  },
+  {
+    "symbol": "AB",
+    "bsc_contract": "0x95034f653d5d161890836ad2b6b8cc49d14e029a",
+    "alpha_symbol": "ALPHA_217USDT",
+    "alpha_id": "ALPHA_217",
+    "base_asset": "AB"
+  },
+  {
+    "symbol": "HUMA",
+    "bsc_contract": "0x92516e0ddf1ddbf7fab1b79cac26689fdc5ba8e6",
+    "alpha_symbol": "ALPHA_201USDT",
+    "alpha_id": "ALPHA_201",
+    "base_asset": "HUMA"
+  },
+  {
+    "symbol": "B",
+    "bsc_contract": "0x6bdcce4a559076e37755a78ce0c06214e59e4444",
+    "alpha_symbol": "ALPHA_197USDT",
+    "alpha_id": "ALPHA_197",
+    "base_asset": "B"
+  },
+  {
+    "symbol": "NXPC",
+    "bsc_contract": "0xf2b51cc1850fed939658317a22d73d3482767591",
+    "alpha_symbol": "ALPHA_189USDT",
+    "alpha_id": "ALPHA_189",
+    "base_asset": "NXPC"
+  },
+  {
+    "symbol": "SKYAI",
+    "bsc_contract": "0x92aa03137385f18539301349dcfc9ebc923ffb10",
+    "alpha_symbol": "ALPHA_154USDT",
+    "alpha_id": "ALPHA_154",
+    "base_asset": "SKYAI"
+  },
+  {
+    "symbol": "SIREN",
+    "bsc_contract": "0x997a58129890bbda032231a52ed1ddc845fc18e1",
+    "alpha_symbol": "ALPHA_102USDT",
+    "alpha_id": "ALPHA_102",
+    "base_asset": "SIREN"
+  },
+  {
+    "symbol": "BANANAS31",
+    "bsc_contract": "0x3d4f0513e8a29669b960f9dbca61861548a9a760",
+    "alpha_symbol": "ALPHA_21USDT",
+    "alpha_id": "ALPHA_21",
+    "base_asset": "BANANAS31"
+  },
+  {
+    "symbol": "KOGE",
+    "bsc_contract": "0xe6df05ce8c8301223373cf5b969afcb1498c5528",
+    "alpha_symbol": "ALPHA_22USDT",
+    "alpha_id": "ALPHA_22",
+    "base_asset": "KOGE"
+  },
+  {
+    "symbol": "CHEEMS",
+    "bsc_contract": "0x0df0587216a4a1bb7d5082fdc491d93d2dd4b413",
+    "alpha_symbol": "ALPHA_2USDT",
+    "alpha_id": "ALPHA_2",
+    "base_asset": "Cheems"
+  }
+]

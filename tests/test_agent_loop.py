@@ -68,16 +68,38 @@ def test_build_prices_bnb_falls_back_to_onchain(mocker):
 
 # --- _compliance_orders ---
 
-def test_compliance_trade_prefers_stable():
+def test_compliance_trade_buys_eligible_not_wbnb():
+    # all-cash → buy the safest ELIGIBLE token (WBNB is not in the 149 — old bug)
+    from src.agent.data import token_list
     orders = al._compliance_orders(_state(30, 0, 29, {}))
     assert len(orders) == 1
-    assert orders[0].token_in == "USDT" and orders[0].token_out == "WBNB"
+    assert orders[0].token_in == "USDT" and orders[0].token_out != "WBNB"
+    assert token_list.is_eligible(token_list.get_token(orders[0].token_out).contract)
 
 
-def test_compliance_trade_uses_risk_token_when_no_stable():
-    orders = al._compliance_orders(_state(30, 10, 0, {"CAKE": 10.0}))
-    assert orders[0].token_in == "CAKE" and orders[0].token_out == "USDT"
+def test_compliance_trade_sells_held_eligible_token():
+    from src.agent.data import token_list
+    alpha = token_list.alpha_symbols()[0]
+    orders = al._compliance_orders(_state(30, 10, 0, {alpha: 10.0}))
+    assert orders[0].token_in == alpha and orders[0].token_out == "USDT"
 
 
 def test_compliance_trade_none_when_wallet_too_small():
     assert al._compliance_orders(_state(1.0, 0, 1.0, {})) == []
+
+
+# --- kill-switch (flatten_to_cash) ---
+
+def test_flatten_to_cash_sells_all_nonstable_and_clears_books(mocker):
+    alpha = al.token_list.alpha_symbols()[0]
+    mocker.patch.object(al, "read_onchain_balances",
+                        return_value={alpha: 100.0, "USDT": 5.0, "BNB": 0.02})
+    mocker.patch.object(al, "_event_prices",
+                        return_value={alpha: 0.1, "USDT": 1.0, "BNB": 600.0})
+    executed = mocker.patch.object(al, "_execute", return_value=[])
+    cleared = mocker.patch.object(al, "_clear_position_book")
+    res = al.flatten_to_cash(dry_run=True)
+    orders = executed.call_args.args[0]
+    assert [(o.token_in, o.token_out) for o in orders] == [(alpha, "USDT")]  # sells the held token
+    assert res["dry_run"] is True
+    cleared.assert_called_once()

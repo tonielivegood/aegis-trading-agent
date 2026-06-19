@@ -23,11 +23,18 @@ def _safe_tick(dry_run: bool) -> None:
 
 def run(dry_run: bool) -> None:
     sched = BlockingScheduler(timezone="UTC")
-    sched.add_job(lambda: _safe_tick(dry_run), "interval",
-                  minutes=settings.strategy_tick_min, id="strategy_tick",
-                  next_run_time=datetime.now(timezone.utc))  # run first tick immediately
-    log.info("scheduler_started", tick_min=settings.strategy_tick_min, dry_run=dry_run)
-    notifier.send(f"🤖 Agent started [{'DRY-RUN' if dry_run else 'LIVE'}] · tick {settings.strategy_tick_min}min")
+    # Event radar runs on a fast (hybrid 60s) cadence; baseline holds tick slowly.
+    event_mode = settings.strategy_mode == "event_alpha" and settings.event_radar_enabled
+    if event_mode:
+        interval = {"seconds": settings.event_tick_seconds}
+        cadence = f"{settings.event_tick_seconds}s"
+    else:
+        interval = {"minutes": settings.strategy_tick_min}
+        cadence = f"{settings.strategy_tick_min}min"
+    sched.add_job(lambda: _safe_tick(dry_run), "interval", id="strategy_tick",
+                  next_run_time=datetime.now(timezone.utc), **interval)  # first tick immediately
+    log.info("scheduler_started", cadence=cadence, event_mode=event_mode, dry_run=dry_run)
+    notifier.send(f"🤖 Agent started [{'DRY-RUN' if dry_run else 'LIVE'}] · tick {cadence}")
     try:
         sched.start()
     except (KeyboardInterrupt, SystemExit):

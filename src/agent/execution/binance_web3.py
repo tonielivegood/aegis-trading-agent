@@ -59,8 +59,8 @@ def _api_key() -> str:
 
 
 def _api_base() -> str:
-    return (getattr(settings, "binance_web3_api_base", "") or
-            os.getenv("BINANCE_WEB3_API_BASE", "") or "https://api.binance.com")
+    return (getattr(settings, "binance_web3_base_url", "") or
+            os.getenv("BINANCE_WEB3_BASE_URL", "") or "https://api.binance.com")
 
 
 def connectivity_check(ping_path: str | None = None) -> ConnectivityResult:

@@ -69,6 +69,15 @@ def test_unknown_token_still_raises():
         token_list.get_token("NOTAREALTOKENXYZ")
 
 
+def test_every_tradable_alpha_token_is_eligible_by_contract():
+    # Anti-DQ guard: the agent's trade universe must be a subset of the official
+    # allowlist (matched by contract address). A token outside it would score 0.
+    if not token_list.alpha_symbols():
+        pytest.skip("tradable_alpha.json not built")
+    for tok in token_list.tradable_alpha_tokens():
+        assert token_list.is_eligible(tok.contract), f"{tok.symbol} not in official allowlist"
+
+
 def test_pricing_works_for_alpha_token_via_router(mocker):
     # Proves the KeyError blocker is gone: price_feed can value an Alpha token
     # once get_token serves it. Router is mocked — no network.
