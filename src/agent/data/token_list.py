@@ -28,8 +28,9 @@ CORE_PATH = DATA_DIR / "curated_core.json"
 ELIGIBLE_PATH = DATA_DIR / "eligible_tokens.json"
 ALPHA_PATH = DATA_DIR / "tradable_alpha.json"
 
-# Stablecoins among the core — used by the risk layer for the "safe" floor.
-STABLECOINS = {"USDT", "USDC", "BUSD", "DAI"}
+# Stablecoins (settlement / "safe" floor) — eligible but never momentum-traded.
+STABLECOINS = {"USDT", "USDC", "BUSD", "DAI", "TUSD", "FDUSD", "FRAX", "USDD",
+               "USDE", "USD1", "LISUSD", "FRXUSD", "USDF", "DUSD", "EURI", "XUSD", "STABLE"}
 
 # Non-stable core tokens ordered by approximate BSC/Binance liquidity. Used to
 # pick a concentrated basket when capital is small (so each order isn't dust).
@@ -71,6 +72,20 @@ def _alpha() -> dict[str, Token]:
         tok = Token(symbol=t["symbol"], contract=t["contract"], decimals=t.get("decimals", 18))
         out[t["symbol"].upper()] = tok
     return out
+
+
+@lru_cache(maxsize=1)
+def _classes() -> dict[str, str]:
+    """symbol(upper) -> 'major' | 'meme', from the tradable universe file."""
+    if not ALPHA_PATH.exists():
+        return {}
+    raw = json.loads(ALPHA_PATH.read_text(encoding="utf-8"))
+    return {t["symbol"].upper(): t.get("token_class", "meme") for t in raw}
+
+
+def token_class(symbol: str) -> str:
+    """Trading class of a tradable token (default 'meme' = ride if unknown)."""
+    return _classes().get(symbol.upper(), "meme")
 
 
 @lru_cache(maxsize=1)
@@ -132,6 +147,16 @@ def get_token(symbol: str) -> Token:
 def get_token_by_address(address: str) -> Token | None:
     """Resolve a token by its (case-insensitive) contract address, or None."""
     return _by_address().get(address.lower())
+
+
+@lru_cache(maxsize=1)
+def _alpha_addrs() -> set[str]:
+    return {t.contract.lower() for t in _alpha().values()}
+
+
+def is_tradable_alpha(address: str) -> bool:
+    """True if the address is in the liquid, tradable Alpha subset."""
+    return address.lower() in _alpha_addrs()
 
 
 def stablecoins() -> list[Token]:

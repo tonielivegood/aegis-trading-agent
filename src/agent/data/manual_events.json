@@ -1,0 +1,47 @@
+[
+  {
+    "token": "TWT",
+    "bsc_contract": "0x4B0F1812e5Df2A09796481Ff14017e6005508003",
+    "text": "Binance announces a new Trust Wallet (TWT) campaign and staking rewards launch on BNB Chain.",
+    "source": "binance",
+    "source_type": "authority",
+    "url": "https://example.com/announcement",
+    "timestamp": 0
+  },
+  {
+    "token": "TWT",
+    "bsc_contract": "0x4B0F1812e5Df2A09796481Ff14017e6005508003",
+    "text": "Official Trust Wallet: partnership and integration details for the upcoming reward campaign.",
+    "source": "trustwallet",
+    "source_type": "project",
+    "url": "https://example.com/twt",
+    "timestamp": 0
+  },
+  {
+    "token": "SFP",
+    "bsc_contract": "0xD41FDb03Ba84762dD66a0af1a6C8540FF1ba5dfb",
+    "text": "CoinMarketCap highlights SafePal (SFP) integration and BNB Chain campaign.",
+    "source": "coinmarketcap",
+    "source_type": "authority",
+    "url": "https://example.com/cmc",
+    "timestamp": 0
+  },
+  {
+    "token": "SFP",
+    "bsc_contract": "0xD41FDb03Ba84762dD66a0af1a6C8540FF1ba5dfb",
+    "text": "SafePal listing campaign and airdrop rumored — unconfirmed forum post.",
+    "source": "random_user",
+    "source_type": "unverified",
+    "url": "",
+    "timestamp": 0
+  },
+  {
+    "token": "SCAMX",
+    "bsc_contract": "0x000000000000000000000000000000000000dead",
+    "text": "FREE CRYPTO giveaway! Send 0.1 BNB get 1000x guaranteed, claim now!",
+    "source": "spam_bot",
+    "source_type": "unverified",
+    "url": "",
+    "timestamp": 0
+  }
+]

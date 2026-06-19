@@ -1,0 +1,10 @@
+[Unit]
+Description=BNB Hack go-live reminder T-2h
+
+[Timer]
+OnCalendar=2026-06-21 22:00:00 UTC
+Persistent=true
+Unit=golive-remind@t2.service
+
+[Install]
+WantedBy=timers.target

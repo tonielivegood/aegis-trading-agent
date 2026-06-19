@@ -38,11 +38,15 @@ def test_buy_order_capped_at_per_token_max():
 
 
 def test_buys_stop_at_stablecoin_floor():
-    # equity 100, floor 20% -> only $80 deployable across all new buys.
+    # Deployable budget = equity*(1 - floor); with risk already near it, only the
+    # remainder may be bought. Derive the floor from config so the test stays
+    # correct regardless of the configured STABLECOIN_FLOOR_PCT.
+    from src.agent.config import settings
+    equity, risk = 100.0, 75.0
+    remaining = max(0.0, equity * (1.0 - settings.stablecoin_floor_pct) - risk)
     signals = [_sig(s, 0.9, "BUY") for s in ("CAKE", "ETH", "BTCB", "ADA", "DOT")]
-    orders = momentum_strategy.decide(signals, _state(equity=100.0, risk=75.0))
-    # Only $5 deployable remains; total ordered must not exceed it.
-    assert sum(o.amount_in_usd for o in orders) <= 5.0 + 1e-9
+    orders = momentum_strategy.decide(signals, _state(equity=equity, risk=risk))
+    assert sum(o.amount_in_usd for o in orders) <= remaining + 1e-9
 
 
 def test_no_buys_when_breaker_tripped():

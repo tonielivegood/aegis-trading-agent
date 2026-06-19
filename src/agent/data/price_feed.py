@@ -10,6 +10,8 @@ where token identity is pinned by CMC id rather than symbol.
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from web3 import Web3
 
 from ..config import settings
@@ -70,17 +72,30 @@ def onchain_price_usd(symbol: str) -> float | None:
     return None
 
 
+_PRICE_WORKERS = 8
+
+
+def _safe_onchain_price(sym: str) -> tuple[str, float | None]:
+    try:
+        return sym, onchain_price_usd(sym)
+    except Exception as e:  # noqa: BLE001
+        log.warning("onchain_price_failed", symbol=sym, error=str(e))
+        return sym, None
+
+
 def get_prices(symbols: list[str]) -> dict[str, float]:
-    """USD price per symbol. On-chain PancakeSwap first; CMC fallback for any missing."""
+    """USD price per symbol. On-chain PancakeSwap first; CMC fallback for any missing.
+
+    On-chain quotes are independent read-only RPC calls, so we fan them out across a
+    small thread pool — sequential pricing of the whole Alpha universe was the tick's
+    dominant latency (≈50s for ~40 tokens) and broke the 60s event cadence.
+    """
     prices: dict[str, float] = {}
-    for sym in symbols:
-        try:
-            p = onchain_price_usd(sym)
-        except Exception as e:  # noqa: BLE001
-            log.warning("onchain_price_failed", symbol=sym, error=str(e))
-            p = None
-        if p is not None:
-            prices[sym] = p
+    if symbols:
+        with ThreadPoolExecutor(max_workers=min(_PRICE_WORKERS, len(symbols))) as ex:
+            for sym, p in ex.map(_safe_onchain_price, symbols):
+                if p is not None:
+                    prices[sym] = p
 
     missing = [s for s in symbols if s not in prices]
     if missing:

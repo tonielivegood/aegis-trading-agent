@@ -34,23 +34,48 @@ def cmd_status() -> None:
     print(f"Tradable : {len(token_list.tradable_symbols())} core tokens")
 
 
+def cmd_compliance() -> None:
+    import time
+
+    from .aegis.compliance import ComplianceTracker
+    rep = ComplianceTracker.load(agent_loop.COMPLIANCE_FILE).report(time.time())
+    print("Track 1 — minimum-trade compliance report")
+    print(f"  date                  : {rep.date}")
+    print(f"  valid trades today    : {rep.valid_trades_today} "
+          f"(need {settings.track1_min_trades_per_day}/day, remaining {rep.remaining_today})")
+    print(f"  valid trades total    : {rep.valid_trades_total} "
+          f"(need {settings.track1_min_trades_total}/week, remaining {rep.remaining_total})")
+    print(f"  last valid trade      : {rep.last_valid_trade}")
+    print(f"  invalid trades ignored: {rep.invalid_trades_ignored} (outside the 149 allowlist)")
+    print(f"  scoring mode          : {settings.track1_scoring_mode} "
+          f"(NAV assumption: {settings.track1_score_nav_assumption})")
+    print(f"  settlement asset      : {settings.track1_settlement_asset}")
+
+
 def main() -> None:
     configure()
     p = argparse.ArgumentParser(prog="agent")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status")
+    sub.add_parser("compliance")  # Track-1 min-trade compliance report
     sub.add_parser("reset")  # clear runtime state (run once before the contest)
     sub.add_parser("notify-test")  # send a test Telegram alert
     rp = sub.add_parser("run")
     rp.add_argument("--live", action="store_true", help="enable live trading (default: dry-run)")
     tp = sub.add_parser("tick")
     tp.add_argument("--live", action="store_true")
+    pp = sub.add_parser("panic")  # KILL-SWITCH: sell everything to USDT + clear books
+    pp.add_argument("--live", action="store_true", help="actually sell (default: dry-run preview)")
     args = p.parse_args()
 
     if args.cmd == "status":
         cmd_status()
+    elif args.cmd == "compliance":
+        cmd_compliance()
     elif args.cmd == "reset":
-        for f in (agent_loop.DRAWDOWN_FILE, agent_loop.TRADES_FILE, agent_loop.BASELINE_FILE):
+        for f in (agent_loop.DRAWDOWN_FILE, agent_loop.TRADES_FILE, agent_loop.BASELINE_FILE,
+                  agent_loop.POSITIONS_FILE, agent_loop.COMPLIANCE_FILE,
+                  agent_loop.COOLDOWN_FILE, agent_loop.REGIME_FILE):
             if f.exists():
                 f.unlink()
                 print(f"removed {f.name}")
@@ -67,6 +92,9 @@ def main() -> None:
     elif args.cmd == "tick":
         result = agent_loop.tick(dry_run=not args.live)
         print(result)
+    elif args.cmd == "panic":
+        result = agent_loop.flatten_to_cash(dry_run=not args.live)
+        print(("LIVE" if args.live else "DRY-RUN (use --live to execute)"), "flatten:", result)
 
 
 if __name__ == "__main__":
