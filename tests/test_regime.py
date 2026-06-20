@@ -4,8 +4,10 @@ import json
 import pytest
 
 from src.agent.aegis.regime import (
+    SENTIMENT_FEAR_FLOOR,
     Regime,
     RegimeState,
+    apply_sentiment_floor,
     classify_btc,
     current_regime,
     decide_regime,
@@ -23,6 +25,36 @@ def test_decide_regime_from_cmc_quote():
     assert flag == Regime.RISK_ON
     flag, _ = decide_regime({"percent_change_1h": None, "percent_change_24h": -4.0})
     assert flag == Regime.CAUTIOUS
+
+
+def test_sentiment_floor_only_tightens_risk_on():
+    # CMC Agent Hub Fear & Greed: extreme fear caps aggression (RISK_ON -> CAUTIOUS).
+    flag, why = apply_sentiment_floor(Regime.RISK_ON, SENTIMENT_FEAR_FLOOR - 1)
+    assert flag == Regime.CAUTIOUS and "F&G" in why
+
+
+def test_sentiment_floor_never_loosens():
+    # It must NEVER upgrade a regime — greed cannot make us aggressive (overpump risk),
+    # and a non-RISK_ON regime is left untouched.
+    assert apply_sentiment_floor(Regime.RISK_ON, 95)[0] == Regime.RISK_ON
+    assert apply_sentiment_floor(Regime.CAUTIOUS, 5)[0] == Regime.CAUTIOUS
+    assert apply_sentiment_floor(Regime.RISK_OFF, 5)[0] == Regime.RISK_OFF
+
+
+def test_sentiment_floor_noop_without_data():
+    # No Agent Hub read available => behaviour is identical to BTC-only classification.
+    flag, why = apply_sentiment_floor(Regime.RISK_ON, None)
+    assert flag == Regime.RISK_ON and why == ""
+
+
+def test_decide_regime_applies_fear_greed_overlay():
+    # BTC calm => RISK_ON, but extreme market fear tightens it to CAUTIOUS.
+    quote = {"percent_change_1h": 0.3, "percent_change_24h": 1.5}
+    flag, reason = decide_regime(quote, fear_greed={"value": 10})
+    assert flag == Regime.CAUTIOUS and "F&G" in reason
+    # Calm BTC + neutral sentiment stays RISK_ON.
+    flag, _ = decide_regime(quote, fear_greed={"value": 55})
+    assert flag == Regime.RISK_ON
 
 
 def test_params_per_regime():

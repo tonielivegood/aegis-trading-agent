@@ -27,6 +27,10 @@ DEFAULT_OVERPUMP = 0.10       # skip if already pumped this much over the recent
 
 MIN_ORDER_USD = 2.0           # below this a swap is dust (fees dominate)
 STABLE = "USDT"
+# CMC Agent Hub community-trending boost: a breakout that is ALSO trending by community
+# activity gets a strength multiplier so it wins the scarce slots over an equally-strong
+# but unnoticed token. Re-ranking only — it never admits a signal that failed a gate.
+TRENDING_BOOST = 1.5
 
 
 @dataclass(frozen=True)
@@ -40,11 +44,13 @@ class BreakoutSignal:
     price_now: float
     baseline_vol: float
     reasons: tuple[str, ...] = ()
+    trending: bool = False    # token is in CMC's community-trending set this hour
 
     @property
     def strength(self) -> float:
-        """Ranking key — stronger money-flow wins the scarce slots."""
-        return self.vol_multiple
+        """Ranking key — stronger money-flow wins the scarce slots; a CMC-trending
+        token is boosted so community attention breaks ties toward it."""
+        return self.vol_multiple * (TRENDING_BOOST if self.trending else 1.0)
 
 
 def _breakout_pct(snap: MarketSnapshot) -> float:
@@ -57,11 +63,15 @@ def scan_breakouts(snapshots: dict[str, MarketSnapshot], *,
                    vol_mult: float = DEFAULT_VOL_MULT,
                    breakout_min: float = 0.0,
                    breakout_max: float = DEFAULT_BREAKOUT_MAX,
-                   overpump_pct: float = DEFAULT_OVERPUMP) -> list[BreakoutSignal]:
+                   overpump_pct: float = DEFAULT_OVERPUMP,
+                   trending_symbols: frozenset[str] | set[str] = frozenset(),
+                   ) -> list[BreakoutSignal]:
     """Emit breakout signals (ranked by volume multiple, strongest first).
 
     `breakout_min` lets a class require a minimum upward move (majors use +0.3% so a
     flat tick doesn't trigger); memes leave it at 0 (any rise within the cap).
+    `trending_symbols` (CMC Agent Hub community-trending set) boosts the rank of any
+    matching signal — empty set ⇒ pure money-flow ranking, identical to before.
     """
     out: list[BreakoutSignal] = []
     for sym, snap in snapshots.items():
@@ -79,12 +89,16 @@ def scan_breakouts(snapshots: dict[str, MarketSnapshot], *,
         if snap.recent_pump_pct >= overpump_pct:
             continue
         vm = snap.vol_5m / snap.baseline_vol
+        is_trending = sym.upper() in trending_symbols
+        reasons = [f"vol {vm:.1f}x baseline", f"breakout +{breakout * 100:.1f}%"]
+        if is_trending:
+            reasons.append("CMC-trending")
         out.append(BreakoutSignal(
             symbol=sym, contract=(snap.contract or "").lower(), vol_multiple=vm,
             breakout_pct=breakout, recent_pump_pct=snap.recent_pump_pct,
             slippage_est=snap.slippage_est, price_now=snap.price_now,
-            baseline_vol=snap.baseline_vol,
-            reasons=(f"vol {vm:.1f}x baseline", f"breakout +{breakout * 100:.1f}%"),
+            baseline_vol=snap.baseline_vol, trending=is_trending,
+            reasons=tuple(reasons),
         ))
     out.sort(key=lambda s: s.strength, reverse=True)
     return out

@@ -67,6 +67,26 @@ def position_usd(nav_usd: float, flag: Regime | str) -> float:
     return max(0.0, nav_usd * params(flag).size_pct)
 
 
+# CMC Agent Hub Fear & Greed floor: at/below this index the whole market is in
+# (near-)panic. A momentum strategy that LOOSENS its entry bar in RISK_ON (beta
+# capture) must not do so into a market-wide sell-off, even if BTC's last hour looks
+# calm. So extreme fear caps aggression — it can only TIGHTEN (RISK_ON → CAUTIOUS),
+# never loosen (Greed is NOT a green light: it correlates with blow-off tops).
+SENTIMENT_FEAR_FLOOR = 20
+
+
+def apply_sentiment_floor(flag: Regime | str, fg_value: int | None) -> tuple[Regime, str]:
+    """Tighten the regime when CMC's Fear & Greed index shows extreme fear.
+
+    Returns (possibly-tightened regime, reason-suffix). A missing read or a
+    non-RISK_ON regime is a no-op (empty suffix) — this NEVER upgrades a regime.
+    """
+    flag = Regime(flag)
+    if fg_value is not None and flag == Regime.RISK_ON and fg_value <= SENTIMENT_FEAR_FLOOR:
+        return Regime.CAUTIOUS, f"sentiment floor: F&G {fg_value} ≤ {SENTIMENT_FEAR_FLOOR}"
+    return flag, ""
+
+
 def classify_btc(*, change_1h: float, change_24h: float,
                  off_24h: float = -0.08, off_1h: float = -0.04,
                  caution_24h: float = -0.03, caution_1h: float = 0.025) -> Regime:
@@ -111,13 +131,19 @@ def current_regime(state: RegimeState, *, max_age_s: float, now: float) -> Regim
     return Regime(state.flag)
 
 
-def decide_regime(btc_quote: dict) -> tuple[Regime, str]:
+def decide_regime(btc_quote: dict, fear_greed: dict | int | None = None) -> tuple[Regime, str]:
     """Map a CMC BTC quote (percent_change_* in PERCENT) to a regime + reason.
 
     This is the hourly updater's brain. A deterministic classifier on BTC momentum
-    is robust and free; an LLM read can later refine it but must not loosen it.
+    is robust and free; the CMC Agent Hub Fear & Greed read (``fear_greed``) refines
+    it via a TIGHTENING-ONLY overlay (extreme fear caps RISK_ON), never loosening it.
     """
     c1 = float(btc_quote.get("percent_change_1h") or 0.0) / 100.0
     c24 = float(btc_quote.get("percent_change_24h") or 0.0) / 100.0
     flag = classify_btc(change_1h=c1, change_24h=c24)
-    return flag, f"BTC 1h {c1 * 100:+.1f}% / 24h {c24 * 100:+.1f}%"
+    reason = f"BTC 1h {c1 * 100:+.1f}% / 24h {c24 * 100:+.1f}%"
+    fg_value = fear_greed.get("value") if isinstance(fear_greed, dict) else fear_greed
+    flag, suffix = apply_sentiment_floor(flag, fg_value)
+    if suffix:
+        reason = f"{reason}; {suffix}"
+    return flag, reason

@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from .config import settings
-from .data import cmc_client, price_feed, token_list
+from .data import cmc_agent_hub, cmc_client, price_feed, token_list
 from .data.token_list import STABLECOINS
 from .execution.pancakeswap import PancakeSwap
 from .monitor import notifier, pnl
@@ -39,6 +39,7 @@ COMPLIANCE_FILE = RUNTIME / "track1_compliance.json"
 COOLDOWN_FILE = RUNTIME / "aegis_cooldown.json"
 REGIME_FILE = RUNTIME / "regime.json"
 PRICECACHE_FILE = RUNTIME / "last_prices.json"
+CMC_SIGNAL_FILE = RUNTIME / "cmc_signal.json"   # cached CMC Agent Hub trending set (hourly)
 LOW_EQUITY_USD = max(5.0, settings.min_portfolio_value_usd * 2)
 COMPLIANCE_ORDER_USD = 2.0
 
@@ -229,13 +230,44 @@ def _maybe_update_regime(now_ts: float):
         return st
     try:
         quote = cmc_client.get_quotes(["BTC"]).get("BTC", {})
-        flag, reason = rg.decide_regime(quote)
+        # CMC Agent Hub: market Fear & Greed refines the BTC regime (tightening-only).
+        fear_greed = cmc_agent_hub.get_fear_greed()
+        flag, reason = rg.decide_regime(quote, fear_greed=fear_greed)
         st = rg.RegimeState(flag=flag.value, updated_at=now_ts, reason=reason)
         st.save(REGIME_FILE)
-        log.info("regime_updated", flag=flag.value, reason=reason)
+        log.info("regime_updated", flag=flag.value, reason=reason,
+                 fear_greed=(fear_greed or {}).get("value"))
+        # CMC Agent Hub: refresh the community-trending set for the token-selection bias.
+        _refresh_trending(now_ts)
     except Exception as e:  # noqa: BLE001 — never let a data hiccup break the tick
         log.info("regime_update_failed", error=type(e).__name__)
     return st
+
+
+def _refresh_trending(now_ts: float) -> None:
+    """Cache the CMC Agent Hub community-trending set to disk so the 60s rails can
+    read it without a network call (fully fail-safe — empty set on any error)."""
+    try:
+        syms = cmc_agent_hub.get_trending_symbols()
+        CMC_SIGNAL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CMC_SIGNAL_FILE.write_text(
+            json.dumps({"trending": sorted(syms), "updated_at": now_ts}), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        log.info("cmc_trending_refresh_failed", error=type(e).__name__)
+
+
+def _load_trending(now_ts: float) -> frozenset[str]:
+    """Read the cached CMC-trending set; empty if absent or stale (so a dead updater
+    silently falls back to pure money-flow ranking)."""
+    try:
+        if not CMC_SIGNAL_FILE.exists():
+            return frozenset()
+        d = json.loads(CMC_SIGNAL_FILE.read_text(encoding="utf-8"))
+        if now_ts - float(d.get("updated_at", 0.0)) > settings.regime_max_age_seconds:
+            return frozenset()
+        return frozenset(d.get("trending", []))
+    except Exception:  # noqa: BLE001
+        return frozenset()
 
 
 def _event_decision(state: PortfolioState, prices: dict, symbols: list[str]):
@@ -252,8 +284,9 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str]):
     feed = MarketFeed(volume_provider=_volume_provider())
     rstate = _maybe_update_regime(now_ts)
     flag = rg.current_regime(rstate, max_age_s=settings.regime_max_age_seconds, now=now_ts)
+    trending = _load_trending(now_ts)
     orders, mode = sniper.run(state, prices, book=book, feed=feed, cooldowns=cooldowns,
-                              regime_flag=flag, universe=symbols, now=now_ts)
+                              regime_flag=flag, universe=symbols, now=now_ts, trending=trending)
     book.save(POSITIONS_FILE)
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
     cooldowns.save(COOLDOWN_FILE)

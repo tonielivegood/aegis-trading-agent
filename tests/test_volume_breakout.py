@@ -53,6 +53,25 @@ def test_bad_liquidity_rejected():
     assert scan_breakouts(snaps) == []
 
 
+def test_trending_boost_promotes_a_qualified_signal():
+    # Two clean breakouts; the weaker one is CMC-trending and must outrank the stronger.
+    snaps = {
+        "AAA": _snap("AAA", vol_5m=400, baseline_vol=100, price_now=104, price_5m_ago=100),  # 4.0x
+        "BBB": _snap("BBB", vol_5m=320, baseline_vol=100, price_now=104, price_5m_ago=100),  # 3.2x
+    }
+    plain = scan_breakouts(snaps, vol_mult=3.0)
+    assert plain[0].symbol == "AAA"  # raw money-flow ranking
+    boosted = scan_breakouts(snaps, vol_mult=3.0, trending_symbols=frozenset({"BBB"}))
+    assert boosted[0].symbol == "BBB" and boosted[0].trending is True
+    assert boosted[1].symbol == "AAA" and boosted[1].trending is False
+
+
+def test_trending_boost_empty_set_is_noop():
+    snaps = {"AAA": _snap("AAA", vol_5m=400, baseline_vol=100, price_now=104, price_5m_ago=100)}
+    sigs = scan_breakouts(snaps, vol_mult=3.0, trending_symbols=frozenset())
+    assert sigs[0].trending is False and sigs[0].strength == sigs[0].vol_multiple
+
+
 def test_falling_price_rejected():
     # high volume but price DOWN = a dump on volume, not a breakout
     snaps = {"AAA": _snap("AAA", vol_5m=400, baseline_vol=100, price_now=95, price_5m_ago=100)}
