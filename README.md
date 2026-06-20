@@ -1,86 +1,89 @@
 # BNB Hack 2026 — Track 1 Autonomous Trading Agent
 
 A self-custody autonomous trading agent for BNB Hack 2026 Track 1. Trades live on
-BSC via PancakeSwap during the contest window (22–28 June 2026), scored on
-hourly PnL with a hard 30% max-drawdown disqualification gate.
+BSC through the **1inch DEX aggregator** during the contest window (22–28 June 2026),
+scored on raw total wallet return with a hard 30% max-drawdown disqualification gate.
 
-**Design philosophy: survival first.** Track 1 is a risk-adjusted survival game,
-not a max-return race. The agent is built to *never get disqualified* and to
-*stay profitable after fees*, while capturing upside when the market trends up.
+**Design philosophy: survival first, then asymmetric upside.** Track 1 ranks on raw
+return but disqualifies anyone who draws down 30%. Aegis is built to *never get
+disqualified*, sit in cash by default, and deploy only into confirmed momentum —
+chasing a few asymmetric winners rather than churning many scalps into fees.
 
 ---
 
 ## Why this matters (Aegis differentiator)
 
-Binance Wallet Web3 API was released during the hackathon window, and Aegis is
-designed to use it as a **native on-chain agent layer**: Binance Alpha 5-minute
-market data for volume confirmation, Binance Web3 quote/route readiness, unsigned
-transaction construction, MEV-aware routing where available, and Trust Wallet
-Agent Kit for self-custody signing. The result is **not a black-box trading bot**,
-but a **risk-managed autonomous agent** that can detect catalysts, verify live
-market confirmation, size small, and execute only when safety gates pass.
+Aegis is **not a black-box trading bot** but a risk-managed autonomous agent that
+sits in cash, watches real money-flow, and deploys only when safety gates pass —
+with **self-custody preserved end to end** (it signs every transaction locally and
+never hands a key to any API). It combines:
 
-Aegis combines five layers:
+1. **1inch DEX aggregator execution** — best price across all BSC DEXs (V2/V3/
+   Biswap/THENA…), unlocking a tradable universe (~91 tokens) far larger than any
+   single DEX. 1inch returns ready-to-sign calldata; **Aegis signs it locally**.
+   Live-proven on-chain (see below). OpenOcean is a keyless backup; PancakeSwap V2
+   is the emergency fallback **and** the on-chain price source for BNB/WBNB.
+2. **CoinMarketCap Pro pricing** — the aggregator universe is priced by CMC id
+   (on-chain V2 prices are unreliable for these thin-pool tokens), so wallet
+   valuation and the drawdown breaker never trip on a bad on-chain read.
+3. **CoinMarketCap AI Agent Hub** — market Fear & Greed + community-trending feed
+   the regime and token ranking (see the #CMCAgentHub section below).
+4. **Live volume confirmation** — Binance Alpha 5m/1m klines (memes) + Binance spot
+   klines (majors); no entry without a real volume spike. No faked volume, ever.
+5. **Aegis risk engine** — regime valve, two-tier exits, debounced drawdown breaker,
+   last-known-good pricing, kill-switch, gas guard, DRY_RUN-by-default.
 
-1. **CoinMarketCap Pro** — signals and multi-year historical validation.
-2. **Binance Alpha / Binance Web3 market data** — live 5-minute volume + market confirmation.
-3. **Binance Wallet Web3 API** — quote / route / **unsigned**-transaction readiness (non-custodial).
-4. **Trust Wallet Agent Kit** — self-custody signing / execution safety.
-5. **Aegis risk engine** — position sizing, entry/exit, drawdown breaker, DRY_RUN safety.
-
-Signing stays **local / self-custody**; the Web3 layer returns unsigned transactions
-only, the agent never auto-broadcasts, and **`DRY_RUN=true` by default**. Setup:
-[`docs/BINANCE_WEB3_SETUP.md`](docs/BINANCE_WEB3_SETUP.md).
+Signing stays **local / self-custody**; the agent never hands out a key or seed,
+and **`DRY_RUN=true` by default**.
 
 ---
 
-## Track 1 strategy — Event-Driven Alpha Momentum (primary)
+## Track 1 strategy — cash-default volume-breakout sniper
 
 For Track 1, Aegis trades **only the official 149-token BEP-20 allowlist** (matched
-by **contract address**), concentrating on the liquid, routable subset. It is a
-catalyst-confirmed momentum strategy, not a buy-and-hold:
+by **contract address**), on the liquid, aggregator-routable subset (~91 tokens =
+56 majors + 35 Binance-Alpha memes). It is **cash by default** and enters only on a
+real volume breakout, sized by an hourly market regime.
 
-**State model** (implemented as layered gates, not a black box):
+**Entry** requires *all*: eligible by contract + aggregator-liquid + a real volume
+spike (≥ class bar × baseline) + price rising but not already blown off + the regime
+allowing new risk + cooldown clear + a free slot + the stablecoin floor respected.
+A flat/quiet token never trades; a single noisy candle is not enough.
 
-```
-SCANNING ─► WATCHLIST ─► ARMED ─► ENTERED ─► PROTECT_PROFIT ─► EXITED ─► COOLDOWN
-  catalyst    catalyst    +price   all gates   trailing / TP /   exit fired  no re-entry
-  scan        mapped to   +liquid   pass →      FOMO-defense                 (no pyramiding)
-  each tick   eligible    +real 5m  $10 entry   active
-                          volume
-```
+**Two tiers by trading cost** (`aegis/token_class.py`):
 
-- **Entry** requires *all*: eligible (by contract) + liquid subset + catalyst
-  score ≥ 70 + price breakout + **real Binance Alpha 5m volume confirmation**
-  (or Tier-1 authority fast path) + slippage/liquidity OK + risk gates + DRY_RUN.
-  A Tier-3/unverified signal **can never enter alone**; a catalyst without volume
-  stays WATCHLIST.
-- **Exit** (priority): drawdown breaker → hard take-profit (**2×**) → stop-loss →
-  **max hold 5h (hard exit)** → **5× volume FOMO defense** → trailing stop.
-- **Meme/Alpha tokens are temporary instruments** to earn the stablecoin
-  settlement asset — never long-term holdings.
+| Tier | Volume bar | Take-profit | Trail | Stop | No-progress cut | Size |
+|---|---|---|---|---|---|---|
+| **MAJOR** (cheap ~0.6% round-trip) | ≥ 2.0× (RISK_ON ×0.75 = 1.5×) | +10% | 5% | −5% | 20 min | regime % of NAV |
+| **MEME** (expensive) | ≥ 3.0× (strict every regime) | **+100%** | 15% | −8% | 25 min | $5 lottery |
 
-> **Max hold = 5h is a hard exit.** **5× volume is NOT a blind sell** — it engages
-> FOMO defense: the trailing stop tightens and the position exits only if price is
-> *also* stalling/reversing; if price keeps rising, the position is held.
+The 35 memes are the **asymmetric-tail win lever** — memecoin contests are won by one
+big +100–300% hit, so memes ride far while majors take modest, frequent profit.
 
-Full detail: [`docs/STRATEGY_STATE_MACHINE.md`](docs/STRATEGY_STATE_MACHINE.md).
-The majors-hold strategy below is the **validated baseline/fallback**, used only
-when no high-confidence catalyst exists.
+**Regime valve** (`aegis/regime.py`, refreshed hourly from CMC BTC momentum + the
+Agent Hub Fear & Greed read): `RISK_ON` 35% NAV / 2 slots (loosens the major bar to
+ride a rising market) · `CAUTIOUS` 20% / 1 slot · `RISK_OFF` 0 (no new entries).
+Total deploy ≤ 70% NAV, leaving a 30% cushion under the DQ breaker.
+
+**Exit priority:** drawdown breaker → hard take-profit → stop-loss → no-progress cut
+→ volume-death-in-profit → trailing stop. Meme/major positions are temporary
+instruments to earn back the stablecoin settlement asset — never long-term holdings.
+
+The majors-hold strategy below is the **validated deep fallback**, available when the
+sniper path is disabled.
 
 ## Why this can win Track 1
 
-- **Right universe, by contract address.** Many entries fail by trading
-  non-eligible majors; Aegis trades only the official allowlist and proves it
-  with an anti-DQ test (`tradable ⊆ eligible`).
-- **Real confirmation, not vibes.** Live Binance Alpha 5-minute volume (83/149
-  eligible tokens mapped) gates every entry; no faked volume, ever.
-- **Survival first.** A 30% drawdown disqualifies; Aegis caps risk with tiny $10
-  positions, a stablecoin floor, a 5h max hold, and a latched drawdown breaker.
-- **Self-custody + on-chain proof.** Keys stay local; execution via PancakeSwap /
-  Trust Wallet Agent Kit, with an on-chain proof transaction already on BscScan.
-- **Uses the newest BNB stack.** Built around the Binance Wallet Web3 API
-  (released during the hackathon window) for quote/route/unsigned-tx readiness.
+- **Right universe, by contract address.** Aegis trades only the official allowlist
+  and proves it with an anti-DQ test (`tradable ⊆ eligible`).
+- **Bigger tradable universe.** The 1inch aggregator unlocks ~91 routable tokens
+  (vs ~18 on PancakeSwap V2 alone), including the meme tail that actually pumps.
+- **Real confirmation, not vibes.** Live Binance 5-minute volume gates every entry.
+- **Survival first.** A 30% drawdown disqualifies; Aegis defaults to cash, caps
+  deployment at 70% NAV, sizes memes at $5, and runs a latched, debounced breaker.
+- **Self-custody + on-chain proof.** Keys stay local; execution routes through the
+  1inch AggregationRouterV6, **proven live** with a real BSC transaction:
+  [`0x2727…7d6c`](https://bscscan.com/tx/0x2727f6d5337a60c1ec2991258fa36c8deaf2652c908743dd29cf3186b11e7d6c).
 
 ## CMC AI Agent Hub integration (#CMCAgentHub)
 
@@ -105,13 +108,13 @@ python -m src.agent signals
 
 | Capability | Status |
 |---|---|
-| Binance Alpha 5m volume (market data) | **LIVE** (read-only) — verified |
-| CoinMarketCap Pro signals + walk-forward validation | **LIVE** (read-only) |
-| Catalyst scanner (manual feed) | **LIVE**; Tier-1 network adapters off until creds/flags set |
-| On-chain pricing / route / slippage (PancakeSwap) | **LIVE** (read-only quotes) |
-| Trade execution | **DRY_RUN** — simulated, **no broadcast**, by default |
-| Binance Web3 API quote/route | adapter ready; **off** until `BINANCE_WEB3_ENABLED=true` |
-| Transaction signing / broadcast | **never automatic**; local/self-custody only |
+| Binance 5m/1m volume (Alpha memes + spot majors) | **LIVE** (read-only) — verified |
+| CoinMarketCap Pro pricing (universe priced by CMC id) | **LIVE** (read-only) |
+| CoinMarketCap AI Agent Hub (Fear & Greed + trending) | **LIVE** (read-only) — `python -m src.agent signals` |
+| 1inch aggregator quote / route / slippage gate | **LIVE** (read-only quotes) |
+| Trade execution (1inch, self-custody local signing) | **LIVE-PROVEN** on-chain; **DRY_RUN by default** until go-live |
+| Transaction signing / broadcast | **never hands out a key**; local/self-custody only |
+| Binance Web3 API / Trust Wallet Agent Kit | adapters present but **deferred/unused** (1inch is the live path) |
 
 ## Track 1 compliance (eligibility + minimum trades)
 
@@ -145,24 +148,24 @@ python -m src.agent signals
 ## Architecture
 
 ```
-data/      market data: RPC (multi-endpoint failover), CMC quotes, price feed, token universe
-aegis/     catalyst scanner + scoring, Binance Alpha 5m volume, market feed, positions, orchestrator
-risk/      drawdown breaker, position sizing, trade counter, portfolio valuation, input guards
-execution/ PancakeSwap V2 swaps + local tx signing (safety rails: whitelist, min_out, exact approval, DRY_RUN gate)
-signal/    momentum + Claude sentiment, behind a prompt-injection firewall (output = bounded number only)
-strategy/  adaptive fractional-hold (production) + momentum/rebalance variants
+data/      market data: RPC (multi-endpoint failover), CMC quotes + AI Agent Hub, price feed, token universe
+aegis/     volume-breakout sniper: regime valve, two-tier params, market feed, positions, cooldown, orchestrator
+risk/      debounced drawdown breaker, position sizing, trade counter, portfolio valuation, input guards
+execution/ 1inch (live) + OpenOcean aggregator + PancakeSwap V2 (fallback + BNB pricing); local self-custody signing
+signal/    momentum + Claude sentiment, behind a prompt-injection firewall (research; not in the live hot path)
+strategy/  event-driven alpha momentum (sniper) + adaptive fractional-hold fallback + variants
 monitor/   safeguard (derisk/halt/compliance), contest PnL accounting, structured logging
 backtest/  engine, metrics, Binance data loader, walk-forward validation
-agent_loop.py  orchestrator: data → risk → safeguard → strategy → execution
-scheduler.py   APScheduler: tick every STRATEGY_TICK_MIN
-__main__.py    CLI
+agent_loop.py  orchestrator: data → pricing (CMC) → risk → regime → sniper → execution (1inch)
+scheduler.py   APScheduler: event tick every EVENT_TICK_SECONDS (60s)
+__main__.py    CLI (status | signals | compliance | reset | tick | run | panic)
 ```
 
 ## Baseline fallback strategy (validated)
 
-> This majors-hold strategy is the **Layer-A fallback** (used when no
-> high-confidence catalyst exists) and the original walk-forward-validated core.
-> The **primary Track-1 strategy is the Event-Driven Alpha Momentum radar above.**
+> This majors-hold strategy is the **deep fallback** and the original
+> walk-forward-validated core. The **live Track-1 strategy is the cash-default
+> volume-breakout sniper above** (`STRATEGY_MODE=event_alpha`, the default).
 
 **Adaptive fractional hold + breaker** — chosen by walk-forward validation over
 111 weekly windows (~125 days of real Binance data):
@@ -176,12 +179,10 @@ __main__.py    CLI
 Validated profile: avg −0.4%/week, worst −10.3%, best +4.7%, **worst drawdown
 12.8%** (vs 30% DQ cap), **0% disqualification across all windows**.
 
-> **Signal layer status:** the default live strategy (adaptive hold) is
-> price-only and does NOT depend on the `signal/` layer. The CMC-sentiment +
-> momentum signal engine (with its prompt-injection firewall) is built, tested,
-> and available to re-enable, but is not wired into the default path — the
-> walk-forward winner didn't need it. It remains usable for research and for
-> sentiment-driven strategy variants.
+> **Signal layer status:** the live sniper is driven by real volume + the CMC
+> regime/Agent-Hub signals; the older `signal/` Claude-sentiment engine (with its
+> prompt-injection firewall) is built and tested but kept OUT of the 60s hot path —
+> available for research and sentiment-driven variants, not the live decision.
 
 > Honest note: no tested strategy showed large reliable alpha in this regime.
 > The edge here is *survival* — while aggressive competitors blow up on the 30%
@@ -192,13 +193,16 @@ Validated profile: avg −0.4%/week, worst −10.3%, best +4.7%, **worst drawdow
 
 | Control | Value | Purpose |
 |---|---|---|
-| Drawdown breaker (latched) | −20% | exit to cash well under the 30% DQ cap |
-| Per-token cap | 10% of equity | no single-token blowup |
-| Stablecoin floor | 20% | wallet never drains (hourly value stays > $1) |
-| Slippage protection | min_out from live quote | anti-MEV/sandwich |
+| Drawdown breaker (latched, **debounced**) | alert −20% after 3 consecutive breach ticks; cap −30% instant | survive a 1-tick price glitch without a phantom DQ |
+| Last-known-good pricing | `last_prices.json` fallback | a failed price read can't crater valuation/trip the breaker |
+| Deploy cap | ≤ 70% NAV (RISK_ON 2×35%) | always keep a cash cushion under the DQ cap |
+| Meme position size | $5 fixed lottery | thin pools can't take full size; bounded downside |
+| Stablecoin floor | max($6, 15% NAV) | settlement cash never drains |
+| Slippage gate + min_out | 4% majors / 6% memes | anti-MEV; rejects illiquid routes |
+| Gas guard | block new buys below `MIN_GAS_BNB` | never get stuck unable to exit |
 | Token approval | exact amount | no unlimited allowance |
-| DRY_RUN gate | env flag | no transaction sent unless explicitly live |
-| Signal firewall | JSON-only, clamped | external text can't inject trade instructions |
+| Kill-switch | `python -m src.agent panic --live` | flatten everything to USDT on demand |
+| DRY_RUN gate | env flag / `run --live` | no transaction sent unless explicitly live |
 
 ---
 
@@ -212,9 +216,12 @@ cp .env.example .env          # then fill in secrets (see below)
 Required in `.env` (never commit it — it is gitignored):
 
 - `AGENT_PRIVATE_KEY`, `AGENT_WALLET_ADDRESS` — the agent wallet (self-custody)
-- `BSCSCAN_API_KEY`, `CMC_API_KEY`, `ANTHROPIC_API_KEY`
-- Risk dials: `DEPLOY_FRAC=0.50`, `BASKET_SIZE=6`, `MAX_DRAWDOWN_ALERT=0.20`, etc.
-- `DRY_RUN=true` (keep true until go-live)
+- `CMC_API_KEY` (Pro plan — pricing + AI Agent Hub), `BSC_RPC_URL`, `BSCSCAN_API_KEY`
+- `EXECUTION_BACKEND=1inch` + `ONEINCH_API_KEY` — the live execution path
+- Risk dials: `MAX_DRAWDOWN_ALERT=0.20`, `MAX_DRAWDOWN_CAP=0.30`, `SLIPPAGE_BPS=400`,
+  `MEME_SLIPPAGE_BPS=600`, `MEME_ORDER_USD=5`, `DRAWDOWN_LATCH_TICKS=3`
+- `ANTHROPIC_API_KEY`, `TELEGRAM_*` (optional)
+- `DRY_RUN=true` (keep true until go-live; `go-live.sh` flips the service to `run --live`)
 
 ## Commands
 
