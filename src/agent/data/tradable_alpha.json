@@ -446,5 +446,285 @@
     "token_class": "major",
     "slippage_12usd": 0.022,
     "id": 17799
+  },
+  {
+    "symbol": "币安人生",
+    "contract": "0x924fa68a0FC644485b8df8AbfA0A41C2e7744444",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 38590
+  },
+  {
+    "symbol": "EDGE",
+    "contract": "0x70f2EADf1CA1969FF42b0c78e9DA519e8937cbaF",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 39720
+  },
+  {
+    "symbol": "B",
+    "contract": "0x6bdcCe4A559076e37755a78Ce0c06214E59e4444",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 36532
+  },
+  {
+    "symbol": "NEX",
+    "contract": "0x365DE036A1F7dcCb621530d517133521debB2013",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 39965
+  },
+  {
+    "symbol": "SKYAI",
+    "contract": "0x92aa03137385F18539301349dcfC9EbC923fFb10",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 36300
+  },
+  {
+    "symbol": "AB",
+    "contract": "0x95034f653D5D161890836Ad2B6b8cc49D14e029a",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 3871
+  },
+  {
+    "symbol": "CHEEMS",
+    "contract": "0x0DF0587216a4a1bB7d5082fdc491d93d2dD4B413",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 33280
+  },
+  {
+    "symbol": "RAVE",
+    "contract": "0x97693439EA2f0ecdeb9135881E49f354656a911c",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 38967
+  },
+  {
+    "symbol": "LAB",
+    "contract": "0x7ec43Cf65F1663F820427C62A5780b8f2E25593A",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 33223
+  },
+  {
+    "symbol": "UB",
+    "contract": "0x40b8129B786D766267A7a118cF8C07E31CDB6Fde",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 38339
+  },
+  {
+    "symbol": "BILL",
+    "contract": "0xDf24f8c21Cb404B3031a450D8e049D6E39FC1fA5",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 39545
+  },
+  {
+    "symbol": "Q",
+    "contract": "0xc07e1300dc138601FA6B0b59f8D0FA477e690589",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 38236
+  },
+  {
+    "symbol": "TAC",
+    "contract": "0x1219c409faBe2C27Bd0D1A565daeed9Bd9f271dE",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 37338
+  },
+  {
+    "symbol": "CYS",
+    "contract": "0x0C69199C1562233640e0Db5Ce2c399A88eB507C7",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 39071
+  },
+  {
+    "symbol": "VELO",
+    "contract": "0xf486ad071f3bEE968384D2E39e2D8aF0fCf6fd46",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 7127
+  },
+  {
+    "symbol": "BSB",
+    "contract": "0x595dEaad1eB5476Ff1E649fDb7EFC36F1E4679cc",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 38889
+  },
+  {
+    "symbol": "BAS",
+    "contract": "0x0F0df6cB17ee5E883eddFEf9153fC6036BDB4e37",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 37387
+  },
+  {
+    "symbol": "COAI",
+    "contract": "0x0A8D6C86e1bcE73fE4D0bD531e1a567306836EA5",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0,
+    "id": 38489
+  },
+  {
+    "symbol": "SIREN",
+    "contract": "0x997A58129890bBdA032231A52eD1ddC845fc18e1",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0001,
+    "id": 35766
+  },
+  {
+    "symbol": "GWEI",
+    "contract": "0x30117E4bC17d7B044194b76A38365C53b72F7D49",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0001,
+    "id": 39379
+  },
+  {
+    "symbol": "PEAQ",
+    "contract": "0x8b9Ee39195eA99d6ddD68030F44131116bc218F6",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0001,
+    "id": 14588
+  },
+  {
+    "symbol": "M",
+    "contract": "0x22b1458e780F8fA71E2F84502cEe8B5A3cc731Fa",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0002,
+    "id": 35491
+  },
+  {
+    "symbol": "PIEVERSE",
+    "contract": "0x0E63B9C287E32A05E6b9AB8ee8dF88A2760225A9",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0002,
+    "id": 38849
+  },
+  {
+    "symbol": "SOON",
+    "contract": "0xb9E1Fd5A02D3A33b25a14d661414E6ED6954a721",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0002,
+    "id": 36542
+  },
+  {
+    "symbol": "BEAT",
+    "contract": "0xcf3232B85b43BCa90E51D38cc06Cc8bB8C8A3E36",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0003,
+    "id": 38837
+  },
+  {
+    "symbol": "KOGE",
+    "contract": "0xe6DF05CE8C8301223373CF5B969AFCb1498c5528",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0005,
+    "id": 7184
+  },
+  {
+    "symbol": "MYX",
+    "contract": "0xD82544bf0dfe8385eF8FA34D67e6e4940CC63e16",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0007,
+    "id": 36410
+  },
+  {
+    "symbol": "GUA",
+    "contract": "0xA5C8e1513B6A08334b479fe4D71F1253259469BE",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0011,
+    "id": 38984
+  },
+  {
+    "symbol": "TOSHI",
+    "contract": "0x6a2608Dabe09bc1128EEC7275B92DFB939D5Db3f",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0012,
+    "id": 27750
+  },
+  {
+    "symbol": "IRYS",
+    "contract": "0x91152B4Ef635403efBAe860edD0F8c321d7c035d",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0012,
+    "id": 38978
+  },
+  {
+    "symbol": "UAI",
+    "contract": "0x3E5d4f8aee0D9B3082d5f6DA5D6e225D17ba9ea0",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0013,
+    "id": 38841
+  },
+  {
+    "symbol": "SLX",
+    "contract": "0x02bcC4C181B83a8c0A342BC003389CbEcb4BC54D",
+    "decimals": 6,
+    "token_class": "meme",
+    "slippage_12usd": 0.0016,
+    "id": 40047
+  },
+  {
+    "symbol": "RIVER",
+    "contract": "0xdA7AD9dea9397cffdDAE2F8a052B82f1484252B3",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0017,
+    "id": 38417
+  },
+  {
+    "symbol": "TAG",
+    "contract": "0x208bF3E7dA9639f1Eaefa2DE78c23396B0682025",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.0027,
+    "id": 34958
+  },
+  {
+    "symbol": "TRIA",
+    "contract": "0xb0b92de23bAa85fB06208277E925ceD53edab482",
+    "decimals": 18,
+    "token_class": "meme",
+    "slippage_12usd": 0.003,
+    "id": 39382
   }
 ]
