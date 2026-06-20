@@ -16,8 +16,6 @@ Endpoints (v3, amount in HUMAN token units):
 """
 from __future__ import annotations
 
-import time
-
 import requests
 from web3 import Web3
 
