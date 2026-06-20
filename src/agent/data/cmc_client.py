@@ -53,3 +53,28 @@ def get_quotes(symbols: list[str], convert: str = "USD") -> dict[str, dict]:
     _CACHE[key] = (now, out)
     log.debug("cmc_quotes_fetched", symbols=len(out))
     return out
+
+
+def get_prices_by_id(ids: list[int], convert: str = "USD") -> dict[int, float]:
+    """USD price per CMC id (unambiguous — avoids same-symbol collisions). One cached
+    call. Used to price the tradable universe accurately when the on-chain DEX-V2 price
+    is unreliable (thin pools) and execution routes through an aggregator anyway."""
+    ids = sorted({int(i) for i in ids if i})
+    if not ids:
+        return {}
+    key = "id:" + ",".join(map(str, ids)) + "|" + convert
+    now = time.time()
+    if key in _CACHE and now - _CACHE[key][0] < _CACHE_TTL:
+        return _CACHE[key][1]
+    url = f"{settings.cmc_api_base}/v2/cryptocurrency/quotes/latest"
+    resp = requests.get(url, headers=_headers(),
+                        params={"id": ",".join(map(str, ids)), "convert": convert}, timeout=30)
+    resp.raise_for_status()
+    out: dict[int, float] = {}
+    for cid, entry in resp.json().get("data", {}).items():
+        e = entry[0] if isinstance(entry, list) else entry
+        p = e.get("quote", {}).get(convert, {}).get("price")
+        if p:
+            out[int(cid)] = float(p)
+    _CACHE[key] = (now, out)
+    return out

@@ -91,6 +91,19 @@ def tradable_slippage(symbol: str) -> float:
 
 
 @lru_cache(maxsize=1)
+def _alpha_ids() -> dict[str, int]:
+    """symbol(upper) -> CoinMarketCap id, for unambiguous CMC pricing of the universe."""
+    if not ALPHA_PATH.exists():
+        return {}
+    raw = json.loads(ALPHA_PATH.read_text(encoding="utf-8"))
+    return {t["symbol"].upper(): int(t["id"]) for t in raw if t.get("id")}
+
+
+def cmc_id(symbol: str) -> int | None:
+    return _alpha_ids().get(symbol.upper())
+
+
+@lru_cache(maxsize=1)
 def _classes() -> dict[str, str]:
     """symbol(upper) -> 'major' | 'meme', from the tradable universe file."""
     if not ALPHA_PATH.exists():

@@ -114,13 +114,38 @@ def _event_mode() -> bool:
 
 
 def _event_prices(symbols: list[str], balances: dict) -> dict[str, float]:
-    """On-chain USD prices for the alpha universe + anything held (for valuation)."""
-    want = list({*symbols, "WBNB", *balances.keys()})
-    prices = price_feed.get_prices([s for s in want if s != "BNB"])
-    for stable in STABLECOINS:
-        prices.setdefault(stable, 1.0)
+    """USD prices for the universe + anything held (valuation + breakout).
+
+    Priced via CMC by CMC-id (unambiguous, accurate). The on-chain DEX-V2 price is
+    GARBAGE for tokens whose liquidity lives outside Pancake V2 (AAVE read $0.81 vs
+    ~$200) — and since we now EXECUTE through an aggregator, the CMC fair price is both
+    correct and coherent with the actual fill. BNB/WBNB keep their on-chain price (deep,
+    correct V2 pool); stablecoins = $1; anything left unpriced falls back on-chain."""
+    want = {*symbols, *balances.keys()}
+    id_of = {s: token_list.cmc_id(s) for s in want}
+    ids = [i for i in id_of.values() if i]
+    try:
+        by_id = cmc_client.get_prices_by_id(ids) if ids else {}
+    except Exception as e:  # noqa: BLE001 — never let a pricing hiccup break the tick
+        log.warning("cmc_pricing_failed", error=type(e).__name__)
+        by_id = {}
+    prices = {s: by_id[i] for s, i in id_of.items() if i and i in by_id}
+
+    wbnb = price_feed.onchain_price_usd("WBNB")
+    if wbnb:
+        prices["WBNB"] = wbnb
     if "BNB" in balances:
         prices["BNB"] = prices.get("WBNB") or price_feed.onchain_price_usd("BNB") or 0.0
+    for stable in STABLECOINS:
+        prices.setdefault(stable, 1.0)
+    for s in want:                       # held tokens with no CMC id → on-chain best-effort
+        if s not in prices and s not in STABLECOINS:
+            try:
+                p = price_feed.onchain_price_usd(s)
+            except Exception:  # noqa: BLE001
+                p = None
+            if p:
+                prices[s] = p
     return prices
 
 
