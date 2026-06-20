@@ -98,6 +98,8 @@ class Settings(BaseModel):
     max_position_usd: float = 10.0           # hard per-token notional cap
     meme_order_usd: float = 5.0              # thin memes: SMALL fixed "lottery" position (pool can't take full size)
     meme_slippage_bps: int = 600             # ...and a looser 6% gate — a meme ride targets +100%, not +5%
+    oneinch_api_key: str = Field(default="", repr=False)   # 1inch aggregator (portal.1inch.dev); dormant if empty
+    oneinch_base_url: str = ""
     stablecoin_floor_usd: float = 6.0        # never let settlement cash drop below this (USD)
     # stablecoin_floor_pct (above, risk block) also applies; floor = max(usd, pct*equity)
     max_hold_minutes: int = 300              # absolute max hold (5h) for a meme position
@@ -247,6 +249,8 @@ def get_settings() -> Settings:
         max_position_usd=float(_get("MAX_POSITION_USD", "10")),
         meme_order_usd=float(_get("MEME_ORDER_USD", "5")),
         meme_slippage_bps=int(_get("MEME_SLIPPAGE_BPS", "600")),
+        oneinch_api_key=_get("ONEINCH_API_KEY", ""),
+        oneinch_base_url=_get("ONEINCH_BASE_URL", ""),
         stablecoin_floor_usd=float(_get("STABLECOIN_FLOOR_USD", "6")),
         max_hold_minutes=int(_get("MAX_HOLD_MINUTES", "300")),
         min_hold_minutes_for_volume_exit=int(_get("MIN_HOLD_MINUTES_FOR_VOLUME_EXIT", "15")),
