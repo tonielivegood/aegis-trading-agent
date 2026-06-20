@@ -23,6 +23,21 @@ def test_token_addresses_checksummed():
         assert t.address.startswith("0x") and len(t.address) == 42
 
 
+def test_valuation_tokens_cover_full_holdable_universe():
+    """Regression: equity must value the full holdable universe (core ∪ alpha),
+    not just the trading core. A leftover alpha holding outside core (e.g. LUNC)
+    previously read as a 0 balance and tripped a phantom drawdown breaker."""
+    core = {t.symbol.upper() for t in token_list.tradable_tokens()}
+    alpha = {s.upper() for s in token_list.alpha_symbols()}
+    val = {t.symbol.upper() for t in token_list.valuation_tokens()}
+    assert core <= val                      # trading core is valued
+    assert alpha <= val                     # every deployable token is valued
+    assert val - core                       # and valuation truly extends past core
+    # deduped by contract address — never double-count a holding
+    addrs = [t.contract.lower() for t in token_list.valuation_tokens()]
+    assert len(addrs) == len(set(addrs))
+
+
 def test_doge_decimals():
     assert token_list.get_token("DOGE").decimals == 8
     assert token_list.get_token("WBNB").decimals == 18

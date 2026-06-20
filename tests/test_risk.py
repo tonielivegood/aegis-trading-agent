@@ -248,7 +248,7 @@ def test_multicall_balances_decode(mocker):
     from src.agent.risk import portfolio
     from src.agent.data.token_list import Token
 
-    mocker.patch("src.agent.risk.portfolio.token_list.tradable_tokens", return_value=[
+    mocker.patch("src.agent.risk.portfolio.token_list.valuation_tokens", return_value=[
         Token(symbol="CAKE", contract="0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals=18),
         Token(symbol="DOGE", contract="0xbA2aE424d960c26247Dd6c32edC70B295c744C43", decimals=8),
     ])
@@ -272,7 +272,7 @@ def test_multicall_omits_zero_and_failed(mocker):
     from src.agent.risk import portfolio
     from src.agent.data.token_list import Token
 
-    mocker.patch("src.agent.risk.portfolio.token_list.tradable_tokens", return_value=[
+    mocker.patch("src.agent.risk.portfolio.token_list.valuation_tokens", return_value=[
         Token(symbol="CAKE", contract="0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals=18),
         Token(symbol="ETH", contract="0x2170Ed0880ac9A755fd29B2688956BD959F933F8", decimals=18),
     ])
@@ -288,3 +288,25 @@ def test_multicall_omits_zero_and_failed(mocker):
 
     out = portfolio._read_balances_multicall("0x0000000000000000000000000000000000000001", None)
     assert out == {"CAKE": pytest.approx(3.0)}
+
+
+def test_balance_read_values_alpha_holdings_not_just_core(mocker):
+    """Regression for the phantom-drawdown false trip: a wallet holding an alpha
+    token outside the trading core (LUNC) must be read, so equity == real wallet."""
+    from src.agent.data.token_list import Token
+    from src.agent.risk import portfolio
+
+    lunc = Token(symbol="LUNC", contract="0x156ab3346823B651294766e23e6Cf87254d68962", decimals=6)
+    mocker.patch("src.agent.risk.portfolio.token_list.valuation_tokens", return_value=[lunc])
+
+    fake_mc = mocker.Mock()
+    fake_mc.functions.aggregate3.return_value.call.return_value = [
+        (True, (0).to_bytes(32, "big")),                 # native zero
+        (True, (106973 * 10**6).to_bytes(32, "big")),    # LUNC 106,973 (6 dp)
+    ]
+    fake_w3 = mocker.Mock()
+    fake_w3.eth.contract.return_value = fake_mc
+    mocker.patch("src.agent.data.rpc.get_web3", return_value=fake_w3)
+
+    out = portfolio._read_balances_multicall("0x0000000000000000000000000000000000000001", None)
+    assert out == {"LUNC": pytest.approx(106973.0)}

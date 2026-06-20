@@ -53,10 +53,13 @@ _GETETHBALANCE_SELECTOR = "0x4d2301cc"  # Multicall3.getEthBalance(address)
 
 
 def _selected_tokens(symbols: list[str] | None):
-    tokens = token_list.tradable_tokens()
+    # Valuation reads the FULL holdable universe (core ∪ alpha), not the trading
+    # subset — otherwise a holding outside the trading set reads as 0 and trips a
+    # phantom drawdown. Callers that want a specific set still filter by symbol.
+    tokens = token_list.valuation_tokens()
     if symbols is not None:
         wanted = {s.upper() for s in symbols}
-        tokens = [t for t in tokens if t.symbol in wanted]
+        tokens = [t for t in tokens if t.symbol.upper() in wanted]
     return tokens
 
 

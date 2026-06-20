@@ -110,6 +110,22 @@ def tradable_tokens() -> list[Token]:
     return list(_core().values())
 
 
+@lru_cache(maxsize=1)
+def valuation_tokens() -> list[Token]:
+    """Every token the wallet could plausibly HOLD, for full-wallet valuation:
+    curated core ∪ tradable-alpha, deduped by contract address (core wins).
+
+    Balance reading / equity MUST use this, never the trading subset. The agent
+    deploys into the alpha universe, but the old core list was a strict subset of
+    it — so any holding outside core (e.g. a leftover alpha position such as LUNC)
+    was never read and surfaced as a phantom drawdown that latched the breaker.
+    Valuing core ∪ alpha keeps equity == the real wallet the contest scores."""
+    out: dict[str, Token] = {}
+    for tok in list(_core().values()) + list(_alpha().values()):
+        out.setdefault(tok.contract.lower(), tok)
+    return list(out.values())
+
+
 def tradable_symbols() -> list[str]:
     return list(_core().keys())
 
