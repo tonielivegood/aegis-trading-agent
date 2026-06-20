@@ -77,7 +77,10 @@ class Settings(BaseModel):
     basket_size: int = 6               # number of tokens in the deploy basket
     min_trade_interval_h: int = 4
     target_daily_trades: int = 4
-    slippage_bps: int = 50
+    slippage_bps: int = 400   # 4% — liquidity gate AND execution min-out. Set for the asymmetric-ride
+                              # universe: the 0.5% gate admitted only ~13 deepest tokens; 4% unlocks the
+                              # liquid middle (ADA/ASTER/XRP/ZIL ≈ 17 total) while still excluding the
+                              # on-chain liquidity cliff (TWT 8.6%+ → AAVE/UNI/DOT 30-100%, untradable on BSC).
     min_portfolio_value_usd: float = 1.50
     strategy_tick_min: int = 15
 
