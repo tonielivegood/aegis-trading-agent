@@ -1,5 +1,11 @@
 # Aegis — Event-Driven Alpha Momentum: state machine, entry & exit policy
 
+> ⚠️ **Conceptual / partly historical.** The live entry/exit numbers are the
+> **two-tier (MAJOR/MEME) params** in `aegis/token_class.py` + the regime valve in
+> `aegis/regime.py` (see the strategy table in [`README.md`](../README.md)). The
+> catalyst-score model below is the original framing; the live trigger is a real
+> volume breakout.
+>
 > Implementation note: Aegis does not run a literal finite-state-machine object.
 > The states below are a conceptual model of the **layered gates** in
 > `aegis/orchestrator.py` + `strategy/event_driven_alpha_momentum.py`. Each tick

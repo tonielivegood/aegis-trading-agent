@@ -5,10 +5,10 @@ the system is structured and *why* the key decisions were made.
 
 ## 1. Design thesis
 
-Track 1 scores hourly PnL over one week with a **hard 30% max-drawdown
-disqualification gate**, a minimum-trade requirement, and simulated fees. It is a
-**risk-adjusted survival game, not a max-return race**. Every architectural choice
-flows from one priority order:
+Track 1 ranks on **raw total wallet return** over the contest week with a **hard 30%
+max-drawdown disqualification gate**, a minimum-trade requirement, and simulated fees.
+Raw return rewards upside, but the DQ gate punishes blowups — so every architectural
+choice flows from one priority order:
 
 1. Never get disqualified (drawdown).
 2. Keep capital deployed (wallet value > $1 each hour).
@@ -21,7 +21,7 @@ of real Binance data), aggressive long strategies lost 15–20% and risked the D
 cap, while the chosen conservative strategy capped drawdown near 13% and stayed
 profitable in up-weeks. See `memory`/`PLAN.md` for the evidence trail.
 
-## 2. Data flow (one tick, every 15 min)
+## 2. Data flow (one event tick, every 60 s)
 
 ```
                          ┌─────────────────────────────────────────┐
@@ -30,22 +30,25 @@ profitable in up-weeks. See `memory`/`PLAN.md` for the evidence trail.
                                             │
    ┌────────────────────┬───────────────────┼───────────────────┬─────────────────┐
    ▼                    ▼                    ▼                   ▼                 ▼
- balances            CMC quotes          drawdown           safeguard          strategy
- (Multicall3,        (% change,          tracker            evaluate()         decide()
-  1 RPC call)         price)             update(equity)      derisk?            adaptive_hold
-   │                    │                    │               halt?              or rebalance
-   └──────► Portfolio valuation ◄────────────┘               min-trade?            │
-            equity / risk / stable                              │                  ▼
-                                                                └──────────► TradeOrder[]
+ balances            CMC pricing         drawdown            regime           sniper.run()
+ (Multicall3,        (by-id; BNB         tracker             valve            volume breakout
+  1 RPC call)         on-chain)          (debounced)        (hourly:          + two-tier exits
+   │                    │                    │               CMC BTC +         + cooldown
+   │                    │                    │               Agent Hub F&G)        │
+   └──────► Portfolio valuation ◄────────────┘  + last-known-good price            ▼
+            equity / risk / stable          (CMC trending re-ranks)──► TradeOrder[]
                                                                                    │
                                                                                    ▼
-                                                                  execution.PancakeSwap.swap()
-                                                                  (DRY_RUN gate · min_out ·
-                                                                   exact approval · receipts)
+                                                              execution: 1inch aggregator
+                                                              (calldata → LOCAL signing ·
+                                                               DRY_RUN gate · min_out · approval)
                                                                                    │
                                                                                    ▼
                                                           persist state + Telegram alerts
 ```
+
+Sentiment + trending come from the **CMC AI Agent Hub**, fetched hourly by the regime
+updater and cached — they never sit in the 60 s hot path.
 
 ## 3. Modules
 
@@ -54,15 +57,18 @@ profitable in up-weeks. See `memory`/`PLAN.md` for the evidence trail.
 | `config.py` | Typed settings from `.env`; secrets marked `repr=False` (never logged). |
 | `data/rpc.py` | Multi-endpoint BSC RPC with failover; cached singleton. |
 | `data/token_list.py` | Verified curated token universe; liquidity-ranked basket selection. |
-| `data/cmc_client.py` | CoinMarketCap quotes (price, % change), cached. |
-| `data/price_feed.py` | USD prices — on-chain PancakeSwap first, CMC fallback. |
-| `risk/drawdown.py` | Latching drawdown breaker (alert −20%, cap −30%). |
+| `data/cmc_client.py` | CoinMarketCap quotes + **prices by id** (the universe is priced by CMC id), cached. |
+| `data/cmc_agent_hub.py` | **CMC AI Agent Hub** skills: Fear & Greed + community trending (fail-safe, cached). |
+| `data/price_feed.py` | USD prices — CMC for the aggregator universe; on-chain PancakeSwap for BNB/WBNB. |
+| `risk/drawdown.py` | **Debounced** latching breaker (alert −20% after N consecutive breach ticks, cap −30% instant). |
 | `risk/position_sizer.py` | Per-token cap + stablecoin floor; fails safe on bad input. |
 | `risk/trade_counter.py` | Min-trade-count tracking, persisted. |
-| `risk/portfolio.py` | Valuation, cost-basis PnL, on-chain balance reads (Multicall3). |
-| `signal/` *(optional, not in default path)* | Momentum + Claude sentiment behind a prompt-injection firewall. |
-| `strategy/adaptive_hold_strategy.py` | **Production strategy**: fractional diversified hold + breaker. |
-| `strategy/rebalance_strategy.py` | Defensive derisk-to-stablecoin. |
+| `risk/portfolio.py` | Full-wallet valuation (core ∪ alpha), cost-basis PnL, Multicall3 balance reads. |
+| `aegis/` | **Live strategy**: volume-breakout sniper — regime valve, two-tier params, market feed, positions, cooldown. |
+| `execution/oneinch.py` | **Live execution**: 1inch v6 aggregator; returns calldata, signed LOCALLY (self-custody). |
+| `execution/openocean.py` · `pancakeswap.py` | Keyless aggregator backup · PancakeSwap V2 fallback + BNB pricing. |
+| `signal/` *(research, not in live path)* | Momentum + Claude sentiment behind a prompt-injection firewall. |
+| `strategy/adaptive_hold_strategy.py` | Deep fallback: fractional diversified hold + breaker (walk-forward-validated). |
 | `monitor/safeguard.py` | Per-tick derisk / halt / compliance-trade decision. |
 | `monitor/pnl.py` | Contest-aware PnL (hour ≤ $1 → 0%). |
 | `monitor/notifier.py` | Telegram alerts (send-only, best-effort). |
@@ -71,10 +77,19 @@ profitable in up-weeks. See `memory`/`PLAN.md` for the evidence trail.
 
 ## 4. Key decisions & rationale
 
-- **Strategy = fractional hold + breaker** (deploy `DEPLOY_FRAC` of equity into the
-  top-`BASKET_SIZE` liquid majors, rest in stablecoin, exit on −20%). Chosen by
-  walk-forward validation, not intuition. Hand-crafted momentum/regime strategies
-  were tested and *rejected* because they lost to cash in the sample.
+- **Strategy = cash-default volume-breakout sniper, two-tier by cost.** Sits in cash,
+  deploys only on a confirmed volume breakout; cheap majors take modest profit (TP +10%),
+  expensive memes ride for the asymmetric tail (TP +100%), all bounded by tight stops and
+  an hourly regime valve. The fractional-hold strategy remains as the walk-forward-validated
+  deep fallback. (Honest: the momentum edge is unproven; the engineering minimizes
+  operational + DQ risk, not market risk.)
+- **Execution via the 1inch DEX aggregator.** Single-DEX (PancakeSwap V2) slippage
+  capped the tradable set at ~18 tokens; the aggregator routes across all BSC DEXs and
+  unlocks ~91 routable tokens (incl. the meme tail). 1inch returns calldata that the agent
+  **signs locally** — self-custody is preserved. Proven live on-chain.
+- **Universe priced by CMC id, not on-chain.** Thin V2 pools give garbage on-chain prices
+  for the aggregator tokens (e.g. AAVE read $0.81 vs ~$76), which would crater valuation and
+  trip the breaker. CMC-by-id is accurate; only BNB/WBNB stay on-chain.
 - **Latching breaker.** Once −20% drawdown hits, exit to stablecoin and stay there
   for the session. A one-week contest rewards preserving a bad start over trying
   to trade back (which historically deepens drawdown → DQ).
@@ -101,15 +116,16 @@ profitable in up-weeks. See `memory`/`PLAN.md` for the evidence trail.
 
 ## 6. Verification
 
-- **131 unit/integration tests** (`pytest tests/`), every module built test-first.
-- **Backtest + walk-forward** over real Binance history selected the strategy.
-- **Live-verified** with real funds: single swap, sequential multi-swap, full
-  sell-back, and Multicall3 reads matched the per-token method exactly.
-- **Operational soak** (continuous dry-run) ran with zero crashes; the
-  breaker → derisk path was exercised end-to-end.
+- **401 unit/integration tests** (`pytest tests/`), every module built test-first.
+- **Backtest + walk-forward** over real Binance history selected the fallback strategy.
+- **Live-verified** self-custody execution: a real on-chain swap routed through the 1inch
+  AggregationRouterV6 (USDT→ETH, status `0x1`), calldata signed locally — tx
+  `0x2727f6d5337a60c1ec2991258fa36c8deaf2652c908743dd29cf3186b11e7d6c`.
+- **Operational soak** (continuous dry-run on the VPS) runs with zero crashes; the
+  breaker debounce, last-known-good pricing, and kill-switch paths were exercised end-to-end.
 
 ## 7. Operations
 
 See `README.md` (commands, Telegram setup, GO-LIVE CHECKLIST) and `DEPLOY.md`
-(VPS deployment with systemd). Live trading needs only BSC RPC + CoinMarketCap;
-Binance is used for backtesting only.
+(VPS deployment with systemd). Live trading needs BSC RPC + CoinMarketCap (pricing +
+AI Agent Hub) + 1inch (execution) + Binance public klines (live volume confirmation).

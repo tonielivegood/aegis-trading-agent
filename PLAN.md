@@ -2,6 +2,10 @@
 
 > BNB Hack 2026 Track 1. Companion to [SPEC.md](SPEC.md).
 > Status as of 14/6/2026. ~8 days until live trading (22/6).
+>
+> ⚠️ **Historical planning doc.** Reflects the early plan, not the shipped system
+> (which moved to 1inch execution, a ~91-token CMC-priced universe, and a
+> volume-breakout sniper). Current state: [`README.md`](README.md) / [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Build status snapshot
 

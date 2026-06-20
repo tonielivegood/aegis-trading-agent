@@ -1,5 +1,12 @@
 # Spec: BNB Hack 2026 — Track 1: Autonomous Trading Agent
 
+> ⚠️ **Historical design doc (original spec).** The live system evolved during the
+> build: execution is now the **1inch DEX aggregator** (self-custody local signing),
+> the universe is ~91 aggregator-routable tokens priced via **CoinMarketCap**, and the
+> live strategy is a **cash-default two-tier volume-breakout sniper** with a CMC
+> AI Agent Hub regime overlay. For the *current* architecture see
+> [`README.md`](README.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
 ## Objective
 
 Build an autonomous AI trading agent that:
