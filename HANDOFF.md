@@ -42,8 +42,11 @@
 - **Soak:** new setup ran ~6h DRY, equity stable ~$36.15, drawdown ~0, **ZERO errors**, tick ~8s.
 - **Tests:** **387 pass / 2 skip, ruff clean.** Bot currently **DRY soak** on the 91-token/1inch/CMC setup.
 
-⚠️ **Observed:** service ticks show `dry_run=True` (DRY). The systemd unit ExecStart is `run --live` but DRY_RUN
-env / scheduler forces dry. **The exact DRY→LIVE flip mechanism is TODO #1 to verify (see §3).**
+✅ **DRY→LIVE flip VERIFIED (21/6 — earlier ⚠️ was a misread, not a bug):** the systemd unit ExecStart is
+`python -m src.agent run` (NO `--live`) → that is exactly why DRY ticks show `dry_run=True` (intended soak state).
+`go-live.sh` step 3/5 `sed s#src.agent run#src.agent run --live#` flips it to LIVE. Robust: `run --live` passes
+`dry_run=False` explicitly down `scheduler.run → tick(False)`, which never consults `settings.dry_run`, so a stray
+`DRY_RUN=true` in `.env` cannot override the live flip. `reset` only clears runtime-state files (never config/universe).
 
 ---
 
@@ -104,17 +107,19 @@ env / scheduler forces dry. **The exact DRY→LIVE flip mechanism is TODO #1 to 
 ## 3. REMAINING TO "WIN" (prioritized roadmap)
 
 **MUST DO before 22/6 (verify, not build):**
-- [ ] **Verify `go-live.sh`** works end-to-end with the NEW setup: `reset` must NOT break the 91-token/1inch/CMC config,
-      and the DRY→LIVE flip must actually set `dry_run=False` (confirm the unit/DRY_RUN mechanism — see §1 ⚠️).
-      Test on VPS: run go-live.sh path in a controlled way, confirm one live tick prices via CMC + would route 1inch.
+- [x] **Verify `go-live.sh` / DRY→LIVE flip** — DONE 21/6 (see §1 ✅). Mechanism is correct: unit is `run` (DRY),
+      go-live.sh sed-flips to `run --live` (forces `dry_run=False` explicitly), `reset` is config-safe. Wallet funded,
+      gas plenty, tests 399 pass. Go-live needs no more code — just `bash /root/go-live.sh` at 22/6 00:00 UTC.
 - [ ] **Repo PUBLIC** before 29/6 (judges must see the code). Also: delete the old TONiE8668 repo + revoke its PAT.
 - [ ] Confirm gas (BNB ~0.012 = ~1000+ swaps @ 0.05 gwei = plenty) + wallet funded.
 
 **BUILD to raise win odds (full power, agreed priority order):**
 1. **(done-ish) go-live readiness** — verify above.
-2. **CMC Agent Hub skill** → **$2k side prize** (#CMCAgentHub) + better regime/catalyst signal. CMC AI Agent Hub:
-   MCP / x402 ($0.01/req USDC-on-Base, no key) / REST. Catalog open-source on GitHub. Wire one skill (sentiment/
-   trending) into the hourly regime + token selection. (Docs: coinmarketcap.com/api/documentation/ai-agent-hub)
+2. **(BUILT 21/6, commit 7334456 — not yet pushed/deployed) CMC Agent Hub skill** → **$2k side prize** (#CMCAgentHub).
+   `src/agent/data/cmc_agent_hub.py` calls 2 Agent Hub REST skills with our Pro key: `/v3/fear-and-greed/latest`
+   (market sentiment) + `/v1/community/trending/token` (community trending; endpoint caps limit=5). Wired OUT of the
+   60s hot path, fail-safe: F&G tightens RISK_ON→CAUTIOUS at ≤20 (tightening-only); trending re-ranks qualified
+   breakouts via `TRENDING_BOOST` (cached hourly to `cmc_signal.json`, stale-guarded). +12 tests (399 pass).
 3. **Claude catalyst layer** → news-driven entry bias (the original sniper alpha; currently volume-only). Hourly
    Claude reads CMC/social → flags a token with a real catalyst → bias entry. More build; keep Claude OUT of the
    60s hot path (rails stay mechanical).
