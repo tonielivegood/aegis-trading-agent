@@ -103,6 +103,7 @@ def decide_breakout_entries(
     cooldown_symbols: frozenset[str] | set[str] = frozenset(),
     settlement: str = STABLE,
     allow: Callable[[str], bool] | None = None,
+    meme_usd: float | None = None,
 ) -> list[TradeOrder]:
     """Turn ranked breakout signals into entry orders, applying every risk gate.
 
@@ -133,11 +134,15 @@ def decide_breakout_entries(
             continue                                 # cooling down after a recent exit
         if not allow(sig.contract):
             continue                                 # must be eligible + tradable
-        if stable_left - position_usd < floor_usd:
+        # Thin memes enter as a small fixed "lottery" position; majors at regime size.
+        size = meme_usd if (meme_usd and token_list.token_class(sig.symbol) == "meme") else position_usd
+        if size < MIN_ORDER_USD:
+            continue                                 # dust
+        if stable_left - size < floor_usd:
             continue                                 # would breach the settlement floor
         orders.append(TradeOrder(
-            settlement, sig.symbol, position_usd,
+            settlement, sig.symbol, size,
             f"breakout vol {sig.vol_multiple:.1f}x +{sig.breakout_pct * 100:.1f}%"))
-        stable_left -= position_usd
+        stable_left -= size
         slots -= 1
     return orders

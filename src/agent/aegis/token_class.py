@@ -44,9 +44,10 @@ PARAMS: dict[str, ClassParams] = {
     MAJOR: ClassParams(vol_mult=2.0, breakout_min=0.003, breakout_max=0.05,
                        hard_tp_mult=1.10, trailing_pct=0.05, hard_stop_pct=0.05,
                        no_progress_min=20),
-    # MEME: expensive/thin (~6–12% round-trip) → RARE, BIG ride.
+    # MEME: expensive/thin (~6–12% round-trip) → RARE, BIG ride. Cap at +100% (a
+    # reachable target that locks the win, vs +200% that rarely prints).
     MEME: ClassParams(vol_mult=3.0, breakout_min=0.0, breakout_max=0.06,
-                      hard_tp_mult=3.0, trailing_pct=0.15, hard_stop_pct=0.08,
+                      hard_tp_mult=2.0, trailing_pct=0.15, hard_stop_pct=0.08,
                       no_progress_min=25),
 }
 

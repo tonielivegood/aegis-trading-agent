@@ -42,6 +42,14 @@ def test_snapshot_marks_illiquid_when_slippage_exceeds_max(mocker, tmp_path):
     assert snap.has_route and snap.liquidity_ok is False
 
 
+def test_meme_uses_looser_slippage_gate_than_major(mocker, tmp_path):
+    # 5% slippage: FAILS the 4% major gate but PASSES the 6% meme gate (small lottery size).
+    feed = MarketFeed(order_usd=10, max_slippage=0.04, cache_path=tmp_path / "c.json")
+    mocker.patch.object(feed, "_estimate_slippage", return_value=0.05)
+    assert feed.snapshot("CHEEMS", price=1.0).liquidity_ok is True    # meme → 6% gate
+    assert feed.snapshot("ETH", price=1.0).liquidity_ok is False      # major → 4% gate
+
+
 def test_cache_persists_across_instances(mocker, tmp_path):
     p = tmp_path / "c.json"
     f1 = MarketFeed(order_usd=10, max_slippage=0.5, cache_path=p)

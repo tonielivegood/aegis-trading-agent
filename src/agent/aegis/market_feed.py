@@ -83,12 +83,13 @@ class MarketFeed:
             self.cache[symbol] = [(t, p) for t, p in series if t >= cutoff]
 
     # --- slippage estimate (read-only on-chain quote at our order size) ---
-    def _estimate_slippage(self, token, spot: float) -> float:
+    def _estimate_slippage(self, token, spot: float, order_usd: float | None = None) -> float:
+        order_usd = self.order_usd if order_usd is None else order_usd
         try:
             router = price_feed._router()
             usdt = Web3.to_checksum_address(settings.usdt_address)
             wbnb = Web3.to_checksum_address(settings.wbnb_address)
-            amount_tokens = self.order_usd / spot
+            amount_tokens = order_usd / spot
             amount_in = int(amount_tokens * 10 ** token.decimals)
             paths = [[token.address, usdt], [token.address, wbnb, usdt]]
             for path in paths:
@@ -118,7 +119,14 @@ class MarketFeed:
             return MarketSnapshot(symbol=symbol, contract=tok.address, has_route=False,
                                   liquidity_ok=False, slippage_est=1.0)
 
-        slippage = self._estimate_slippage(tok, price)
+        # Thin memes trade as SMALL "lottery" positions, so gate them at their small
+        # order size and a looser slippage ceiling (a meme ride targets +100%, not +5%);
+        # deep majors keep the full size + tight gate.
+        if token_list.token_class(symbol) == "meme":
+            order_usd, max_slip = settings.meme_order_usd, settings.meme_slippage_bps / 10_000
+        else:
+            order_usd, max_slip = self.order_usd, self.max_slippage
+        slippage = self._estimate_slippage(tok, price, order_usd)
         now = time.time()
         self._record(symbol, now, price)
         p5, recent_min = _price_5m_and_min(self.cache.get(symbol, []), now)
@@ -128,7 +136,7 @@ class MarketFeed:
         return MarketSnapshot(
             symbol=symbol, contract=tok.address, vol_5m=vol5, baseline_vol=basevol,
             price_now=price, price_5m_ago=p5, recent_pump_pct=max(0.0, recent_pump),
-            slippage_est=slippage, has_route=True, liquidity_ok=slippage <= self.max_slippage,
+            slippage_est=slippage, has_route=True, liquidity_ok=slippage <= max_slip,
         )
 
     def build_snapshots(self, symbols: list[str],

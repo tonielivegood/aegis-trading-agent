@@ -1,29 +1,34 @@
-"""Measure on-chain slippage for EVERY tradable-alpha token at our real order size,
-so we can see how many tokens each liquidity-gate level would unlock.
+"""Slippage of every tradable-alpha token at several order sizes — to see how many
+tokens each liquidity gate unlocks, and whether a smaller order size helps.
 
-Read-only (getAmountsOut quotes only). Run on the VPS:
-    cd /home/agent/bnbhack-track1-agent && .venv/bin/python /tmp/slippage_scan.py
+Read-only. Run on the VPS:  .venv/bin/python /tmp/slippage_scan.py
 """
 from src.agent.aegis.market_feed import MarketFeed
 from src.agent.data import token_list
 
-ORDER_USD = 12.0  # ~35% of $36 NAV = our actual position size
+SIZES = [12.0, 6.0, 3.0]
+toks = token_list.tradable_alpha_tokens()
 
-feed = MarketFeed(order_usd=ORDER_USD)
-rows = []
-for tok in token_list.tradable_alpha_tokens():
-    snap = feed.snapshot(tok.symbol)
-    rows.append((snap.slippage_est, tok.symbol, token_list.token_class(tok.symbol),
-                 snap.has_route, snap.price_now))
+# slippage per token per size
+data = {}
+for size in SIZES:
+    feed = MarketFeed(order_usd=size)
+    for tok in toks:
+        s = feed.snapshot(tok.symbol)
+        data.setdefault(tok.symbol, {})[size] = (s.slippage_est, s.has_route and s.price_now > 0,
+                                                  token_list.token_class(tok.symbol))
 
-rows.sort()
-print(f"tradable_alpha tokens: {len(rows)} | order size: ${ORDER_USD}\n")
-print(f"{'SYM':<10}{'class':<7}{'slip%':>8}  route/price")
-for slip, sym, cls, route, price in rows:
-    note = "" if route and price > 0 else "  (no route/price)"
-    print(f"{sym:<10}{cls:<7}{slip * 100:>7.2f}%  {note}")
+# print sorted by $12 slippage
+print(f"{'SYM':<10}{'class':<7}" + "".join(f"{f'${s:.0f}slip':>9}" for s in SIZES))
+for sym in sorted(data, key=lambda k: data[k][12.0][0]):
+    cls = data[sym][12.0][2]
+    cells = "".join(f"{data[sym][s][0] * 100:>8.2f}%" for s in SIZES)
+    print(f"{sym:<10}{cls:<7}{cells}")
 
-print("\n=== how many tokens unlock at each gate ===")
-for gate in (0.005, 0.01, 0.02, 0.03, 0.05, 0.10):
-    n = sum(1 for slip, _, _, route, price in rows if route and price > 0 and slip <= gate)
-    print(f"  gate ≤{gate * 100:>4.1f}%  ->  {n} tokens")
+print("\n=== tokens passing gate, by size ===")
+for size in SIZES:
+    line = [f"order ${size:.0f}:"]
+    for gate in (0.02, 0.04, 0.06):
+        n = sum(1 for sym in data if data[sym][size][1] and data[sym][size][0] <= gate)
+        line.append(f"≤{gate*100:.0f}%={n}")
+    print("  " + "  ".join(line))

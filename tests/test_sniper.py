@@ -34,16 +34,17 @@ def _allow(_c):
 
 
 def test_breakout_opens_regime_sized_entry():
-    snaps = {"AAA": _snap("AAA", vol_5m=400, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
+    # ETH = MAJOR → sized at the regime % of NAV (memes use the small fixed sleeve).
+    snaps = {"ETH": _snap("ETH", vol_5m=400, baseline_vol=100, price_now=1.03, price_5m_ago=1.0)}
     book = PositionBook()
-    prices = {"AAA": 1.05}
+    prices = {"ETH": 1.03}
     orders, mode = sniper.run(_state(), prices, book=book, feed=FakeFeed(snaps),
                               cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
-                              universe=["AAA"], now=1000.0, floor_usd=6.0, allow=_allow)
+                              universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)
     assert mode == "sniper"
-    assert len(orders) == 1 and orders[0].token_out == "AAA"
+    assert len(orders) == 1 and orders[0].token_out == "ETH"
     assert orders[0].amount_in_usd == 10.5         # 35% of $30 NAV (RISK_ON, concentrated)
-    assert book.is_open("AAA")
+    assert book.is_open("ETH")
 
 
 def test_risk_on_loosens_major_entry_for_beta_capture():
@@ -61,11 +62,11 @@ def test_risk_on_loosens_major_entry_for_beta_capture():
 
 
 def test_cautious_uses_smaller_size():
-    snaps = {"AAA": _snap("AAA", vol_5m=400, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
-    orders, _ = sniper.run(_state(), {"AAA": 1.05}, book=PositionBook(), feed=FakeFeed(snaps),
+    snaps = {"ETH": _snap("ETH", vol_5m=400, baseline_vol=100, price_now=1.03, price_5m_ago=1.0)}
+    orders, _ = sniper.run(_state(), {"ETH": 1.03}, book=PositionBook(), feed=FakeFeed(snaps),
                            cooldowns=CooldownBook(), regime_flag=Regime.CAUTIOUS,
-                           universe=["AAA"], now=1000.0, floor_usd=4.0, allow=_allow)
-    assert orders[0].amount_in_usd == 6.0          # 20% of $30 (CAUTIOUS)
+                           universe=["ETH"], now=1000.0, floor_usd=4.0, allow=_allow)
+    assert orders[0].amount_in_usd == 6.0          # 20% of $30 (CAUTIOUS, MAJOR sized)
 
 
 def test_risk_off_blocks_all_entries():

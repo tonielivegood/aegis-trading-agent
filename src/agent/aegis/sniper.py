@@ -86,7 +86,8 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
         pos_usd = rg.position_usd(state.equity_usd, regime_flag)
         entries = decide_breakout_entries(
             sigs, state, book, position_usd=pos_usd, max_positions=params.max_slots,
-            floor_usd=floor_usd, cooldown_symbols=cooling, settlement=settlement, allow=allow)
+            floor_usd=floor_usd, cooldown_symbols=cooling, settlement=settlement, allow=allow,
+            meme_usd=settings.meme_order_usd)
         for o in entries:
             sym = o.token_out
             if o.token_in == settlement and sym in prices:

@@ -104,6 +104,22 @@ def test_entry_emits_order_for_signal():
     assert (orders[0].token_in, orders[0].token_out, orders[0].amount_in_usd) == ("USDT", "AAA", 6.0)
 
 
+def test_meme_entry_uses_small_lottery_size():
+    # a meme-class token (unknown symbol → meme) sizes at meme_usd, not full position_usd
+    orders = decide_breakout_entries(
+        [_sig("PEPE")], _state(), PositionBook(),
+        position_usd=12.0, max_positions=2, floor_usd=6.0, allow=_allow_all, meme_usd=5.0)
+    assert len(orders) == 1 and orders[0].amount_in_usd == 5.0
+
+
+def test_major_entry_keeps_full_size_with_meme_sleeve():
+    # ETH is a MAJOR in the universe → full regime size even when a meme sleeve is set
+    orders = decide_breakout_entries(
+        [_sig("ETH")], _state(), PositionBook(),
+        position_usd=12.0, max_positions=2, floor_usd=6.0, allow=_allow_all, meme_usd=5.0)
+    assert len(orders) == 1 and orders[0].amount_in_usd == 12.0
+
+
 def test_risk_off_zero_size_blocks_entries():
     orders = decide_breakout_entries(
         [_sig("AAA")], _state(), PositionBook(),

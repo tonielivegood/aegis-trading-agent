@@ -23,10 +23,10 @@ def test_params_two_tier_active_major_vs_ride_meme():
     maj, meme = tc.params("major"), tc.params("meme")
     # MAJOR = active/modest: small TP, tight trail, fast recycle.
     assert maj.hard_tp_mult == 1.10 and maj.trailing_pct == 0.05 and maj.hard_stop_pct == 0.05
-    # MEME = rare/ride: big cap, wide trail, wider stop, more patience.
-    assert meme.hard_tp_mult == 3.0 and meme.trailing_pct == 0.15 and meme.hard_stop_pct == 0.08
+    # MEME = rare/ride: +100% cap, wide trail, wider stop, more patience.
+    assert meme.hard_tp_mult == 2.0 and meme.trailing_pct == 0.15 and meme.hard_stop_pct == 0.08
     assert maj.no_progress_min < meme.no_progress_min          # majors recycle faster
-    assert tc.params("unknown").hard_tp_mult == 3.0            # unknown → meme default
+    assert tc.params("unknown").hard_tp_mult == 2.0            # unknown → meme default
 
 
 # --- exits diverge by tier: MAJOR harvests modest, MEME rides big ---
