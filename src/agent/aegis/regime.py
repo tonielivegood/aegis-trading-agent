@@ -4,9 +4,14 @@ Meme/Alpha tokens are highly correlated: in a market crash three positions behav
 like one leveraged bet, so the latched −20% breaker alone is not enough. The regime
 flag throttles how much risk the sniper may carry, BEFORE a position is ever opened:
 
-    RISK_ON   → 20% NAV/position, up to 3 slots   (BTC calm/up)
-    CAUTIOUS  → 15% NAV/position, up to 2 slots   (BTC choppy / mildly down)
+    RISK_ON   → 35% NAV/position, up to 2 slots   (BTC calm/up)
+    CAUTIOUS  → 20% NAV/position, up to 1 slot    (BTC choppy / mildly down)
     RISK_OFF  → 0% / 0 slots → NO new entries      (BTC dumping; rails also trim)
+
+Sizing is CONCENTRATED (few, heavy positions) on purpose: at small capital a
+winner only moves the total return if the position is big, and fewer round-trips
+means less fee bleed. RISK_ON caps total deployment at 2×35% = 70% NAV, leaving a
+30% cash cushion under the −20% DQ breaker.
 
 A separate hourly updater (Claude reading BTC via CMC / Agent Hub) writes the flag;
 the 60s rails just READ it — cheap and deterministic. This module is pure: the
@@ -39,8 +44,8 @@ class RegimeParams:
 
 
 _PARAMS: dict[Regime, RegimeParams] = {
-    Regime.RISK_ON: RegimeParams(0.20, 3, True),
-    Regime.CAUTIOUS: RegimeParams(0.15, 2, True),
+    Regime.RISK_ON: RegimeParams(0.35, 2, True),
+    Regime.CAUTIOUS: RegimeParams(0.20, 1, True),
     Regime.RISK_OFF: RegimeParams(0.0, 0, False),
 }
 

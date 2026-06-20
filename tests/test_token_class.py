@@ -19,33 +19,39 @@ def _book(symbol, entry, cls):
     return b
 
 
-def test_params_per_class():
-    assert tc.params("major").hard_tp_mult == 1.04 and tc.params("major").hard_stop_pct == 0.035
-    assert tc.params("meme").hard_tp_mult == 3.0 and tc.params("meme").trailing_pct == 0.15
+def test_params_unified_asymmetric_ride_exit():
+    # Both classes now RIDE with the SAME asymmetric exit (no more major scalp).
+    for cls in ("major", "meme"):
+        p = tc.params(cls)
+        assert p.hard_tp_mult == 3.0          # +200% cap — let winners run
+        assert p.trailing_pct == 0.15         # wide trail
+        assert p.hard_stop_pct == 0.07        # cut losers fast at −7%
+        assert p.no_progress_min == 25        # patience for a wave to form
     assert tc.params("unknown").hard_tp_mult == 3.0          # unknown → meme default
 
 
-# --- exits diverge by class ---
+# --- exits are now UNIFIED (both ride): cut losers fast, let winners run ---
 
-def test_major_scalps_at_plus_4pct_but_meme_rides():
-    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 1.05}, {},
-                            _state({"FOO": 6.3}), class_aware=True, now=60)
-    assert maj and "hard TP" in maj[0].reason            # +5% ≥ major +4% → scalp out
-    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 1.05}, {},
-                             _state({"FOO": 6.3}), class_aware=True, now=60)
-    assert meme == []                                    # +5% ≪ meme +200% → keep riding
-
-
-def test_major_stops_tighter_than_meme():
-    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 0.96}, {},
-                            _state({"FOO": 5.76}), class_aware=True, now=60)
-    assert maj and "hard stop" in maj[0].reason          # −4% ≥ major −3.5% → cut
-    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 0.96}, {},
-                             _state({"FOO": 5.76}), class_aware=True, now=60)
-    assert meme == []                                    # −4% within meme −8% → hold
+def test_both_classes_ride_small_gains():
+    # +5% is a winner-in-progress for BOTH — neither scalps out (we ride).
+    for cls in ("major", "meme"):
+        out = edam.decide_exits(_book("FOO", 1.0, cls), {"FOO": 1.05}, {},
+                                _state({"FOO": 6.3}), class_aware=True, now=60)
+        assert out == [], f"{cls} should keep riding +5%"
 
 
-# --- entry thresholds diverge by class ---
+def test_both_classes_hold_small_dip_but_cut_at_7pct():
+    # −5% is within the −7% stop for BOTH → hold; −8% cuts BOTH.
+    for cls in ("major", "meme"):
+        hold = edam.decide_exits(_book("FOO", 1.0, cls), {"FOO": 0.95}, {},
+                                 _state({"FOO": 5.7}), class_aware=True, now=60)
+        assert hold == [], f"{cls} should hold a −5% dip"
+        cut = edam.decide_exits(_book("FOO", 1.0, cls), {"FOO": 0.92}, {},
+                                _state({"FOO": 5.52}), class_aware=True, now=60)
+        assert cut and "hard stop" in cut[0].reason, f"{cls} should cut at −8%"
+
+
+# --- entry thresholds still diverge by class (two-speed entry) ---
 
 def _snap(sym, vol_5m, baseline, now_p, ago_p):
     return MarketSnapshot(symbol=sym, contract="0x" + sym, vol_5m=vol_5m, baseline_vol=baseline,
@@ -53,8 +59,8 @@ def _snap(sym, vol_5m, baseline, now_p, ago_p):
 
 
 def test_major_entry_looser_than_meme():
-    # a 2x-volume, +1% move: a MAJOR breakout, but NOT a meme one (needs 3x)
-    snaps = {"M": _snap("M", vol_5m=220, baseline=100, now_p=1.01, ago_p=1.0)}
+    # a 2.7x-volume, +1% move: a MAJOR breakout (≥2.5x), but NOT a meme one (needs 3x)
+    snaps = {"M": _snap("M", vol_5m=270, baseline=100, now_p=1.01, ago_p=1.0)}
     mp, ep = tc.params("major"), tc.params("meme")
     assert len(scan_breakouts(snaps, vol_mult=mp.vol_mult, breakout_min=mp.breakout_min,
                               breakout_max=mp.breakout_max)) == 1
@@ -63,8 +69,16 @@ def test_major_entry_looser_than_meme():
 
 
 def test_major_requires_minimum_rise():
-    # 2x volume but essentially flat (+0.1%) → below major's +0.3% floor → no entry
-    snaps = {"M": _snap("M", vol_5m=220, baseline=100, now_p=1.001, ago_p=1.0)}
+    # 2.7x volume but essentially flat (+0.1%) → below major's +0.3% floor → no entry
+    snaps = {"M": _snap("M", vol_5m=270, baseline=100, now_p=1.001, ago_p=1.0)}
     mp = tc.params("major")
     assert scan_breakouts(snaps, vol_mult=mp.vol_mult, breakout_min=mp.breakout_min,
                           breakout_max=mp.breakout_max) == []
+
+
+def test_entry_catches_early_not_chasing():
+    # a +8% move is already spent for BOTH classes (major cap +5%, meme +6%) → no entry
+    snaps = {"M": _snap("M", vol_5m=400, baseline=100, now_p=1.08, ago_p=1.0)}
+    for p in (tc.params("major"), tc.params("meme")):
+        assert scan_breakouts(snaps, vol_mult=p.vol_mult, breakout_min=p.breakout_min,
+                              breakout_max=p.breakout_max) == []

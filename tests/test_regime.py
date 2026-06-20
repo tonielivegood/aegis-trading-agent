@@ -1,6 +1,8 @@
 """TDD for the regime layer = the deployment valve (DQ control)."""
 import json
 
+import pytest
+
 from src.agent.aegis.regime import (
     Regime,
     RegimeState,
@@ -24,20 +26,23 @@ def test_decide_regime_from_cmc_quote():
 
 
 def test_params_per_regime():
-    assert params(Regime.RISK_ON).size_pct == 0.20
-    assert params(Regime.RISK_ON).max_slots == 3
+    # Concentrated sizing: few, heavy positions (winners must move the needle).
+    assert params(Regime.RISK_ON).size_pct == 0.35
+    assert params(Regime.RISK_ON).max_slots == 2
     assert params(Regime.RISK_ON).allow_new is True
-    assert params(Regime.CAUTIOUS).size_pct == 0.15
-    assert params(Regime.CAUTIOUS).max_slots == 2
+    assert params(Regime.CAUTIOUS).size_pct == 0.20
+    assert params(Regime.CAUTIOUS).max_slots == 1
     assert params(Regime.RISK_OFF).size_pct == 0.0
     assert params(Regime.RISK_OFF).max_slots == 0
     assert params(Regime.RISK_OFF).allow_new is False
+    # RISK_ON total deployment stays under 100% NAV (DQ cushion).
+    assert params(Regime.RISK_ON).size_pct * params(Regime.RISK_ON).max_slots <= 0.75
 
 
 def test_position_usd_scales_with_nav():
-    assert position_usd(30.0, Regime.RISK_ON) == 6.0       # 20%
-    assert position_usd(30.0, Regime.CAUTIOUS) == 4.5      # 15%
-    assert position_usd(30.0, Regime.RISK_OFF) == 0.0      # halt
+    assert position_usd(30.0, Regime.RISK_ON) == pytest.approx(10.5)    # 35%
+    assert position_usd(30.0, Regime.CAUTIOUS) == pytest.approx(6.0)    # 20%
+    assert position_usd(30.0, Regime.RISK_OFF) == 0.0                   # halt
 
 
 def test_classify_dump_is_risk_off():

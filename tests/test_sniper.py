@@ -42,7 +42,7 @@ def test_breakout_opens_regime_sized_entry():
                               universe=["AAA"], now=1000.0, floor_usd=6.0, allow=_allow)
     assert mode == "sniper"
     assert len(orders) == 1 and orders[0].token_out == "AAA"
-    assert orders[0].amount_in_usd == 6.0          # 20% of $30 NAV (RISK_ON)
+    assert orders[0].amount_in_usd == 10.5         # 35% of $30 NAV (RISK_ON, concentrated)
     assert book.is_open("AAA")
 
 
@@ -51,7 +51,7 @@ def test_cautious_uses_smaller_size():
     orders, _ = sniper.run(_state(), {"AAA": 1.05}, book=PositionBook(), feed=FakeFeed(snaps),
                            cooldowns=CooldownBook(), regime_flag=Regime.CAUTIOUS,
                            universe=["AAA"], now=1000.0, floor_usd=4.0, allow=_allow)
-    assert orders[0].amount_in_usd == 4.5          # 15% of $30
+    assert orders[0].amount_in_usd == 6.0          # 20% of $30 (CAUTIOUS)
 
 
 def test_risk_off_blocks_all_entries():
