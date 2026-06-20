@@ -46,7 +46,9 @@ def test_meme_uses_looser_slippage_gate_than_major(mocker, tmp_path):
     # 5% slippage: FAILS the 4% major gate but PASSES the 6% meme gate (small lottery size).
     feed = MarketFeed(order_usd=10, max_slippage=0.04, cache_path=tmp_path / "c.json")
     mocker.patch("src.agent.aegis.market_feed.token_list.tradable_slippage", return_value=0.05)
-    assert feed.snapshot("CHEEMS", price=1.0).liquidity_ok is True    # meme → 6% gate
+    tc = mocker.patch("src.agent.aegis.market_feed.token_list.token_class", return_value="meme")
+    assert feed.snapshot("ETH", price=1.0).liquidity_ok is True       # meme → 6% gate
+    tc.return_value = "major"
     assert feed.snapshot("ETH", price=1.0).liquidity_ok is False      # major → 4% gate
 
 
