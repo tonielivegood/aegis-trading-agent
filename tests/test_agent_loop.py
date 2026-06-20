@@ -59,6 +59,20 @@ def test_make_executor_selects_twak(mocker):
     tw.assert_called_once()
 
 
+def test_make_executor_selects_openocean(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "openocean")
+    oo = mocker.patch("src.agent.execution.openocean.OpenOcean")
+    al._make_executor(dry_run=True)
+    oo.assert_called_once()
+
+
+def test_make_executor_selects_1inch(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    oi = mocker.patch("src.agent.execution.oneinch.OneInch")
+    al._make_executor(dry_run=True)
+    oi.assert_called_once()
+
+
 # --- _amount_in_tokens ---
 
 def test_amount_in_tokens_converts_usd_to_token():

@@ -442,15 +442,24 @@ def _compliance_orders(state: PortfolioState) -> list[TradeOrder]:
 
 def _make_executor(dry_run: bool):
     """Select the execution backend. Default PancakeSwap on the registered wallet
-    (battle-tested); 'twak' routes through the Trust Wallet Agent Kit CLI, which
-    drives its OWN local wallet (use only if that wallet is the registered one)."""
-    if settings.execution_backend == "twak":
+    (battle-tested). 'openocean'/'1inch' route through a DEX AGGREGATOR (best price
+    across all BSC DEXs → far lower slippage, much larger tradable universe); they
+    return ready-to-sign calldata that we sign LOCALLY (self-custody preserved).
+    'twak' routes through the Trust Wallet Agent Kit CLI (its own local wallet)."""
+    backend = settings.execution_backend
+    if backend == "twak":
         from .execution.twak_executor import TwakExecutor
         return TwakExecutor(dry_run=dry_run)
     account = None
     if not dry_run:
         from eth_account import Account
         account = Account.from_key(settings.agent_private_key)
+    if backend == "openocean":
+        from .execution.openocean import OpenOcean
+        return OpenOcean(account=account, dry_run=dry_run)
+    if backend in ("1inch", "oneinch"):
+        from .execution.oneinch import OneInch
+        return OneInch(account=account, dry_run=dry_run)
     return PancakeSwap(account=account, dry_run=dry_run)
 
 
