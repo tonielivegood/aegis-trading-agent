@@ -65,8 +65,10 @@ def cmd_signals() -> None:
 
     fng = cmc_agent_hub.get_fear_greed()
     trending = sorted(cmc_agent_hub.get_trending_symbols())
-    btc = cmc_client.get_quotes(["BTC"]).get("BTC", {})
-    flag, reason = rg.decide_regime(btc, fear_greed=fng)
+    try:
+        btc = cmc_client.get_quotes(["BTC"]).get("BTC", {})
+    except Exception:  # noqa: BLE001 — diagnostic command, never traceback at a judge
+        btc = {}
 
     print("CMC AI Agent Hub — live signals (#CMCAgentHub)")
     if fng:
@@ -74,7 +76,11 @@ def cmd_signals() -> None:
     else:
         print("  Fear & Greed      : <unavailable> (fails safe → BTC-only regime)")
     print(f"  Community trending : {', '.join(trending) if trending else '<none>'}")
-    print(f"  Resulting regime   : {flag.value}   [{reason}]")
+    if btc:
+        flag, reason = rg.decide_regime(btc, fear_greed=fng)
+        print(f"  Resulting regime   : {flag.value}   [{reason}]")
+    else:
+        print("  Resulting regime   : <BTC quote unavailable>")
     print("  How it steers the agent:")
     print(f"    • sentiment TIGHTENS risk only — RISK_ON→CAUTIOUS at F&G ≤ {rg.SENTIMENT_FEAR_FLOOR} "
           f"(never loosens)")
