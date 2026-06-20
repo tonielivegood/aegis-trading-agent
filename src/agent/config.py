@@ -174,8 +174,8 @@ class Settings(BaseModel):
     @classmethod
     def _check_backend(cls, v: str) -> str:
         v = v.lower()
-        if v not in ("pancake", "twak"):
-            raise ValueError("EXECUTION_BACKEND must be 'pancake' or 'twak'")
+        if v not in ("pancake", "twak", "openocean", "1inch", "oneinch"):
+            raise ValueError("EXECUTION_BACKEND must be pancake | twak | openocean | 1inch")
         return v
 
     @field_validator("agent_private_key")
