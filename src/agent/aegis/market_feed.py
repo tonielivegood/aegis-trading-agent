@@ -119,14 +119,14 @@ class MarketFeed:
             return MarketSnapshot(symbol=symbol, contract=tok.address, has_route=False,
                                   liquidity_ok=False, slippage_est=1.0)
 
-        # Thin memes trade as SMALL "lottery" positions, so gate them at their small
-        # order size and a looser slippage ceiling (a meme ride targets +100%, not +5%);
-        # deep majors keep the full size + tight gate.
-        if token_list.token_class(symbol) == "meme":
-            order_usd, max_slip = settings.meme_order_usd, settings.meme_slippage_bps / 10_000
-        else:
-            order_usd, max_slip = self.order_usd, self.max_slippage
-        slippage = self._estimate_slippage(tok, price, order_usd)
+        # Liquidity gate uses the PRE-MEASURED aggregator slippage from the offline
+        # 1inch universe build (token_list.tradable_slippage) — NOT a live Pancake-V2
+        # quote, which wrongly rejects the liquid majors (UNI/DOT show 30-46% on V2 but
+        # <0.5% via an aggregator) AND costs an on-chain call per token per tick. Thin
+        # memes keep a looser ceiling (small "lottery" positions targeting +100%).
+        max_slip = (settings.meme_slippage_bps / 10_000
+                    if token_list.token_class(symbol) == "meme" else self.max_slippage)
+        slippage = token_list.tradable_slippage(symbol)
         now = time.time()
         self._record(symbol, now, price)
         p5, recent_min = _price_5m_and_min(self.cache.get(symbol, []), now)

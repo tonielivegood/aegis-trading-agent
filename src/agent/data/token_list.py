@@ -75,6 +75,22 @@ def _alpha() -> dict[str, Token]:
 
 
 @lru_cache(maxsize=1)
+def _alpha_slippage() -> dict[str, float]:
+    """symbol(upper) -> pre-measured aggregator slippage at our order size, from the
+    offline 1inch universe build (slippage_12usd). Used as the runtime liquidity gate
+    so we never re-quote Pancake V2 (which wrongly rejects the liquid majors)."""
+    if not ALPHA_PATH.exists():
+        return {}
+    raw = json.loads(ALPHA_PATH.read_text(encoding="utf-8"))
+    return {t["symbol"].upper(): float(t.get("slippage_12usd", t.get("slippage_5usd", 1.0))) for t in raw}
+
+
+def tradable_slippage(symbol: str) -> float:
+    """Pre-measured aggregator slippage for a tradable token (1.0 if unknown = block)."""
+    return _alpha_slippage().get(symbol.upper(), 1.0)
+
+
+@lru_cache(maxsize=1)
 def _classes() -> dict[str, str]:
     """symbol(upper) -> 'major' | 'meme', from the tradable universe file."""
     if not ALPHA_PATH.exists():
