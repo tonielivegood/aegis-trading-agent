@@ -27,16 +27,20 @@ from .volume_breakout import BreakoutSignal, decide_breakout_entries, scan_break
 STABLE = "USDT"
 
 
-def _scan_by_class(snapshots, overpump_pct: float) -> list[BreakoutSignal]:
-    """Scan each token with its CLASS entry params (majors enter loose & scalp,
-    memes need a real 3x breakout), then merge and rank by money-flow strength."""
+def _scan_by_class(snapshots, overpump_pct: float, vol_factor: float = 1.0) -> list[BreakoutSignal]:
+    """Scan each token with its CLASS entry params (majors enter looser, memes need
+    a real 3x breakout), then merge and rank by money-flow strength.
+
+    `vol_factor` is the regime BETA-CAPTURE valve: in RISK_ON it is < 1, lowering the
+    volume bar so the agent deploys into mild deep-major momentum and rides a rising
+    market instead of sitting in cash waiting for a rare sharp breakout."""
     by_class: dict[str, dict] = {}
     for sym, snap in snapshots.items():
         by_class.setdefault(token_list.token_class(sym), {})[sym] = snap
     sigs: list[BreakoutSignal] = []
     for cls, snaps in by_class.items():
         cp = tc.params(cls)
-        sigs += scan_breakouts(snaps, vol_mult=cp.vol_mult, breakout_min=cp.breakout_min,
+        sigs += scan_breakouts(snaps, vol_mult=cp.vol_mult * vol_factor, breakout_min=cp.breakout_min,
                                breakout_max=cp.breakout_max, overpump_pct=overpump_pct)
     sigs.sort(key=lambda s: s.strength, reverse=True)
     return sigs
@@ -74,7 +78,7 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
     params = rg.params(regime_flag)
     entries: list[TradeOrder] = []
     if params.allow_new:
-        sigs = _scan_by_class(snapshots, overpump_pct)
+        sigs = _scan_by_class(snapshots, overpump_pct, vol_factor=params.entry_vol_factor)
         cooling = cooldowns.cooling_down(now=now, cooldown_s=cooldown_s)
         pos_usd = rg.position_usd(state.equity_usd, regime_flag)
         entries = decide_breakout_entries(

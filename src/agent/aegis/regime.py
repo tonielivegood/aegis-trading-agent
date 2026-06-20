@@ -41,12 +41,20 @@ class RegimeParams:
     size_pct: float      # position size as a fraction of NAV
     max_slots: int       # max concurrent positions allowed
     allow_new: bool      # may we open new positions at all
+    entry_vol_factor: float = 1.0  # scales the volume-breakout bar (<1 = more aggressive)
 
 
+# entry_vol_factor = the BETA-CAPTURE valve. The only safely tradable tokens are
+# ~13 deep majors that rarely produce a sharp 2-3x volume breakout, so a pure
+# breakout sniper sits in cash and misses a rising market (raw-return contest →
+# sitting out ≈ losing). In RISK_ON (BTC calm/up) we LOOSEN the entry bar so the
+# agent deploys into mild deep-major momentum and rides the market; in CAUTIOUS we
+# keep the strict bar; in RISK_OFF we don't enter at all. Downside stays bounded by
+# the −7% per-position stop, the regime flip to cash, and the −20% breaker.
 _PARAMS: dict[Regime, RegimeParams] = {
-    Regime.RISK_ON: RegimeParams(0.35, 2, True),
-    Regime.CAUTIOUS: RegimeParams(0.20, 1, True),
-    Regime.RISK_OFF: RegimeParams(0.0, 0, False),
+    Regime.RISK_ON: RegimeParams(0.35, 2, True, entry_vol_factor=0.75),
+    Regime.CAUTIOUS: RegimeParams(0.20, 1, True, entry_vol_factor=1.0),
+    Regime.RISK_OFF: RegimeParams(0.0, 0, False, entry_vol_factor=1.0),
 }
 
 
