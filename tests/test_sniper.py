@@ -46,17 +46,17 @@ def test_breakout_opens_regime_sized_entry():
     assert book.is_open("AAA")
 
 
-def test_risk_on_loosens_entry_for_beta_capture():
-    # A 2.5x-vol mild move: RISK_ON enters it (bar 3.0*0.75=2.25), CAUTIOUS does not (3.0).
-    # This is the beta-capture valve — deploy into deep-major momentum in a calm/up market.
-    snaps = {"AAA": _snap("AAA", vol_5m=250, baseline_vol=100, price_now=1.03, price_5m_ago=1.0)}
-    on, _ = sniper.run(_state(), {"AAA": 1.03}, book=PositionBook(), feed=FakeFeed(snaps),
+def test_risk_on_loosens_major_entry_for_beta_capture():
+    # A MAJOR 1.6x-vol mild move: RISK_ON enters it (bar 2.0*0.75=1.5), CAUTIOUS does
+    # not (2.0). The beta-capture valve loosens the cheap MAJOR tier only (ETH=major).
+    snaps = {"ETH": _snap("ETH", vol_5m=160, baseline_vol=100, price_now=1.02, price_5m_ago=1.0)}
+    on, _ = sniper.run(_state(), {"ETH": 1.02}, book=PositionBook(), feed=FakeFeed(snaps),
                        cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
-                       universe=["AAA"], now=1000.0, floor_usd=6.0, allow=_allow)
-    assert len(on) == 1 and on[0].token_out == "AAA"
-    cau, _ = sniper.run(_state(), {"AAA": 1.03}, book=PositionBook(), feed=FakeFeed(snaps),
+                       universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)
+    assert len(on) == 1 and on[0].token_out == "ETH"
+    cau, _ = sniper.run(_state(), {"ETH": 1.02}, book=PositionBook(), feed=FakeFeed(snaps),
                         cooldowns=CooldownBook(), regime_flag=Regime.CAUTIOUS,
-                        universe=["AAA"], now=1000.0, floor_usd=6.0, allow=_allow)
+                        universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)
     assert cau == []
 
 

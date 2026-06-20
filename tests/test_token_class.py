@@ -19,36 +19,36 @@ def _book(symbol, entry, cls):
     return b
 
 
-def test_params_unified_asymmetric_ride_exit():
-    # Both classes now RIDE with the SAME asymmetric exit (no more major scalp).
-    for cls in ("major", "meme"):
-        p = tc.params(cls)
-        assert p.hard_tp_mult == 3.0          # +200% cap — let winners run
-        assert p.trailing_pct == 0.15         # wide trail
-        assert p.hard_stop_pct == 0.07        # cut losers fast at −7%
-        assert p.no_progress_min == 25        # patience for a wave to form
-    assert tc.params("unknown").hard_tp_mult == 3.0          # unknown → meme default
+def test_params_two_tier_active_major_vs_ride_meme():
+    maj, meme = tc.params("major"), tc.params("meme")
+    # MAJOR = active/modest: small TP, tight trail, fast recycle.
+    assert maj.hard_tp_mult == 1.10 and maj.trailing_pct == 0.05 and maj.hard_stop_pct == 0.05
+    # MEME = rare/ride: big cap, wide trail, wider stop, more patience.
+    assert meme.hard_tp_mult == 3.0 and meme.trailing_pct == 0.15 and meme.hard_stop_pct == 0.08
+    assert maj.no_progress_min < meme.no_progress_min          # majors recycle faster
+    assert tc.params("unknown").hard_tp_mult == 3.0            # unknown → meme default
 
 
-# --- exits are now UNIFIED (both ride): cut losers fast, let winners run ---
+# --- exits diverge by tier: MAJOR harvests modest, MEME rides big ---
 
-def test_both_classes_ride_small_gains():
-    # +5% is a winner-in-progress for BOTH — neither scalps out (we ride).
-    for cls in ("major", "meme"):
-        out = edam.decide_exits(_book("FOO", 1.0, cls), {"FOO": 1.05}, {},
-                                _state({"FOO": 6.3}), class_aware=True, now=60)
-        assert out == [], f"{cls} should keep riding +5%"
+def test_major_takes_modest_profit_while_meme_rides():
+    # +11%: MAJOR hits its +10% take-profit; MEME keeps riding toward +200%.
+    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 1.11}, {},
+                            _state({"FOO": 6.66}), class_aware=True, now=60)
+    assert maj and "hard TP" in maj[0].reason
+    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 1.11}, {},
+                             _state({"FOO": 6.66}), class_aware=True, now=60)
+    assert meme == []
 
 
-def test_both_classes_hold_small_dip_but_cut_at_7pct():
-    # −5% is within the −7% stop for BOTH → hold; −8% cuts BOTH.
-    for cls in ("major", "meme"):
-        hold = edam.decide_exits(_book("FOO", 1.0, cls), {"FOO": 0.95}, {},
-                                 _state({"FOO": 5.7}), class_aware=True, now=60)
-        assert hold == [], f"{cls} should hold a −5% dip"
-        cut = edam.decide_exits(_book("FOO", 1.0, cls), {"FOO": 0.92}, {},
-                                _state({"FOO": 5.52}), class_aware=True, now=60)
-        assert cut and "hard stop" in cut[0].reason, f"{cls} should cut at −8%"
+def test_major_stop_tighter_than_meme():
+    # −6%: MAJOR cut (−5% stop); MEME holds (−8% stop) to give the big move room.
+    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 0.94}, {},
+                            _state({"FOO": 5.64}), class_aware=True, now=60)
+    assert maj and "hard stop" in maj[0].reason
+    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 0.94}, {},
+                             _state({"FOO": 5.64}), class_aware=True, now=60)
+    assert meme == []
 
 
 # --- entry thresholds still diverge by class (two-speed entry) ---

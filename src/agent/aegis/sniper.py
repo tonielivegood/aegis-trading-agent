@@ -40,7 +40,10 @@ def _scan_by_class(snapshots, overpump_pct: float, vol_factor: float = 1.0) -> l
     sigs: list[BreakoutSignal] = []
     for cls, snaps in by_class.items():
         cp = tc.params(cls)
-        sigs += scan_breakouts(snaps, vol_mult=cp.vol_mult * vol_factor, breakout_min=cp.breakout_min,
+        # Beta-capture loosening applies to the CHEAP major tier only; memes stay
+        # strict (rare, big-ride) in every regime — they're too expensive to churn.
+        bar = cp.vol_mult * (vol_factor if cls == tc.MAJOR else 1.0)
+        sigs += scan_breakouts(snaps, vol_mult=bar, breakout_min=cp.breakout_min,
                                breakout_max=cp.breakout_max, overpump_pct=overpump_pct)
     sigs.sort(key=lambda s: s.strength, reverse=True)
     return sigs
