@@ -82,6 +82,25 @@ when no high-confidence catalyst exists.
 - **Uses the newest BNB stack.** Built around the Binance Wallet Web3 API
   (released during the hackathon window) for quote/route/unsigned-tx readiness.
 
+## CMC AI Agent Hub integration (#CMCAgentHub)
+
+Aegis consumes two **CoinMarketCap AI Agent Hub** REST skills
+([docs](https://coinmarketcap.com/api/documentation/ai-agent-hub)) via our Pro key —
+see [`src/agent/data/cmc_agent_hub.py`](src/agent/data/cmc_agent_hub.py):
+
+| Agent Hub skill | Endpoint | How Aegis uses it |
+| --- | --- | --- |
+| **Market sentiment** | `GET /v3/fear-and-greed/latest` | Refines the hourly regime, **tightening-only**: extreme fear (F&G ≤ 20) forces `RISK_ON → CAUTIOUS`. It can never make the agent *more* aggressive (greed ≠ green light). |
+| **Community trending** | `GET /v1/community/trending/token` | Re-ranks already-qualified volume breakouts (1.5× boost), steering the scarce position slots toward tokens with real community attention. Never opens a position on its own. |
+
+Both run **out of the 60s hot path** (fetched hourly, cached to
+`data/runtime/cmc_signal.json`) and **fail safe** — a network hiccup returns
+`None`/empty, so the agent falls back to its momentum-only behaviour. See it live:
+
+```bash
+python -m src.agent signals
+```
+
 ## What is live vs DRY_RUN
 
 | Capability | Status |
@@ -201,6 +220,7 @@ Required in `.env` (never commit it — it is gitignored):
 
 ```bash
 python -m src.agent status     # wallet, equity, balances, mode
+python -m src.agent signals    # live CMC AI Agent Hub signals + resulting regime (#CMCAgentHub)
 python -m src.agent reset      # clear runtime state (drawdown peak + trade ledger)
 python -m src.agent tick       # one tick, DRY-RUN (live data, no money moved)
 python -m src.agent tick --live   # one tick, LIVE (sends real transactions)

@@ -16,6 +16,19 @@ python -m src.agent tick       # one full event-radar tick; prints strategy + n_
 ```
 Point out: `dry_run=True`, and Track-1 mode trades only the eligible allowlist.
 
+## 1b. CMC AI Agent Hub signals (#CMCAgentHub)
+```bash
+python -m src.agent signals     # live Fear & Greed + community-trending → regime
+```
+Point out: Aegis consumes two **CMC AI Agent Hub** REST skills with our Pro key —
+`/v3/fear-and-greed/latest` (market sentiment) and `/v1/community/trending/token`
+(community trending). They feed the agent **out of the 60s hot path** and **fail safe**:
+- **Sentiment** refines the hourly regime, **tightening-only** — extreme fear (F&G ≤ 20)
+  forces `RISK_ON → CAUTIOUS`; it can never make the agent more aggressive.
+- **Trending** re-ranks already-qualified volume breakouts (a 1.5× boost), steering the
+  scarce position slots toward tokens with real community attention — it never opens a
+  position on its own. Code: `src/agent/data/cmc_agent_hub.py`.
+
 ## 2. Real Binance Alpha 5-minute volume provider
 ```bash
 python scripts/build_alpha_symbol_map.py        # maps eligible contracts -> Alpha symbols (83/149)

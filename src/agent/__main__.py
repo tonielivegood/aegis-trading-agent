@@ -52,12 +52,43 @@ def cmd_compliance() -> None:
     print(f"  settlement asset      : {settings.track1_settlement_asset}")
 
 
+def cmd_signals() -> None:
+    """Show the live CMC AI Agent Hub signals and how they steer the agent (read-only).
+
+    A judge runs this to SEE the #CMCAgentHub integration working: the Fear & Greed
+    score, the community-trending set, and the regime they produce — all from the
+    Agent Hub REST skills, fully fail-safe.
+    """
+    from .aegis import regime as rg
+    from .aegis.volume_breakout import TRENDING_BOOST
+    from .data import cmc_agent_hub, cmc_client
+
+    fng = cmc_agent_hub.get_fear_greed()
+    trending = sorted(cmc_agent_hub.get_trending_symbols())
+    btc = cmc_client.get_quotes(["BTC"]).get("BTC", {})
+    flag, reason = rg.decide_regime(btc, fear_greed=fng)
+
+    print("CMC AI Agent Hub — live signals (#CMCAgentHub)")
+    if fng:
+        print(f"  Fear & Greed      : {fng['value']} ({fng['classification']})")
+    else:
+        print("  Fear & Greed      : <unavailable> (fails safe → BTC-only regime)")
+    print(f"  Community trending : {', '.join(trending) if trending else '<none>'}")
+    print(f"  Resulting regime   : {flag.value}   [{reason}]")
+    print("  How it steers the agent:")
+    print(f"    • sentiment TIGHTENS risk only — RISK_ON→CAUTIOUS at F&G ≤ {rg.SENTIMENT_FEAR_FLOOR} "
+          f"(never loosens)")
+    print(f"    • a breakout that is ALSO community-trending gets a {TRENDING_BOOST:g}× rank boost "
+          f"for the scarce slots")
+
+
 def main() -> None:
     configure()
     p = argparse.ArgumentParser(prog="agent")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status")
     sub.add_parser("compliance")  # Track-1 min-trade compliance report
+    sub.add_parser("signals")  # show live CMC AI Agent Hub signals + resulting regime
     sub.add_parser("reset")  # clear runtime state (run once before the contest)
     sub.add_parser("notify-test")  # send a test Telegram alert
     rp = sub.add_parser("run")
@@ -72,6 +103,8 @@ def main() -> None:
         cmd_status()
     elif args.cmd == "compliance":
         cmd_compliance()
+    elif args.cmd == "signals":
+        cmd_signals()
     elif args.cmd == "reset":
         for f in (agent_loop.DRAWDOWN_FILE, agent_loop.TRADES_FILE, agent_loop.BASELINE_FILE,
                   agent_loop.POSITIONS_FILE, agent_loop.COMPLIANCE_FILE,
