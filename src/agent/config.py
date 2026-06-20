@@ -70,6 +70,7 @@ class Settings(BaseModel):
     total_budget_usd: float = 100.0
     max_drawdown_alert: float = 0.20
     max_drawdown_cap: float = 0.30
+    drawdown_latch_ticks: int = 3      # breaker latches only after N consecutive breach ticks (anti-glitch debounce)
     max_position_pct: float = 0.10
     stablecoin_floor_pct: float = 0.15
     deploy_frac: float = 0.65          # fraction of equity deployed to the basket (walk-forward sweet spot: more upside, 0% DQ over 5.7yr)
@@ -222,6 +223,7 @@ def get_settings() -> Settings:
         total_budget_usd=float(_get("TOTAL_BUDGET_USD", "100")),
         max_drawdown_alert=float(_get("MAX_DRAWDOWN_ALERT", "0.20")),
         max_drawdown_cap=float(_get("MAX_DRAWDOWN_CAP", "0.30")),
+        drawdown_latch_ticks=int(_get("DRAWDOWN_LATCH_TICKS", "3")),
         max_position_pct=float(_get("MAX_POSITION_PCT", "0.10")),
         stablecoin_floor_pct=float(_get("STABLECOIN_FLOOR_PCT", "0.15")),
         deploy_frac=float(_get("DEPLOY_FRAC", "0.50")),

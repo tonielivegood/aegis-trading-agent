@@ -38,6 +38,7 @@ POSITIONS_FILE = RUNTIME / "aegis_positions.json"
 COMPLIANCE_FILE = RUNTIME / "track1_compliance.json"
 COOLDOWN_FILE = RUNTIME / "aegis_cooldown.json"
 REGIME_FILE = RUNTIME / "regime.json"
+PRICECACHE_FILE = RUNTIME / "last_prices.json"
 LOW_EQUITY_USD = max(5.0, settings.min_portfolio_value_usd * 2)
 COMPLIANCE_ORDER_USD = 2.0
 
@@ -123,6 +124,44 @@ def _event_prices(symbols: list[str], balances: dict) -> dict[str, float]:
     return prices
 
 
+def _load_price_cache() -> dict[str, float]:
+    if not PRICECACHE_FILE.exists():
+        return {}
+    try:
+        raw = json.loads(PRICECACHE_FILE.read_text(encoding="utf-8"))
+        return {k: float(v) for k, v in raw.items() if float(v) > 0}
+    except Exception:  # noqa: BLE001 — a corrupt cache must never break a tick
+        return {}
+
+
+def _apply_price_fallback(prices: dict[str, float], balances: dict[str, float]) -> dict[str, float]:
+    """Never let a TRANSIENT price-read miss value a HELD token at $0.
+
+    Equity feeds the latched drawdown breaker and every exit; a single failed
+    on-chain read (RPC hiccup) would otherwise drop a held token to $0, crater
+    equity and (pre-debounce) trip the breaker, or zero an exit's sell size. We
+    persist the last good price per symbol and, for any token the wallet still
+    HOLDS but couldn't price this tick, fall back to that last-known value. A real
+    price (incl. a real crash) always wins — fallback only fills an actual miss."""
+    cache = _load_price_cache()
+    for sym, p in prices.items():
+        if p and p > 0:
+            cache[sym] = p                          # refresh cache with fresh good prices
+    filled = dict(prices)
+    for sym, bal in balances.items():
+        if sym in STABLECOINS or bal <= 0:
+            continue
+        if filled.get(sym, 0.0) <= 0 and cache.get(sym, 0.0) > 0:
+            filled[sym] = cache[sym]
+            log.warning("price_fallback_last_known", symbol=sym, price=cache[sym])
+    try:
+        RUNTIME.mkdir(parents=True, exist_ok=True)
+        PRICECACHE_FILE.write_text(json.dumps(cache), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — persistence is best-effort
+        pass
+    return filled
+
+
 def _clear_position_book() -> None:
     from .aegis.positions import PositionBook
     book = PositionBook.load(POSITIONS_FILE)
@@ -197,17 +236,21 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str]):
 
 
 def _load_drawdown() -> DrawdownTracker:
-    dt = DrawdownTracker(settings.max_drawdown_alert, settings.max_drawdown_cap)
+    dt = DrawdownTracker(settings.max_drawdown_alert, settings.max_drawdown_cap,
+                         latch_ticks=settings.drawdown_latch_ticks)
     if DRAWDOWN_FILE.exists():
         d = json.loads(DRAWDOWN_FILE.read_text(encoding="utf-8"))
         dt.peak = d.get("peak", 0.0)
         dt._tripped = d.get("tripped", False)
+        dt._breach_streak = d.get("breach_streak", 0)
     return dt
 
 
 def _save_drawdown(dt: DrawdownTracker) -> None:
     RUNTIME.mkdir(parents=True, exist_ok=True)
-    DRAWDOWN_FILE.write_text(json.dumps({"peak": dt.peak, "tripped": dt._tripped}), encoding="utf-8")
+    DRAWDOWN_FILE.write_text(
+        json.dumps({"peak": dt.peak, "tripped": dt._tripped, "breach_streak": dt._breach_streak}),
+        encoding="utf-8")
 
 
 def _baseline_equity(current_equity: float) -> float:
@@ -249,6 +292,10 @@ def tick(dry_run: bool | None = None) -> dict:
         symbols = token_list.tradable_symbols()
         quotes = cmc_client.get_quotes([s for s in symbols if s != "WBNB"] + ["WBNB"])
         prices = _build_prices(symbols, quotes, balances)
+
+    # Robust valuation: a transient price-read miss must not value a held token at
+    # $0 (which would crater equity, glitch the breaker, and zero exit sizing).
+    prices = _apply_price_fallback(prices, balances)
 
     pf = Portfolio()
     equity = pf.equity(balances, prices)              # full wallet value (incl native BNB) for PnL
@@ -332,7 +379,7 @@ def flatten_to_cash(dry_run: bool | None = None) -> dict:
     dry_run = settings.dry_run if dry_run is None else dry_run
     now = utcnow()
     balances = read_onchain_balances(settings.agent_wallet_address)
-    prices = _event_prices(token_list.alpha_symbols(), balances)
+    prices = _apply_price_fallback(_event_prices(token_list.alpha_symbols(), balances), balances)
     pf = Portfolio()
     # Value EVERY held token (not just the alpha universe) so nothing is left behind;
     # native BNB stays as gas (it is not a directly swappable ERC-20).

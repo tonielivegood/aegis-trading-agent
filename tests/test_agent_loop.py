@@ -15,6 +15,34 @@ def _state(equity, risk, stable, holdings=None):
                           token_values_usd=holdings or {})
 
 
+# --- _apply_price_fallback (robust valuation: transient miss must not = $0) ---
+
+def test_price_fallback_fills_held_token_missing_this_tick(tmp_path, mocker):
+    mocker.patch.object(al, "PRICECACHE_FILE", tmp_path / "last_prices.json")
+    # tick 1: LUNC priced → remembered
+    out1 = al._apply_price_fallback({"LUNC": 6e-05, "USDT": 1.0}, {"LUNC": 100.0, "USDT": 5.0})
+    assert out1["LUNC"] == 6e-05
+    # tick 2: LUNC read FAILS (absent) but is still HELD → fall back to last known
+    out2 = al._apply_price_fallback({"USDT": 1.0}, {"LUNC": 100.0, "USDT": 5.0})
+    assert out2["LUNC"] == 6e-05
+
+
+def test_price_fallback_real_price_always_wins(tmp_path, mocker):
+    mocker.patch.object(al, "PRICECACHE_FILE", tmp_path / "last_prices.json")
+    al._apply_price_fallback({"LUNC": 6e-05}, {"LUNC": 100.0})       # cache a good price
+    # a real (much lower) read = a real crash → must NOT be masked by the cache
+    out = al._apply_price_fallback({"LUNC": 3e-05}, {"LUNC": 100.0})
+    assert out["LUNC"] == 3e-05
+
+
+def test_price_fallback_only_for_held_tokens(tmp_path, mocker):
+    mocker.patch.object(al, "PRICECACHE_FILE", tmp_path / "last_prices.json")
+    al._apply_price_fallback({"FOO": 2.0}, {"FOO": 10.0})            # cache FOO
+    # next tick we no longer hold FOO and it isn't priced → it stays absent
+    out = al._apply_price_fallback({}, {"USDT": 5.0})
+    assert "FOO" not in out
+
+
 # --- _make_executor (backend selection) ---
 
 def test_make_executor_defaults_to_pancake(mocker):

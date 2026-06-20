@@ -78,6 +78,48 @@ def test_drawdown_rejects_nan_and_negative():
         dt.update(-5.0)
 
 
+# --- breaker DEBOUNCE: a lone glitch tick must not latch the contest-killer ---
+
+def test_breaker_debounce_ignores_single_glitch_tick():
+    # One tick at -25% (e.g. a transient price-read valuing a held token at $0)
+    # must NOT latch when a debounce streak is required.
+    dt = DrawdownTracker(alert=0.20, cap=0.30, latch_ticks=3)
+    dt.update(100.0)
+    dt.update(75.0)            # glitch tick 1 (-25%)
+    assert dt.breaker_tripped() is False
+    dt.update(100.0)           # equity recovers next tick → streak resets
+    assert dt.breaker_tripped() is False
+
+
+def test_breaker_debounce_latches_on_sustained_breach():
+    dt = DrawdownTracker(alert=0.20, cap=0.30, latch_ticks=3)
+    dt.update(100.0)
+    dt.update(75.0)            # breach 1
+    dt.update(74.0)            # breach 2
+    assert dt.breaker_tripped() is False
+    dt.update(76.0)            # breach 3 (still ≤ -20%) → latch
+    assert dt.breaker_tripped() is True
+    dt.update(99.0)            # bounce → stays latched
+    assert dt.breaker_tripped() is True
+
+
+def test_breaker_debounce_streak_resets_between_nonconsecutive_glitches():
+    dt = DrawdownTracker(alert=0.20, cap=0.30, latch_ticks=3)
+    dt.update(100.0)
+    for _ in range(3):
+        dt.update(75.0)        # a breach...
+        dt.update(100.0)       # ...immediately recovered → never 3 in a row
+    assert dt.breaker_tripped() is False
+
+
+def test_breaker_default_latch_is_immediate():
+    # Back-compat: with the default latch_ticks=1 the breaker trips on the tick.
+    dt = DrawdownTracker(alert=0.20, cap=0.30)
+    dt.update(100.0)
+    dt.update(80.0)
+    assert dt.breaker_tripped() is True
+
+
 # ============================== PositionSizer ==============================
 
 def test_max_position_is_pct_of_equity():
