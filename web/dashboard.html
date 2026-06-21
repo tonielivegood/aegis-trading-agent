@@ -67,6 +67,26 @@
   .step:hover{border-color:var(--blue);transform:translateY(-1px);}
   .partner:hover{border-color:#3a4a63;transform:translateY(-2px);}
   .pill,a{transition:color .15s ease, background .15s ease;}
+  @media (max-width:600px){
+    .wrap{padding:16px 11px 46px;}
+    h1{font-size:18px;}
+    .flow{padding:12px 12px;}
+    .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .frow i{display:none;}
+    .step{padding:9px 11px;font-size:12.5px;}
+    #metrics{grid-template-columns:1fr 1fr !important;}
+    .val{font-size:22px;}
+    table{font-size:13px;}
+    th{font-size:10px;}
+    .card{padding:14px 14px;}
+    h2{font-size:11px;}
+    #scan table th:nth-child(3),#scan table td:nth-child(3){display:none;}
+    .partner{min-width:140px;}
+  }
+  @media (max-width:380px){
+    .frow{grid-template-columns:1fr;}
+    #metrics{grid-template-columns:1fr !important;}
+  }
 </style>
 </head>
 <body>
