@@ -45,15 +45,21 @@ def main() -> None:
     equity = pf.equity(balances, prices)
     stable = pf.stable_value(balances, prices)
     position_usd = equity * settings.beta_core_position_pct
-    floor_usd = max(settings.stablecoin_floor_usd, equity * settings.stablecoin_floor_pct)
+    base_floor = max(settings.stablecoin_floor_usd, equity * settings.stablecoin_floor_pct)
+    # Mirror the live tick: graduated max_names by regime + a 1-meme-ticket cash reserve.
+    beta_max = (settings.beta_core_max_names if flag == rg.Regime.RISK_ON
+                else 1 if flag == rg.Regime.CAUTIOUS else 0)
+    meme_reserve = settings.meme_order_usd if rg.params(flag).max_slots > 0 else 0.0
+    floor_usd = base_floor + meme_reserve
 
-    basket = bc.select_basket(momentum, max_names=settings.beta_core_max_names,
+    basket = bc.select_basket(momentum, max_names=beta_max,
                               min_momentum=settings.beta_core_min_momentum)
     ranked = sorted(momentum.items(), key=lambda kv: kv[1], reverse=True)
 
     print(f"BETA-CORE diagnostic — regime={flag.value} equity=${equity:.2f} "
-          f"stable=${stable:.2f} position=${position_usd:.2f} (×{settings.beta_core_max_names}) "
-          f"min_mom={settings.beta_core_min_momentum:g}%  [enabled={settings.beta_core_enabled}]")
+          f"stable=${stable:.2f} position=${position_usd:.2f} (×{beta_max}) "
+          f"floor+reserve=${floor_usd:.2f} min_mom={settings.beta_core_min_momentum:g}%  "
+          f"[enabled={settings.beta_core_enabled}]")
     print(f"{'SYM':<12}{'mom%':>8}{'1h%':>7}{'24h%':>8}{'price':>12}  pick")
     for sym, mom in ranked[:15]:
         q = quotes.get(sym, {})
@@ -68,7 +74,7 @@ def main() -> None:
                            stable_value_usd=stable, token_values_usd=token_values)
     orders, mode = bc.decide_beta(
         state, prices, momentum, book=book, regime_flag=flag, now=now,
-        max_names=settings.beta_core_max_names, position_usd=position_usd, floor_usd=floor_usd,
+        max_names=beta_max, position_usd=position_usd, floor_usd=floor_usd,
         min_momentum=settings.beta_core_min_momentum, trail_pct=settings.beta_core_trail_pct,
         hard_stop_pct=settings.beta_core_hard_stop_pct,
         breakeven_trigger=settings.aegis_breakeven_trigger_pct,
