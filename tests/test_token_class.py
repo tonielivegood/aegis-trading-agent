@@ -27,11 +27,12 @@ def test_params_both_ride_no_time_exit():
     maj, meme = tc.params("major"), tc.params("meme")
     # No time-based exit on either tier — rides exit on TP/stop/trail only.
     assert maj.no_progress_min == 0 and meme.no_progress_min == 0
-    # MEME = primary asymmetric ride: bigger cap, wider trail + stop than the rare major.
+    # MEME = big asymmetric ride: bigger cap, wider trail + stop.
     assert meme.hard_tp_mult == 3.0 and meme.trailing_pct == 0.25 and meme.hard_stop_pct == 0.12
-    assert maj.hard_tp_mult == 2.0 and maj.trailing_pct == 0.10 and maj.hard_stop_pct == 0.07
-    # MAJOR is RARER than meme: a strictly higher volume bar.
-    assert maj.vol_mult > meme.vol_mult
+    # MAJOR = active on confirmed +10-30% days: tight 7% trail, +30% cap lock, −7% stop.
+    assert maj.hard_tp_mult == 1.30 and maj.trailing_pct == 0.07 and maj.hard_stop_pct == 0.07
+    # MAJOR fires EASIER than meme now (lower bar): cheaper to trade, catch major days.
+    assert maj.vol_mult < meme.vol_mult
     assert tc.params("unknown").hard_tp_mult == 3.0            # unknown → meme default
 
 
@@ -73,14 +74,14 @@ def _snap(sym, vol_5m, baseline, now_p, ago_p):
                           price_now=now_p, price_5m_ago=ago_p, has_route=True, liquidity_ok=True)
 
 
-def test_meme_enters_easier_than_major():
-    # a 4.5x-volume, +5% confirmed move: a MEME breakout (>=4x), but NOT a major one (needs 5x).
-    snaps = {"M": _snap("M", vol_5m=450, baseline=100, now_p=1.05, ago_p=1.0)}
+def test_major_enters_easier_than_meme():
+    # a 3x-volume, +5% confirmed move: a MAJOR breakout (>=2.5x), but NOT a meme one (needs 4x).
+    snaps = {"M": _snap("M", vol_5m=300, baseline=100, now_p=1.05, ago_p=1.0)}
     mp, ep = tc.params("major"), tc.params("meme")
-    assert len(scan_breakouts(snaps, vol_mult=ep.vol_mult, breakout_min=ep.breakout_min,
-                              breakout_max=ep.breakout_max)) == 1
-    assert scan_breakouts(snaps, vol_mult=mp.vol_mult, breakout_min=mp.breakout_min,
-                          breakout_max=mp.breakout_max) == []
+    assert len(scan_breakouts(snaps, vol_mult=mp.vol_mult, breakout_min=mp.breakout_min,
+                              breakout_max=mp.breakout_max)) == 1
+    assert scan_breakouts(snaps, vol_mult=ep.vol_mult, breakout_min=ep.breakout_min,
+                          breakout_max=ep.breakout_max) == []
 
 
 def test_unconfirmed_move_rejected():

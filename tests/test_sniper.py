@@ -49,9 +49,9 @@ def test_breakout_opens_regime_sized_entry():
 
 def test_risk_on_no_longer_loosens_entry_bar():
     # The beta-capture valve was REMOVED (it over-fired live → churn bleed). A MAJOR
-    # 3x-vol move is now BELOW the rare 5x bar in EVERY regime → no entry, even in
-    # RISK_ON (regime risks more via SIZE/SLOTS, not a looser signal bar).
-    weak = {"ETH": _snap("ETH", vol_5m=300, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
+    # 2x-vol move is BELOW the 2.5x bar in EVERY regime → no entry, even in RISK_ON
+    # (regime risks more via SIZE/SLOTS, not a looser signal bar).
+    weak = {"ETH": _snap("ETH", vol_5m=200, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
     on, _ = sniper.run(_state(), {"ETH": 1.05}, book=PositionBook(), feed=FakeFeed(weak),
                        cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
                        universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)

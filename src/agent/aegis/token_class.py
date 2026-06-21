@@ -12,9 +12,11 @@ Redesign principles (trader-driven):
     has begun — a slightly later entry, but the noise is filtered out.
   - THEN RIDE: a WIDE trailing stop + high cap let a winner run; the trailing stop
     (NOT a timer) banks profit. Losers are cut by a hard stop. There is NO time exit.
-  - MEME = the asymmetric tail (+100-300% lives here) → PRIMARY. MAJOR = VERY RARE
-    (high bar): majors seldom move enough on BSC to beat the round-trip cost, so only a
-    strong, confirmed surge qualifies.
+  - MEME = the asymmetric tail (+100-300% lives here). MAJOR = ACTIVE on a CONFIRMED
+    move: a major having a good day routinely runs +10-30%, very tradable now that we
+    filter noise (5m candles + a real +3% move) and RIDE instead of churning. Major's
+    volume bar is LOWER than meme's (cheaper to trade, we want those days); the +3%
+    confirmation + ride exits are what prevent the old churn, not a sky-high bar.
 
 Exit is take-profit / hard-stop / trailing only (no_progress_min=0 disables the time
 exit). Regime overlay (regime.py) only throttles EXPOSURE now (size/slots), never the
@@ -42,12 +44,13 @@ class ClassParams:
 
 
 PARAMS: dict[str, ClassParams] = {
-    # MAJOR — VERY RARE. Only a strong, CONFIRMED major surge qualifies: 5x sustained
-    # 5m volume AND price already +3% (up to +15%). Majors rarely move enough on BSC to
-    # beat the round-trip, so we almost never trade them; when we do, RIDE with a 10%
-    # trail and a +100% cap, cut at −7%. No time exit.
-    MAJOR: ClassParams(vol_mult=5.0, breakout_min=0.03, breakout_max=0.15,
-                       hard_tp_mult=2.0, trailing_pct=0.10, hard_stop_pct=0.07,
+    # MAJOR — ACTIVE on a CONFIRMED move. A 2.5x sustained 5m volume surge WITH price
+    # already +3% (up to +15%) = a real major move starting (good days run +10-30%).
+    # RIDE it: 7% trail locks most of a modest major move, +30% hard-TP banks a great
+    # day, cut at −7%. No time exit — the +3% confirmation + ride (not a high bar) are
+    # what stop the churn, so a lower bar here is safe and lets us catch major days.
+    MAJOR: ClassParams(vol_mult=2.5, breakout_min=0.03, breakout_max=0.15,
+                       hard_tp_mult=1.30, trailing_pct=0.07, hard_stop_pct=0.07,
                        no_progress_min=0),
     # MEME — the asymmetric tail (primary). Confirmed ignition: 4x sustained 5m volume
     # AND price +3% (up to +20%, so we still catch a fast starter), then RIDE: 25% trail
