@@ -123,6 +123,16 @@ class Settings(BaseModel):
     # faded" trades — the gap the trailing stop (gated on price>entry) can't cover.
     aegis_breakeven_trigger_pct: float = 0.05  # arm once peak gain reaches +5%
     aegis_breakeven_buffer_pct: float = 0.005  # exit at entry +0.5% (covers the round-trip fee)
+    # --- Beta core (barbell Phase-2): regime-gated momentum-major basket. OFF by default;
+    # flip on mid-week after the DRY soak (scripts/beta_diag.py) validates selection. ---
+    beta_core_enabled: bool = False          # master switch (live tick wiring is gated on this)
+    beta_core_max_names: int = 3             # basket size (3 × 20% = 60% deploy, 30% DQ cushion)
+    beta_core_position_pct: float = 0.20     # per-name size as a fraction of NAV
+    beta_core_min_momentum: float = 2.0      # min blended (1h+24h) momentum %, only buy real leaders
+    beta_core_mom_w1h: float = 0.5           # weight on 1h vs 1.0 on 24h in the momentum blend
+    beta_core_trail_pct: float = 0.12        # trailing stop (wide — a multi-day beta hold, not a scalp)
+    beta_core_hard_stop_pct: float = 0.10    # hard per-name stop
+    beta_core_exit_rank_mult: int = 2        # keep a held name while it's in the top (max_names×this)
     # v2 sniper: breakout entry cap + cooldown + hourly regime cadence/staleness
     aegis_breakout_max_pct: float = 0.10     # entry: price rising but <= this (don't chase a blow-off)
     aegis_cooldown_seconds: int = 5400       # no re-entry into a token for 90 min after an exit
@@ -275,6 +285,14 @@ def get_settings() -> Settings:
         aegis_volume_death_in_profit=_get("AEGIS_VOLUME_DEATH_IN_PROFIT", "false").lower() in ("1", "true", "yes"),
         aegis_breakeven_trigger_pct=float(_get("AEGIS_BREAKEVEN_TRIGGER_PCT", "0.05")),
         aegis_breakeven_buffer_pct=float(_get("AEGIS_BREAKEVEN_BUFFER_PCT", "0.005")),
+        beta_core_enabled=_get_bool("BETA_CORE_ENABLED", "false"),
+        beta_core_max_names=int(_get("BETA_CORE_MAX_NAMES", "3")),
+        beta_core_position_pct=float(_get("BETA_CORE_POSITION_PCT", "0.20")),
+        beta_core_min_momentum=float(_get("BETA_CORE_MIN_MOMENTUM", "2.0")),
+        beta_core_mom_w1h=float(_get("BETA_CORE_MOM_W1H", "0.5")),
+        beta_core_trail_pct=float(_get("BETA_CORE_TRAIL_PCT", "0.12")),
+        beta_core_hard_stop_pct=float(_get("BETA_CORE_HARD_STOP_PCT", "0.10")),
+        beta_core_exit_rank_mult=int(_get("BETA_CORE_EXIT_RANK_MULT", "2")),
         aegis_breakout_max_pct=float(_get("AEGIS_BREAKOUT_MAX_PCT", "0.10")),
         aegis_cooldown_seconds=int(_get("AEGIS_COOLDOWN_SECONDS", "5400")),
         regime_update_seconds=int(_get("REGIME_UPDATE_SECONDS", "3600")),
