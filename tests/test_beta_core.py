@@ -62,13 +62,16 @@ def test_risk_on_enters_top_names_into_empty_slots():
     assert book.is_open("AAA") and book.is_open("BBB") and not book.is_open("CCC")
 
 
-def test_cautious_opens_nothing_but_holds():
-    mom = {"AAA": 12.0}
-    book = _book(_major("AAA", 1.0))
-    orders, _ = bc.decide_beta(_state(holdings={"AAA": 20.0}), {"AAA": 1.0}, mom, book=book,
-                               regime_flag=Regime.CAUTIOUS, now=0.0, max_names=3,
-                               position_usd=20.0, floor_usd=6.0, allow=ALLOW)
-    assert orders == [] and book.is_open("AAA")
+def test_cautious_deploys_light_basket():
+    # Graduated: CAUTIOUS still deploys, but the caller passes a SMALL max_names (light).
+    mom = {"AAA": 12.0, "BBB": 8.0, "CCC": 3.0}
+    book = _book()
+    prices = {"AAA": 1.0, "BBB": 2.0, "CCC": 3.0}
+    orders, _ = bc.decide_beta(_state(), prices, mom, book=book, regime_flag=Regime.CAUTIOUS,
+                               now=0.0, max_names=1, position_usd=20.0, floor_usd=6.0, allow=ALLOW)
+    bought = {o.token_out for o in orders if o.token_in == "USDT"}
+    assert bought == {"AAA"}                 # only the single strongest leader
+    assert book.is_open("AAA") and not book.is_open("BBB")
 
 
 def test_entry_respects_stable_floor():

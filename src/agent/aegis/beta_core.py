@@ -11,11 +11,12 @@ shared position book and the regime flag. No network/chain here; DRY_RUN is enfo
 downstream. It trades MAJORS ONLY — the meme lottery sleeve (sniper) is separate and
 owns meme-class positions; beta-core owns major-class positions.
 
-Posture (trend-following):
-  RISK_ON   → hold up to `max_names` strongest majors, fill empty slots with new leaders.
-  CAUTIOUS  → HOLD existing (trail/breakeven still manage), open NOTHING new.
+Posture (trend-following, GRADUATED — the caller scales `max_names` by regime):
+  RISK_ON   → full basket (e.g. 3 strongest majors).
+  CAUTIOUS  → LIGHT basket (e.g. 1 strongest major) — stay adaptive/active, not all-or-nothing.
   RISK_OFF  → flatten the whole beta basket to cash.
-Breaker (drawdown/cap) overrides everything → flatten to cash.
+Breaker (drawdown/cap) overrides everything → flatten to cash. Entries are gated by
+`max_names` (caller passes the regime-scaled count; 0 ⇒ no new entries, holds ride).
 """
 from __future__ import annotations
 
@@ -146,10 +147,11 @@ def decide_beta(
         if not book.is_open(sym):
             exited_now.add(sym)        # never re-enter a name we exited this tick
 
-    # --- entries: RISK_ON only; fill empty slots with the strongest non-held leaders ---
-    # `block_entries` (daily soft breaker) suppresses NEW entries WITHOUT flattening the
-    # basket — existing holds keep riding their trailing/breakeven stops.
-    if flag == rg.Regime.RISK_ON and position_usd >= MIN_ORDER_USD and not block_entries:
+    # --- entries: RISK_ON / CAUTIOUS, up to the (regime-scaled) `max_names` slots ---
+    # The caller passes a smaller max_names in CAUTIOUS (light basket) → graduated exposure,
+    # not all-or-nothing. RISK_OFF/breaker already returned above (flattened). `block_entries`
+    # (daily soft breaker) suppresses NEW entries WITHOUT flattening existing holds.
+    if flag in (rg.Regime.RISK_ON, rg.Regime.CAUTIOUS) and position_usd >= MIN_ORDER_USD and not block_entries:
         basket = select_basket(momentum, max_names=max_names, min_momentum=min_momentum, allow=allow)
         slots = max_names - len(_beta_held(book))
         stable_left = state.stable_value_usd

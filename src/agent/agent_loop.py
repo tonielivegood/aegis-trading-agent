@@ -438,9 +438,14 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
         from .aegis import beta_core as bc
         cooling = cooldowns.cooling_down(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
         base_floor = max(settings.stablecoin_floor_usd, state.equity_usd * settings.stablecoin_floor_pct)
+        # GRADUATED exposure: full basket in RISK_ON, a light 1-name basket in CAUTIOUS,
+        # nothing new in RISK_OFF (which also flattens) — the agent flexes with the regime
+        # (BTC + F&G + Claude) instead of betting a market direction.
+        beta_max = (settings.beta_core_max_names if flag == rg.Regime.RISK_ON
+                    else 1 if flag == rg.Regime.CAUTIOUS else 0)
         beta_orders, beta_mode = bc.decide_beta(
             state, prices, _beta_momentum(symbols), book=book, regime_flag=flag, now=now_ts,
-            max_names=settings.beta_core_max_names,
+            max_names=beta_max,
             position_usd=state.equity_usd * settings.beta_core_position_pct,
             floor_usd=base_floor + settings.beta_core_cash_reserve_usd,
             min_momentum=settings.beta_core_min_momentum, trail_pct=settings.beta_core_trail_pct,
