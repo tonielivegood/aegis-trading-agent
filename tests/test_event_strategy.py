@@ -144,14 +144,20 @@ def test_no_progress_suppressed_before_window():
     assert orders == []
 
 
-def test_exit_volume_death_in_profit():
-    # in profit but 5m volume dropped below its baseline (inflow gone) => bank it
+def test_volume_death_in_profit_disabled_by_default():
+    # Redesign (21/6): the volume-death exit is OFF by default — a volume dip while in
+    # profit no longer bails; the position RIDES (only trail/TP/stop exit it).
     book = _book_with(entry_time=0.0, baseline_vol=100.0)
     snap = MarketSnapshot(symbol="FOO", vol_5m=60.0, baseline_vol=100.0,
                           price_now=1.06, price_5m_ago=1.05)
-    orders = edam.decide_exits(book, {"FOO": 1.06}, {"FOO": snap}, _state(holdings={"FOO": 10.6}),
-                               volume_death_mult=1.0, min_hold_vol_min=15, trailing_pct=0.5, now=20 * 60)
-    assert orders and "volume died" in orders[0].reason and not book.is_open("FOO")
+    rode = edam.decide_exits(book, {"FOO": 1.06}, {"FOO": snap}, _state(holdings={"FOO": 10.6}),
+                             min_hold_vol_min=15, trailing_pct=0.5, now=20 * 60)
+    assert rode == [] and book.is_open("FOO")
+    # ...but the mechanism still works when explicitly enabled (back-compat).
+    banked = edam.decide_exits(book, {"FOO": 1.06}, {"FOO": snap}, _state(holdings={"FOO": 10.6}),
+                               volume_death_in_profit=True, volume_death_mult=1.0,
+                               min_hold_vol_min=15, trailing_pct=0.5, now=20 * 60)
+    assert banked and "volume died" in banked[0].reason and not book.is_open("FOO")
 
 
 def test_volume_death_not_fired_when_losing():

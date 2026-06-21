@@ -102,13 +102,13 @@ class Settings(BaseModel):
     oneinch_base_url: str = ""
     stablecoin_floor_usd: float = 6.0        # never let settlement cash drop below this (USD)
     # stablecoin_floor_pct (above, risk block) also applies; floor = max(usd, pct*equity)
-    max_hold_minutes: int = 300              # absolute max hold (5h) for a meme position
+    max_hold_minutes: int = 1440             # 24h backstop only (NOT a time exit); rides exit on trail/TP/stop
     min_hold_minutes_for_volume_exit: int = 15   # don't volume-exit on noisy first candles
     volume_exit_multiple: float = 5.0        # exit when 5m volume hits Nx the entry baseline
     hard_take_profit_multiple: float = 2.0   # exit full when position value reaches Nx (10->20 USD)
     aegis_vol_spike_mult: float = 3.0        # 5m volume vs baseline = entry confirmation spike
     aegis_breakout_pct: float = 0.015        # 5m price breakout threshold (entry confirmation)
-    aegis_overpump_pct: float = 0.15         # skip entry if already pumped this much
+    aegis_overpump_pct: float = 0.20         # skip entry only if already blown off >20% over the recent window
     aegis_trailing_stop_pct: float = 0.03    # trail this far below peak once profitable
     aegis_fomo_trailing_pct: float = 0.015   # TIGHTER trail while a 5x volume blow-off is active
     aegis_hard_stop_pct: float = 0.08        # hard per-position stop loss
@@ -116,7 +116,7 @@ class Settings(BaseModel):
     aegis_no_progress_minutes: int = 15      # cut a flat/dead position after this long...
     aegis_no_progress_min_gain: float = 0.02 # ...if it still hasn't risen at least this much
     aegis_volume_death_mult: float = 1.0     # exit in profit when 5m vol < this x baseline (inflow gone)
-    aegis_volume_death_in_profit: bool = True
+    aegis_volume_death_in_profit: bool = False  # redesign: let the trailing stop bank the ride, don't bail on a volume dip
     # v2 sniper: breakout entry cap + cooldown + hourly regime cadence/staleness
     aegis_breakout_max_pct: float = 0.10     # entry: price rising but <= this (don't chase a blow-off)
     aegis_cooldown_seconds: int = 5400       # no re-entry into a token for 90 min after an exit
@@ -252,20 +252,20 @@ def get_settings() -> Settings:
         oneinch_api_key=_get("ONEINCH_API_KEY", ""),
         oneinch_base_url=_get("ONEINCH_BASE_URL", ""),
         stablecoin_floor_usd=float(_get("STABLECOIN_FLOOR_USD", "6")),
-        max_hold_minutes=int(_get("MAX_HOLD_MINUTES", "300")),
+        max_hold_minutes=int(_get("MAX_HOLD_MINUTES", "1440")),
         min_hold_minutes_for_volume_exit=int(_get("MIN_HOLD_MINUTES_FOR_VOLUME_EXIT", "15")),
         volume_exit_multiple=float(_get("VOLUME_EXIT_MULTIPLE", "5")),
         hard_take_profit_multiple=float(_get("HARD_TAKE_PROFIT_MULTIPLE", "3.0")),
         aegis_vol_spike_mult=float(_get("AEGIS_VOL_SPIKE_MULT", "3.0")),
         aegis_breakout_pct=float(_get("AEGIS_BREAKOUT_PCT", "0.015")),
-        aegis_overpump_pct=float(_get("AEGIS_OVERPUMP_PCT", "0.10")),
+        aegis_overpump_pct=float(_get("AEGIS_OVERPUMP_PCT", "0.20")),
         aegis_trailing_stop_pct=float(_get("AEGIS_TRAILING_STOP_PCT", "0.15")),
         aegis_fomo_trailing_pct=float(_get("AEGIS_FOMO_TRAILING_PCT", "0.05")),
         aegis_hard_stop_pct=float(_get("AEGIS_HARD_STOP_PCT", "0.08")),
         aegis_no_progress_minutes=int(_get("AEGIS_NO_PROGRESS_MINUTES", "15")),
         aegis_no_progress_min_gain=float(_get("AEGIS_NO_PROGRESS_MIN_GAIN", "0.02")),
         aegis_volume_death_mult=float(_get("AEGIS_VOLUME_DEATH_MULT", "1.0")),
-        aegis_volume_death_in_profit=_get("AEGIS_VOLUME_DEATH_IN_PROFIT", "true").lower() in ("1", "true", "yes"),
+        aegis_volume_death_in_profit=_get("AEGIS_VOLUME_DEATH_IN_PROFIT", "false").lower() in ("1", "true", "yes"),
         aegis_breakout_max_pct=float(_get("AEGIS_BREAKOUT_MAX_PCT", "0.10")),
         aegis_cooldown_seconds=int(_get("AEGIS_COOLDOWN_SECONDS", "5400")),
         regime_update_seconds=int(_get("REGIME_UPDATE_SECONDS", "3600")),
@@ -276,7 +276,7 @@ def get_settings() -> Settings:
         volume_source=_get("VOLUME_SOURCE", "binance_alpha_klines"),
         binance_alpha_api_base=_get("BINANCE_ALPHA_API_BASE", "https://www.binance.com"),
         binance_spot_api_base=_get("BINANCE_SPOT_API_BASE", "https://data-api.binance.vision"),
-        alpha_kline_interval=_get("ALPHA_KLINE_INTERVAL", "1m"),
+        alpha_kline_interval=_get("ALPHA_KLINE_INTERVAL", "5m"),
         alpha_baseline_candles=int(_get("ALPHA_BASELINE_CANDLES", "24")),
         alpha_freshness_seconds=int(_get("ALPHA_FRESHNESS_SECONDS", "600")),
         event_tick_seconds=int(_get("EVENT_TICK_SECONDS", "60")),

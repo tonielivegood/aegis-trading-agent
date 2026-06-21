@@ -34,10 +34,10 @@ def _allow(_c):
 
 
 def test_breakout_opens_regime_sized_entry():
-    # ETH = MAJOR → sized at the regime % of NAV (memes use the small fixed sleeve).
-    snaps = {"ETH": _snap("ETH", vol_5m=400, baseline_vol=100, price_now=1.03, price_5m_ago=1.0)}
+    # ETH = MAJOR → needs the rare 5x vol + a confirmed +3% move; sized at regime % of NAV.
+    snaps = {"ETH": _snap("ETH", vol_5m=600, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
     book = PositionBook()
-    prices = {"ETH": 1.03}
+    prices = {"ETH": 1.05}
     orders, mode = sniper.run(_state(), prices, book=book, feed=FakeFeed(snaps),
                               cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
                               universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)
@@ -49,24 +49,24 @@ def test_breakout_opens_regime_sized_entry():
 
 def test_risk_on_no_longer_loosens_entry_bar():
     # The beta-capture valve was REMOVED (it over-fired live → churn bleed). A MAJOR
-    # 1.6x-vol mild move is now BELOW the full 2.5x bar in EVERY regime → no entry,
-    # even in RISK_ON (regime risks more via SIZE/SLOTS, not a looser bar).
-    weak = {"ETH": _snap("ETH", vol_5m=160, baseline_vol=100, price_now=1.02, price_5m_ago=1.0)}
-    on, _ = sniper.run(_state(), {"ETH": 1.02}, book=PositionBook(), feed=FakeFeed(weak),
+    # 3x-vol move is now BELOW the rare 5x bar in EVERY regime → no entry, even in
+    # RISK_ON (regime risks more via SIZE/SLOTS, not a looser signal bar).
+    weak = {"ETH": _snap("ETH", vol_5m=300, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
+    on, _ = sniper.run(_state(), {"ETH": 1.05}, book=PositionBook(), feed=FakeFeed(weak),
                        cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
                        universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)
     assert on == []
-    # A genuine 2.6x breakout still clears the bar and enters in RISK_ON.
-    strong = {"ETH": _snap("ETH", vol_5m=260, baseline_vol=100, price_now=1.02, price_5m_ago=1.0)}
-    on2, _ = sniper.run(_state(), {"ETH": 1.02}, book=PositionBook(), feed=FakeFeed(strong),
+    # A genuine 6x breakout with a confirmed +5% move clears the bar and enters in RISK_ON.
+    strong = {"ETH": _snap("ETH", vol_5m=600, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
+    on2, _ = sniper.run(_state(), {"ETH": 1.05}, book=PositionBook(), feed=FakeFeed(strong),
                         cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
                         universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)
     assert len(on2) == 1 and on2[0].token_out == "ETH"
 
 
 def test_cautious_uses_smaller_size():
-    snaps = {"ETH": _snap("ETH", vol_5m=400, baseline_vol=100, price_now=1.03, price_5m_ago=1.0)}
-    orders, _ = sniper.run(_state(), {"ETH": 1.03}, book=PositionBook(), feed=FakeFeed(snaps),
+    snaps = {"ETH": _snap("ETH", vol_5m=600, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
+    orders, _ = sniper.run(_state(), {"ETH": 1.05}, book=PositionBook(), feed=FakeFeed(snaps),
                            cooldowns=CooldownBook(), regime_flag=Regime.CAUTIOUS,
                            universe=["ETH"], now=1000.0, floor_usd=4.0, allow=_allow)
     assert orders[0].amount_in_usd == 6.0          # 20% of $30 (CAUTIOUS, MAJOR sized)
@@ -91,13 +91,13 @@ def test_cooldown_blocks_reentry():
 
 
 def test_exit_records_cooldown_and_frees_slot():
-    # A held position at -10% should hard-stop out and enter cooldown.
+    # A held position at -15% should hard-stop out and enter cooldown (below both tiers' stops).
     book = PositionBook()
     book.open(OpenPosition(symbol="OLD", contract="0xold", entry_price=1.0, usd_size=6.0,
                            entry_time=0.0))
-    snaps = {"OLD": _snap("OLD", vol_5m=0, baseline_vol=0, price_now=0.90, price_5m_ago=0.95)}
+    snaps = {"OLD": _snap("OLD", vol_5m=0, baseline_vol=0, price_now=0.85, price_5m_ago=0.95)}
     cb = CooldownBook()
-    orders, _ = sniper.run(_state(holdings={"OLD": 5.4}), {"OLD": 0.90}, book=book,
+    orders, _ = sniper.run(_state(holdings={"OLD": 5.1}), {"OLD": 0.85}, book=book,
                            feed=FakeFeed(snaps), cooldowns=cb, regime_flag=Regime.RISK_ON,
                            universe=["OLD"], now=1000.0, allow=_allow)
     assert any(o.token_in == "OLD" and o.token_out == "USDT" for o in orders)
