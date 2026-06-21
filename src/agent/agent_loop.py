@@ -293,6 +293,14 @@ def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
             positions.append({"symbol": sym, "class": p.token_class,
                               "price": px, "gain_pct": round(gain * 100, 1),
                               "usd_size": round(p.usd_size, 2)})
+        compliance = None
+        try:
+            from .aegis.compliance import ComplianceTracker
+            rep = ComplianceTracker.load(COMPLIANCE_FILE).report(time.time())
+            compliance = {"today": rep.valid_trades_today, "need_today": settings.track1_min_trades_per_day,
+                          "week": rep.valid_trades_total, "need_week": settings.track1_min_trades_total}
+        except Exception:  # noqa: BLE001
+            compliance = None
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         prior: list = []
         equity_hist: list = []
@@ -325,6 +333,7 @@ def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
             "equity_history": equity_hist,
             "scan": scan_rows or [],
             "scan_firing": sum(1 for r in (scan_rows or []) if r.get("fires")),
+            "compliance": compliance,
             "universe": {"total": len(syms), "majors": majors, "memes": len(syms) - majors},
             "backend": settings.execution_backend,
             "wallet": settings.agent_wallet_address,

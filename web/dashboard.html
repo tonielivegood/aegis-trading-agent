@@ -49,6 +49,14 @@
   .live .dot{animation:pulse 1.5s infinite;}
   .partner{flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:13px 15px;}
   .partner .nm{font-weight:600;font-size:14px;margin-bottom:3px;}
+  .flow{padding:13px 16px;}
+  .frow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+  .frow i{color:var(--dim);font-style:normal;font-size:15px;}
+  .step{display:flex;flex-direction:column;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:600;}
+  .step b{color:var(--blue);font-weight:700;margin-right:5px;}
+  .step small{font-weight:400;color:var(--muted);font-size:11.5px;}
+  .step.exec{border-color:#2a7d4f;background:rgba(70,210,126,.08);}
+  .step.exec b{color:var(--green);}
 </style>
 </head>
 <body>
@@ -68,7 +76,18 @@
     Snapshot is stale — the agent may be between ticks or paused. Showing last known state.
   </div>
 
-  <div class="grid" style="grid-template-columns:1.4fr 1fr 1fr 1fr;margin-bottom:13px;" id="metrics">
+  <div class="card flow" style="margin-bottom:13px;">
+    <div class="frow">
+      <span class="step"><b>1</b> Wallet + RPC<small>on-chain balances</small></span><i>→</i>
+      <span class="step"><b>2</b> CMC pricing<small>NAV by-id</small></span><i>→</i>
+      <span class="step"><b>3</b> Regime + Agent Hub<small>F&amp;G · trending</small></span><i>→</i>
+      <span class="step"><b>4</b> 5-min scan<small>confirmed move</small></span><i>→</i>
+      <span class="step"><b>5</b> Risk gates<small>breaker · slots · floor</small></span><i>→</i>
+      <span class="step exec"><b>6</b> 1inch execute<small>local self-custody</small></span>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:13px;" id="metrics">
     <div class="card">
       <div class="label">Equity (NAV)</div>
       <div class="row between" style="align-items:flex-end;gap:8px;">
@@ -102,12 +121,12 @@
     </div>
   </div>
 
-  <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:13px;" id="twoCol">
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-bottom:13px;" id="twoCol">
     <div class="card"><h2>Open positions</h2><div id="positions"></div></div>
     <div class="card"><h2>Recent activity</h2><div id="trades"></div></div>
   </div>
 
-  <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:13px;">
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-bottom:13px;">
     <div class="card">
       <h2>Strategy — confirmed move, then ride</h2>
       <table>
@@ -141,6 +160,7 @@
   <div class="card" style="margin-bottom:13px;">
     <div class="row between" style="flex-wrap:wrap;gap:10px;">
       <div><div class="label">Tradable universe</div><div class="mono" id="sUniverse" style="font-size:15px;font-weight:600;">—</div></div>
+      <div><div class="label">Compliance (≥1/day · 7/wk)</div><div class="mono" id="sCompliance" style="font-size:15px;font-weight:600;">—</div></div>
       <div><div class="label">Test suite</div><div class="mono" style="font-size:15px;font-weight:600;">405 passing · TDD</div></div>
       <div><div class="label">Agent wallet</div><div class="mono" id="sWallet" style="font-size:13px;">—</div></div>
       <div><div class="label">On-chain proof</div><div style="font-size:13px;"><a id="proofTx" href="https://bscscan.com/tx/0x2727f6d5337a60c1ec2991258fa36c8deaf2652c908743dd29cf3186b11e7d6c">USDT→ETH via 1inch ↗</a></div></div>
@@ -215,6 +235,7 @@ function render(d){
 
   if(d.breaker) el('sBreaker').textContent='−'+d.breaker.alert_pct+'% / −'+d.breaker.cap_pct+'% DQ';
   if(d.universe) el('sUniverse').textContent=d.universe.total+' · '+d.universe.majors+' major · '+d.universe.memes+' meme';
+  if(d.compliance){const c=d.compliance,okd=c.today>=c.need_today;el('sCompliance').innerHTML='<span class="'+(okd?'green':'amber')+'">'+c.today+'/'+c.need_today+' today</span> · '+c.week+'/'+c.need_week+' wk';}
   if(d.wallet){el('sWallet').innerHTML='<a href="https://bscscan.com/address/'+d.wallet+'">'+d.wallet.slice(0,6)+'…'+d.wallet.slice(-4)+' ↗</a>';}
 
   el('updated').textContent='Updated '+fmtTime(d.updated_at);
