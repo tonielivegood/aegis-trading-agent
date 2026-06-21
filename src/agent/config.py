@@ -131,7 +131,9 @@ class Settings(BaseModel):
     beta_core_position_pct: float = 0.20     # per-name size as a fraction of NAV
     beta_core_min_momentum: float = 2.0      # min blended (1h+24h) momentum %, only buy real leaders
     beta_core_mom_w1h: float = 0.5           # weight on 1h vs 1.0 on 24h in the momentum blend
-    beta_core_trail_pct: float = 0.12        # trailing stop (wide — a multi-day beta hold, not a scalp)
+    beta_core_trail_pct: float = 0.06        # trailing stop — tight, banks major moves (+10-30%) hard;
+                                             # majors are less explosive than memes so trail < meme's 10%.
+                                             # Watch for whipsaw (majors swing 5-10%/day) → widen if it churns.
     beta_core_hard_stop_pct: float = 0.10    # hard per-name stop
     beta_core_exit_rank_mult: int = 2        # keep a held name while it's in the top (max_names×this)
     # (the meme cash reserve is computed dynamically = meme_order_usd × the regime's meme slots)
