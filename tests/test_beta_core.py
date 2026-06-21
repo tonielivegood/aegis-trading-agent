@@ -126,6 +126,21 @@ def test_trailing_exit():
     assert any("trailing" in o.reason for o in orders) and not book.is_open("AAA")
 
 
+def test_block_entries_suppresses_new_without_flattening():
+    # Daily soft breaker: block_entries=True opens nothing new but does NOT flatten holds.
+    mom = {"AAA": 12.0, "BBB": 10.0}
+    book = _book(_major("AAA", 1.0))
+    orders, _ = bc.decide_beta(_state(holdings={"AAA": 20.0}), {"AAA": 1.0}, mom, book=book,
+                               regime_flag=Regime.RISK_ON, now=0.0, max_names=3,
+                               position_usd=20.0, floor_usd=6.0, block_entries=True, allow=ALLOW)
+    assert orders == [] and book.is_open("AAA")          # held, not flattened
+    book2 = _book()
+    orders2, _ = bc.decide_beta(_state(), {"AAA": 1.0, "BBB": 2.0}, mom, book=book2,
+                                regime_flag=Regime.RISK_ON, now=0.0, max_names=3,
+                                position_usd=20.0, floor_usd=6.0, block_entries=True, allow=ALLOW)
+    assert orders2 == [] and not book2.positions         # no new entries
+
+
 def test_momentum_lost_exit():
     # Held name is no longer among the (max_names*exit_rank_mult) leaders → rotate out.
     mom = {"AAA": 12.0, "BBB": 10.0, "CCC": 8.0, "OLD": -2.0}

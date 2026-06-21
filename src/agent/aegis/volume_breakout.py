@@ -127,6 +127,7 @@ def decide_breakout_entries(
     settlement: str = STABLE,
     allow: Callable[[str], bool] | None = None,
     meme_usd: float | None = None,
+    manage_classes: set[str] | frozenset[str] | None = None,
 ) -> list[TradeOrder]:
     """Turn ranked breakout signals into entry orders, applying every risk gate.
 
@@ -142,7 +143,13 @@ def decide_breakout_entries(
         return []                                    # RISK_OFF or dust size
     allow = _default_allow if allow is None else allow
 
-    slots = max_positions - len(book.positions)
+    # Count only positions of the classes THIS sleeve owns (when the barbell splits
+    # majors→beta / memes→sniper), so the other sleeve's positions don't eat our slots.
+    if manage_classes is None:
+        held_count = len(book.positions)
+    else:
+        held_count = sum(1 for p in book.positions.values() if p.token_class in manage_classes)
+    slots = max_positions - held_count
     if slots <= 0:
         return []
 

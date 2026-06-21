@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from .config import settings
@@ -224,6 +225,24 @@ def _volume_provider():
     return provider
 
 
+def _beta_momentum(symbols: list[str]) -> dict[str, float]:
+    """Blended (1h+24h) momentum for the MAJOR symbols, sourced by CMC id (same as the
+    price feed → no same-symbol collision). Fail-safe: {} on any error (beta then holds)."""
+    from .aegis import beta_core as bc
+    majors = [s for s in symbols if token_list.token_class(s) == "major"]
+    id_of = {s: token_list.cmc_id(s) for s in majors}
+    ids = [i for i in id_of.values() if i]
+    if not ids:
+        return {}
+    try:
+        by_id = cmc_client.get_quotes_by_id(ids)
+    except Exception as e:  # noqa: BLE001 — never let a momentum fetch break the tick
+        log.warning("beta_momentum_failed", error=type(e).__name__)
+        return {}
+    quotes = {s: by_id[i] for s, i in id_of.items() if i and i in by_id}
+    return bc.build_momentum(quotes, w_1h=settings.beta_core_mom_w1h)
+
+
 def _maybe_update_regime(now_ts: float):
     """Refresh the regime flag at most once per `regime_update_seconds` (hourly).
 
@@ -405,13 +424,48 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
     flag = rg.current_regime(rstate, max_age_s=settings.regime_max_age_seconds, now=now_ts)
     entry_flag = rg.Regime.RISK_OFF if block_entries else flag   # daily breaker: entries off
     trending = _load_trending(now_ts)
-    orders, mode = sniper.run(state, prices, book=book, feed=feed, cooldowns=cooldowns,
-                              regime_flag=entry_flag, universe=symbols, now=now_ts, trending=trending)
+
+    # BARBELL: when the beta core is enabled it OWNS majors (momentum-basket hold) and the
+    # sniper handles MEMES only (lottery). Beta runs first; we then (a) record its exits into
+    # the cooldown and (b) shrink the stable cash the meme sleeve sees by beta's net deploy,
+    # so the two sleeves don't double-spend the same USDT. block_entries (daily breaker)
+    # suppresses NEW entries in both without flattening existing holds.
+    beta_orders: list[TradeOrder] = []
+    beta_label = ""
+    sniper_state = state
+    sniper_classes: set[str] | None = None
+    if settings.beta_core_enabled:
+        from .aegis import beta_core as bc
+        cooling = cooldowns.cooling_down(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
+        base_floor = max(settings.stablecoin_floor_usd, state.equity_usd * settings.stablecoin_floor_pct)
+        beta_orders, beta_mode = bc.decide_beta(
+            state, prices, _beta_momentum(symbols), book=book, regime_flag=flag, now=now_ts,
+            max_names=settings.beta_core_max_names,
+            position_usd=state.equity_usd * settings.beta_core_position_pct,
+            floor_usd=base_floor + settings.beta_core_cash_reserve_usd,
+            min_momentum=settings.beta_core_min_momentum, trail_pct=settings.beta_core_trail_pct,
+            hard_stop_pct=settings.beta_core_hard_stop_pct,
+            breakeven_trigger=settings.aegis_breakeven_trigger_pct,
+            breakeven_buffer=settings.aegis_breakeven_buffer_pct,
+            exit_rank_mult=settings.beta_core_exit_rank_mult, cooldown_symbols=cooling,
+            block_entries=block_entries)
+        for o in beta_orders:
+            if o.token_out == "USDT":              # an exit (sold back to stable) → cooldown
+                cooldowns.record_exit(o.token_in, now_ts)
+        net_beta = (sum(o.amount_in_usd for o in beta_orders if o.token_in == "USDT")
+                    - sum(o.amount_in_usd for o in beta_orders if o.token_out == "USDT"))
+        sniper_state = replace(state, stable_value_usd=max(0.0, state.stable_value_usd - net_beta))
+        sniper_classes = {"meme"}                  # beta owns majors → sniper handles memes only
+        beta_label = f"+beta:{beta_mode}"
+
+    orders, mode = sniper.run(sniper_state, prices, book=book, feed=feed, cooldowns=cooldowns,
+                              regime_flag=entry_flag, universe=symbols, now=now_ts, trending=trending,
+                              manage_classes=sniper_classes)
     book.save(POSITIONS_FILE)
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
     cooldowns.save(COOLDOWN_FILE)
-    label = f"{mode}:{flag.value}" + (":dayhalt" if block_entries else "")
-    return orders, label, _scan_rows(feed.last_snapshots)
+    label = f"{mode}:{flag.value}" + beta_label + (":dayhalt" if block_entries else "")
+    return beta_orders + orders, label, _scan_rows(feed.last_snapshots)
 
 
 def _scan_rows(snapshots, limit: int = 8) -> list[dict]:

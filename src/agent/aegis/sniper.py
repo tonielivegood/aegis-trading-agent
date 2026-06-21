@@ -28,7 +28,8 @@ STABLE = "USDT"
 
 
 def _scan_by_class(snapshots, overpump_pct: float, vol_factor: float = 1.0,
-                   trending: frozenset[str] | set[str] = frozenset()) -> list[BreakoutSignal]:
+                   trending: frozenset[str] | set[str] = frozenset(),
+                   manage_classes: set[str] | frozenset[str] | None = None) -> list[BreakoutSignal]:
     """Scan each token with its CLASS entry params (majors enter looser, memes need
     a real 3x breakout), then merge and rank by money-flow strength.
 
@@ -42,6 +43,8 @@ def _scan_by_class(snapshots, overpump_pct: float, vol_factor: float = 1.0,
         by_class.setdefault(token_list.token_class(sym), {})[sym] = snap
     sigs: list[BreakoutSignal] = []
     for cls, snaps in by_class.items():
+        if manage_classes is not None and cls not in manage_classes:
+            continue                         # another sleeve owns this class
         cp = tc.params(cls)
         # Beta-capture loosening applies to the CHEAP major tier only; memes stay
         # strict (rare, big-ride) in every regime — they're too expensive to churn.
@@ -60,6 +63,7 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
         cooldown_s: float | None = None,
         allow: Callable[[str], bool] | None = None,
         trending: frozenset[str] | set[str] = frozenset(),
+        manage_classes: set[str] | frozenset[str] | None = None,
         ) -> tuple[list[TradeOrder], str]:
     overpump_pct = settings.aegis_overpump_pct if overpump_pct is None else overpump_pct
     cooldown_s = settings.aegis_cooldown_seconds if cooldown_s is None else cooldown_s
@@ -69,7 +73,7 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
 
     # Breaker overrides everything: flatten, record cooldowns, sit in cash.
     if state.drawdown_tripped or state.cap_breached:
-        exits = edam.decide_exits(book, prices, {}, state, now=now)
+        exits = edam.decide_exits(book, prices, {}, state, now=now, manage_classes=manage_classes)
         for o in exits:
             cooldowns.record_exit(o.token_in, now)
         return exits, "sniper-breaker"
@@ -79,7 +83,8 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
 
     # Exits first — frees slots within the tick and records each into cooldown.
     # class_aware: majors scalp (+4%/−3.5%), memes ride (+200%/−8%).
-    exits = edam.decide_exits(book, prices, snapshots, state, now=now, class_aware=True)
+    exits = edam.decide_exits(book, prices, snapshots, state, now=now,
+                              manage_classes=manage_classes, class_aware=True)
     for o in exits:
         cooldowns.record_exit(o.token_in, now)
 
@@ -88,13 +93,13 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
     entries: list[TradeOrder] = []
     if params.allow_new:
         sigs = _scan_by_class(snapshots, overpump_pct, vol_factor=params.entry_vol_factor,
-                              trending=trending)
+                              trending=trending, manage_classes=manage_classes)
         cooling = cooldowns.cooling_down(now=now, cooldown_s=cooldown_s)
         pos_usd = rg.position_usd(state.equity_usd, regime_flag)
         entries = decide_breakout_entries(
             sigs, state, book, position_usd=pos_usd, max_positions=params.max_slots,
             floor_usd=floor_usd, cooldown_symbols=cooling, settlement=settlement, allow=allow,
-            meme_usd=settings.meme_order_usd)
+            meme_usd=settings.meme_order_usd, manage_classes=manage_classes)
         for o in entries:
             sym = o.token_out
             if o.token_in == settlement and sym in prices:

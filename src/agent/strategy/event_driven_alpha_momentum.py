@@ -179,6 +179,7 @@ def decide_exits(book: PositionBook, prices: dict[str, float],
                  volume_death_mult: float | None = None,
                  volume_death_in_profit: bool | None = None,
                  breakeven_trigger: float | None = None, breakeven_buffer: float | None = None,
+                 manage_classes: set[str] | frozenset[str] | None = None,
                  class_aware: bool = False) -> list[TradeOrder]:
     hard_tp_mult = settings.hard_take_profit_multiple if hard_tp_mult is None else hard_tp_mult
     hard_stop_pct = settings.aegis_hard_stop_pct if hard_stop_pct is None else hard_stop_pct
@@ -200,6 +201,11 @@ def decide_exits(book: PositionBook, prices: dict[str, float],
 
     for symbol in list(book.positions):
         p = book.positions[symbol]
+        # Class ownership: when the barbell splits sleeves (beta core owns majors, the
+        # sniper owns memes), only manage positions of the classes we own — never touch
+        # the other sleeve's positions.
+        if manage_classes is not None and p.token_class not in manage_classes:
+            continue
         held_usd = state.token_values_usd.get(symbol, p.usd_size)
         price = prices.get(symbol, 0.0)
 

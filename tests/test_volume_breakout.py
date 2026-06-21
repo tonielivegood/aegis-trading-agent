@@ -50,6 +50,29 @@ def test_breakout_falls_back_to_cache_when_no_kline_move():
     assert abs(breakout_pct(snap) - 0.05) < 1e-9
 
 
+def test_manage_classes_slots_ignore_other_class_holdings():
+    # Barbell slot accounting: a held MAJOR (beta-owned) must NOT consume the meme sleeve's
+    # slot. With manage_classes={meme} the meme entry fits; without it, the major fills the
+    # single slot and the meme is blocked.
+    state = PortfolioState(equity_usd=30.0, risk_value_usd=10.0, stable_value_usd=20.0,
+                           token_values_usd={})
+    sig = BreakoutSignal(symbol="MEMEX", contract="0xm", vol_multiple=5.0, breakout_pct=0.05,
+                         recent_pump_pct=0.0, slippage_est=0.01, price_now=1.0, baseline_vol=100.0)
+
+    def _book_major():
+        b = PositionBook()
+        b.open(OpenPosition(symbol="ETHX", contract="0xe", entry_price=1.0, usd_size=10.0,
+                            token_class="major"))
+        return b
+
+    owned = decide_breakout_entries([sig], state, _book_major(), position_usd=10.0, max_positions=1,
+                                    floor_usd=6.0, allow=lambda c: True, manage_classes={"meme"})
+    assert len(owned) == 1 and owned[0].token_out == "MEMEX"
+    blocked = decide_breakout_entries([sig], state, _book_major(), position_usd=10.0, max_positions=1,
+                                      floor_usd=6.0, allow=lambda c: True)
+    assert blocked == []          # default: the major eats the only slot
+
+
 def test_low_volume_rejected():
     snaps = {"AAA": _snap("AAA", vol_5m=200, baseline_vol=100, price_now=105, price_5m_ago=100)}
     assert scan_breakouts(snaps, vol_mult=3.0) == []

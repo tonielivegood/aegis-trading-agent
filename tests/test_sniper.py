@@ -105,6 +105,30 @@ def test_exit_records_cooldown_and_frees_slot():
     assert "OLD" in cb.cooling_down(now=1000.0, cooldown_s=5400)
 
 
+def test_manage_classes_leaves_other_sleeves_positions_alone():
+    # Barbell: when the sniper owns MEMES only, it must NOT exit a MAJOR position (the beta
+    # core owns those) even when that major is deep underwater.
+    snaps = {"ETH": _snap("ETH", vol_5m=0, baseline_vol=0, price_now=0.85, price_5m_ago=0.95)}
+
+    def _book_with_major():
+        b = PositionBook()
+        b.open(OpenPosition(symbol="ETH", contract="0xeth", entry_price=1.0, usd_size=10.0,
+                            token_class="major"))
+        return b
+
+    held = _book_with_major()
+    orders, _ = sniper.run(_state(holdings={"ETH": 8.5}), {"ETH": 0.85}, book=held,
+                           feed=FakeFeed(snaps), cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
+                           universe=["ETH"], now=1000.0, allow=_allow, manage_classes={"meme"})
+    assert orders == [] and held.is_open("ETH")          # meme sleeve doesn't touch the major
+
+    control = _book_with_major()
+    orders2, _ = sniper.run(_state(holdings={"ETH": 8.5}), {"ETH": 0.85}, book=control,
+                            feed=FakeFeed(snaps), cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
+                            universe=["ETH"], now=1000.0, allow=_allow)
+    assert any(o.token_in == "ETH" for o in orders2) and not control.is_open("ETH")  # default manages it
+
+
 def test_breaker_flattens_and_blocks():
     book = PositionBook()
     book.open(OpenPosition(symbol="OLD", contract="0xold", entry_price=1.0, usd_size=6.0))

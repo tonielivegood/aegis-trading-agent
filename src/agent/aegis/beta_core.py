@@ -91,6 +91,7 @@ def decide_beta(
     breakeven_trigger: float = 0.05, breakeven_buffer: float = 0.005,
     exit_rank_mult: int = 2, settlement: str = STABLE,
     cooldown_symbols: frozenset[str] | set[str] = frozenset(),
+    block_entries: bool = False,
     allow: Callable[[str], bool] | None = None,
 ) -> tuple[list[TradeOrder], str]:
     """One beta-core decision: exits first (free slots + cut/rotate), then RISK_ON
@@ -146,7 +147,9 @@ def decide_beta(
             exited_now.add(sym)        # never re-enter a name we exited this tick
 
     # --- entries: RISK_ON only; fill empty slots with the strongest non-held leaders ---
-    if flag == rg.Regime.RISK_ON and position_usd >= MIN_ORDER_USD:
+    # `block_entries` (daily soft breaker) suppresses NEW entries WITHOUT flattening the
+    # basket — existing holds keep riding their trailing/breakeven stops.
+    if flag == rg.Regime.RISK_ON and position_usd >= MIN_ORDER_USD and not block_entries:
         basket = select_basket(momentum, max_names=max_names, min_momentum=min_momentum, allow=allow)
         slots = max_names - len(_beta_held(book))
         stable_left = state.stable_value_usd
