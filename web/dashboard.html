@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Aegis — Live Trading Agent · BNB Hack Track 1</title>
+<link rel="icon" type="image/png" href="logo.png" />
 <style>
   :root{
     --bg:#0a0e14; --surface:#141a23; --surface2:#1b2330; --line:#283143;
@@ -57,13 +58,23 @@
   .step small{font-weight:400;color:var(--muted);font-size:11.5px;}
   .step.exec{border-color:#2a7d4f;background:rgba(70,210,126,.08);}
   .step.exec b{color:var(--green);}
+  .card{transition:border-color .18s ease, box-shadow .18s ease;}
+  .card:hover{border-color:#3a4a63;box-shadow:0 6px 22px rgba(0,0,0,.28);}
+  tbody tr,table tr{transition:background .15s ease;}
+  table tr:hover td{background:rgba(90,169,255,.06);}
+  .chip,.step,.partner{transition:border-color .18s ease, transform .18s ease, color .18s ease;}
+  .chip:hover{border-color:var(--blue);color:#9ecbff;}
+  .step:hover{border-color:var(--blue);transform:translateY(-1px);}
+  .partner:hover{border-color:#3a4a63;transform:translateY(-2px);}
+  .pill,a{transition:color .15s ease, background .15s ease;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="row between" style="margin-bottom:20px;">
     <div class="row">
-      <div style="width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,#1f6feb,#a78bfa);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;color:#fff;">A</div>
+      <img src="logo.png" alt="Aegis" style="width:48px;height:48px;border-radius:11px;object-fit:cover;display:block;" onerror="this.style.display='none';document.getElementById('logoFB').style.display='flex';" />
+      <div id="logoFB" style="display:none;width:48px;height:48px;border-radius:11px;background:linear-gradient(135deg,#1f6feb,#a78bfa);align-items:center;justify-content:center;font-weight:800;font-size:20px;color:#fff;">A</div>
       <div>
         <h1>Aegis <span class="sub" style="font-weight:400;">· self-custody AI trading agent</span></h1>
         <div class="sub">BNB Hack 2026 · Track 1 · CoinMarketCap × Trust Wallet × BNB Chain</div>
