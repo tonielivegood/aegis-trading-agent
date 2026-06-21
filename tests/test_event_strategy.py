@@ -231,6 +231,35 @@ def test_exit_trailing_stop():
     assert orders and "trailing" in orders[0].reason and not book.is_open("FOO")
 
 
+def test_exit_breakeven_after_pop_then_fade():
+    # Ran to +6% (peak 1.06), now faded back to entry -> bank ~flat instead of riding
+    # down to the -8% hard stop. This is the gap the trailing stop (gated on price>entry)
+    # cannot cover.
+    book = _book_with(entry=1.0, peak=1.06)
+    orders = edam.decide_exits(book, {"FOO": 1.00}, {}, _state(holdings={"FOO": 10.0}),
+                               breakeven_trigger=0.05, breakeven_buffer=0.005, now=1000.0)
+    assert orders and "breakeven" in orders[0].reason and not book.is_open("FOO")
+
+
+def test_breakeven_not_armed_without_a_real_pop():
+    # Only ever +3% (below the +5% trigger) then back to entry -> breakeven NOT armed,
+    # position is held (no other exit applies). Avoids whipsawing out on small noise.
+    book = _book_with(entry=1.0, peak=1.03)
+    orders = edam.decide_exits(book, {"FOO": 1.00}, {}, _state(holdings={"FOO": 10.0}),
+                               breakeven_trigger=0.05, breakeven_buffer=0.005, now=1000.0)
+    assert orders == [] and book.is_open("FOO")
+
+
+def test_breakeven_does_not_preempt_a_still_running_winner():
+    # Peaked +10% and still at +6% -> above entry+buffer, so breakeven does NOT fire;
+    # the trailing stop governs the ride instead.
+    book = _book_with(entry=1.0, peak=1.10)
+    orders = edam.decide_exits(book, {"FOO": 1.06}, {}, _state(holdings={"FOO": 10.6}),
+                               breakeven_trigger=0.05, breakeven_buffer=0.005,
+                               trailing_pct=0.5, now=1000.0)
+    assert orders == [] and book.is_open("FOO")
+
+
 def test_exit_breaker_flattens_all():
     book = _book_with()
     orders = edam.decide_exits(book, {"FOO": 1.0}, {},

@@ -118,6 +118,11 @@ class Settings(BaseModel):
     aegis_no_progress_min_gain: float = 0.02 # ...if it still hasn't risen at least this much
     aegis_volume_death_mult: float = 1.0     # exit in profit when 5m vol < this x baseline (inflow gone)
     aegis_volume_death_in_profit: bool = False  # redesign: let the trailing stop bank the ride, don't bail on a volume dip
+    # Breakeven stop: once a trade has run to +trigger, exit ~flat if it falls back to entry
+    # (+buffer for fees) instead of riding it down to the hard stop. Protects "popped then
+    # faded" trades — the gap the trailing stop (gated on price>entry) can't cover.
+    aegis_breakeven_trigger_pct: float = 0.05  # arm once peak gain reaches +5%
+    aegis_breakeven_buffer_pct: float = 0.005  # exit at entry +0.5% (covers the round-trip fee)
     # v2 sniper: breakout entry cap + cooldown + hourly regime cadence/staleness
     aegis_breakout_max_pct: float = 0.10     # entry: price rising but <= this (don't chase a blow-off)
     aegis_cooldown_seconds: int = 5400       # no re-entry into a token for 90 min after an exit
@@ -268,6 +273,8 @@ def get_settings() -> Settings:
         aegis_no_progress_min_gain=float(_get("AEGIS_NO_PROGRESS_MIN_GAIN", "0.02")),
         aegis_volume_death_mult=float(_get("AEGIS_VOLUME_DEATH_MULT", "1.0")),
         aegis_volume_death_in_profit=_get("AEGIS_VOLUME_DEATH_IN_PROFIT", "false").lower() in ("1", "true", "yes"),
+        aegis_breakeven_trigger_pct=float(_get("AEGIS_BREAKEVEN_TRIGGER_PCT", "0.05")),
+        aegis_breakeven_buffer_pct=float(_get("AEGIS_BREAKEVEN_BUFFER_PCT", "0.005")),
         aegis_breakout_max_pct=float(_get("AEGIS_BREAKOUT_MAX_PCT", "0.10")),
         aegis_cooldown_seconds=int(_get("AEGIS_COOLDOWN_SECONDS", "5400")),
         regime_update_seconds=int(_get("REGIME_UPDATE_SECONDS", "3600")),

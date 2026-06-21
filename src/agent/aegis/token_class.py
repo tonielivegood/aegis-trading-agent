@@ -53,12 +53,14 @@ PARAMS: dict[str, ClassParams] = {
                        hard_tp_mult=1.30, trailing_pct=0.07, hard_stop_pct=0.07,
                        no_progress_min=0),
     # MEME — the asymmetric tail (primary). Confirmed ignition: 4x sustained 5m volume
-    # AND price already **+6%** (up to +20%, so we still catch a fast starter). Memes wiggle
-    # ±3% on noise, so a +3% floor caught false starts that reverted (live: GUA/RAVE went red
-    # right after entry); +6% demands a more decisive move before committing. Then a TIGHT
-    # ride that locks fast and gives back little: 10% trail, cap **+80%**, −8% stop. (Wide
-    # 25%/+200% gave back too much on a meme that spikes then fades.) No time exit.
-    MEME: ClassParams(vol_mult=4.0, breakout_min=0.06, breakout_max=0.20,
+    # AND price already **+3%** (up to +20%, so we still catch a fast starter). The meme
+    # sleeve is a bounded-downside / huge-upside LOTTERY ($5, −8% stop vs +80% cap), so we
+    # optimise for SHOTS ON GOAL, not per-trade win-rate: a lower +3% floor takes more
+    # entries → more chances to catch the rare runner. The +6% floor (21/6) reduced shots
+    # and entered higher, capturing LESS of a real run. The "popped then faded" false starts
+    # it was meant to avoid are now handled by the BREAKEVEN stop (exit ~flat once a trade has
+    # run +5%), not by skipping entries. Ride: 10% trail, cap +80%, −8% stop. No time exit.
+    MEME: ClassParams(vol_mult=4.0, breakout_min=0.03, breakout_max=0.20,
                       hard_tp_mult=1.80, trailing_pct=0.10, hard_stop_pct=0.08,
                       no_progress_min=0),
 }

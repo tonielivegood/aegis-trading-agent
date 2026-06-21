@@ -178,6 +178,7 @@ def decide_exits(book: PositionBook, prices: dict[str, float],
                  no_progress_min: int | None = None, no_progress_gain: float | None = None,
                  volume_death_mult: float | None = None,
                  volume_death_in_profit: bool | None = None,
+                 breakeven_trigger: float | None = None, breakeven_buffer: float | None = None,
                  class_aware: bool = False) -> list[TradeOrder]:
     hard_tp_mult = settings.hard_take_profit_multiple if hard_tp_mult is None else hard_tp_mult
     hard_stop_pct = settings.aegis_hard_stop_pct if hard_stop_pct is None else hard_stop_pct
@@ -191,6 +192,8 @@ def decide_exits(book: PositionBook, prices: dict[str, float],
     volume_death_mult = settings.aegis_volume_death_mult if volume_death_mult is None else volume_death_mult
     if volume_death_in_profit is None:
         volume_death_in_profit = settings.aegis_volume_death_in_profit
+    breakeven_trigger = settings.aegis_breakeven_trigger_pct if breakeven_trigger is None else breakeven_trigger
+    breakeven_buffer = settings.aegis_breakeven_buffer_pct if breakeven_buffer is None else breakeven_buffer
 
     breaker = state.drawdown_tripped or state.cap_breached
     orders: list[TradeOrder] = []
@@ -232,6 +235,18 @@ def decide_exits(book: PositionBook, prices: dict[str, float],
         # 2) Hard stop-loss.
         if gain <= -stop_p:
             orders.append(_sell_full(symbol, held_usd, f"aegis exit: hard stop {gain*100:.1f}%"))
+            book.close(symbol)
+            continue
+        # 2b) Breakeven stop: once a trade has RUN to +breakeven_trigger, never let it
+        #     round-trip into a loss. If it falls back to ~entry (+buffer for fees), bank
+        #     it flat instead of waiting for the −stop. This closes the real gap: the
+        #     trailing stop below is gated on price>entry, so a "+5% pop then fade through
+        #     entry" was caught only by the −8% hard stop. Buffer locks a hair above net 0.
+        peak_gain = (p.peak_price - p.entry_price) / p.entry_price if p.entry_price > 0 else 0.0
+        if (breakeven_trigger > 0 and peak_gain >= breakeven_trigger
+                and price <= p.entry_price * (1 + breakeven_buffer)):
+            orders.append(_sell_full(symbol, held_usd,
+                                     f"aegis exit: breakeven ({peak_gain*100:.1f}% peak gave back)"))
             book.close(symbol)
             continue
         # 3) Max hold time.
