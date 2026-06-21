@@ -56,6 +56,7 @@ def test_live_swap_signs_and_sends_aggregator_calldata(mocker):
     oo.w3.eth.contract.return_value.functions.balanceOf.return_value.call.return_value = 10**30
     oo.w3.eth.get_transaction_count.return_value = 7
     oo.w3.eth.send_raw_transaction.return_value = b"\xab\xcd"
+    oo.w3.eth.wait_for_transaction_receipt.return_value.status = 1   # mined OK
     mocker.patch("src.agent.execution.openocean.requests.get", return_value=_resp(mocker, {
         "to": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64", "data": "0xdead",
         "value": "0", "estimatedGas": "250000", "outAmount": "9999"}))

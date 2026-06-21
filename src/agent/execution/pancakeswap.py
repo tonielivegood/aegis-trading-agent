@@ -180,8 +180,11 @@ class PancakeSwap:
         self._approve(token_in, q.amount_in_wei)
         tx = self._build_swap_tx(q)
         tx_hash = self._sign_and_send(tx)
-        self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
         hash_str = _to_hex(tx_hash)
+        if getattr(receipt, "status", 1) != 1:   # mined but reverted → treat as failure
+            log.warning("swap_reverted", token_in=token_in, token_out=token_out, tx_hash=hash_str)
+            raise RuntimeError(f"PancakeSwap swap reverted on-chain (status 0): {hash_str}")
         log.info("swap_sent", token_in=token_in, token_out=token_out, tx_hash=hash_str)
         return SwapResult(q.token_in, q.token_out, q.amount_in_wei,
                           q.expected_out_wei, q.min_out_wei, simulated=False, tx_hash=hash_str)
@@ -205,7 +208,9 @@ class PancakeSwap:
             "chainId": settings.bsc_chain_id,
         })
         tx_hash = self._sign_and_send(tx)
-        self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+        if getattr(receipt, "status", 1) != 1:
+            raise RuntimeError(f"token approval reverted for {token_in}")
 
     def _build_swap_tx(self, q: Quote) -> dict:
         deadline = tx_builder.swap_deadline(int(time.time()), seconds=120)

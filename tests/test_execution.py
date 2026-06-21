@@ -204,6 +204,7 @@ def test_live_swap_uses_exact_approval_and_minout(mocker):
     approve = mocker.patch.object(ps, "_approve")
     mocker.patch.object(ps, "_build_swap_tx", return_value={})
     send = mocker.patch.object(ps, "_sign_and_send", return_value="0xhash")
+    ps.w3.eth.wait_for_transaction_receipt.return_value.status = 1   # mined OK
 
     amount_in_wei = tx_builder.to_wei_amount(1.0, token_list.get_token("CAKE").decimals)
     result = ps.swap("CAKE", "USDT", 1.0)

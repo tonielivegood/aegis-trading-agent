@@ -126,8 +126,12 @@ class OpenOcean:
             "chainId": settings.bsc_chain_id,
         }
         tx_hash = self._sign_and_send(tx)
-        self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
         hash_str = _to_hex(tx_hash)
+        if getattr(receipt, "status", 1) != 1:   # mined but reverted → treat as failure
+            log.warning("swap_reverted", backend="openocean", token_in=token_in,
+                        token_out=token_out, tx_hash=hash_str)
+            raise RuntimeError(f"OpenOcean swap reverted on-chain (status 0): {hash_str}")
         log.info("swap_sent", backend="openocean", token_in=token_in,
                  token_out=token_out, tx_hash=hash_str)
         return SwapResult(token_in, token_out, amount_in_wei, out_wei, 0,
@@ -143,7 +147,9 @@ class OpenOcean:
             "nonce": self.w3.eth.get_transaction_count(self.account.address, "pending"),
             "gas": 80_000, "gasPrice": int(self.w3.eth.gas_price * 1.2),
             "chainId": settings.bsc_chain_id})
-        self.w3.eth.wait_for_transaction_receipt(self._sign_and_send(tx), timeout=180)
+        receipt = self.w3.eth.wait_for_transaction_receipt(self._sign_and_send(tx), timeout=180)
+        if getattr(receipt, "status", 1) != 1:
+            raise RuntimeError(f"token approval reverted for {token_in}")
 
     def _sign_and_send(self, tx: dict):
         signed = self.account.sign_transaction(tx)

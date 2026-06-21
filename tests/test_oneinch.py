@@ -56,6 +56,7 @@ def test_live_swap_signs_1inch_calldata(mocker):
     oi.w3.eth.contract.return_value.functions.balanceOf.return_value.call.return_value = 10**30
     oi.w3.eth.get_transaction_count.return_value = 3
     oi.w3.eth.send_raw_transaction.return_value = b"\xab\xcd"
+    oi.w3.eth.wait_for_transaction_receipt.return_value.status = 1   # mined OK
     mocker.patch("src.agent.execution.oneinch.requests.get", return_value=_resp(mocker, {
         "dstAmount": "9999",
         "tx": {"to": "0x111111125421cA6dc452d289314280a0f8842A65", "data": "0xbeef", "value": "0"}}))
@@ -65,3 +66,24 @@ def test_live_swap_signs_1inch_calldata(mocker):
     sent = acct.sign_transaction.call_args[0][0]
     assert sent["data"] == "0xbeef"
     assert sent["to"].lower().endswith("8842a65")          # 1inch AggregationRouterV6
+
+
+def test_live_swap_raises_on_reverted_receipt(mocker):
+    # A mined-but-reverted tx (status 0) must raise, so the tick never counts it.
+    acct = mocker.Mock()
+    acct.address = "0x0000000000000000000000000000000000000001"
+    signed = mocker.Mock()
+    signed.raw_transaction = b"raw"
+    acct.sign_transaction.return_value = signed
+    oi = _oi(mocker, dry_run=False, account=acct)
+    oi.w3.eth.contract.return_value.functions.allowance.return_value.call.return_value = 10**30
+    oi.w3.eth.contract.return_value.functions.balanceOf.return_value.call.return_value = 10**30
+    oi.w3.eth.get_transaction_count.return_value = 3
+    oi.w3.eth.send_raw_transaction.return_value = b"\xab\xcd"
+    oi.w3.eth.wait_for_transaction_receipt.return_value.status = 0   # REVERTED
+    mocker.patch("src.agent.execution.oneinch.requests.get", return_value=_resp(mocker, {
+        "dstAmount": "9999",
+        "tx": {"to": "0x111111125421cA6dc452d289314280a0f8842A65", "data": "0xbeef", "value": "0"}}))
+
+    with pytest.raises(RuntimeError, match="reverted"):
+        oi.swap("USDT", "ETH", 12.0)
