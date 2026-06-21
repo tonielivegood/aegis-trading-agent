@@ -132,6 +132,27 @@
   </div>
 
   <div class="card" style="margin-bottom:13px;">
+    <div class="row between" style="margin-bottom:9px;">
+      <h2 style="margin:0;">Barbell — adaptive allocation</h2>
+      <span id="barbellRegime" class="tag">—</span>
+    </div>
+    <div class="sub" style="margin-bottom:13px;">The agent flexes with the market regime (BTC · Fear&amp;Greed · Claude) — it does <b>not</b> bet a direction. Risk-on deploys the momentum core; a downturn steps it to cash.</div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:11px;">
+      <div class="partner">
+        <div class="row between"><div class="nm blue">Beta core · majors</div><span id="betaCount" class="tag">—</span></div>
+        <div class="sub">Strongest-momentum majors, held &amp; trailed — steady up-trend capture.</div>
+        <div id="betaList" class="row" style="gap:6px;margin-top:9px;"></div>
+      </div>
+      <div class="partner">
+        <div class="row between"><div class="nm" style="color:var(--purple);">Meme lottery</div><span id="memeCount" class="tag">—</span></div>
+        <div class="sub">Small fixed tickets — bounded loss, asymmetric upside tail.</div>
+        <div id="memeList" class="row" style="gap:6px;margin-top:9px;"></div>
+      </div>
+    </div>
+    <div id="barbellAlloc" class="foot" style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px;"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:13px;">
     <h2>CMC AI Agent Hub · #CMCAgentHub</h2>
     <div class="sub" style="margin-bottom:7px;">Market Fear &amp; Greed — tightens the regime in a panic (never loosens)</div>
     <div class="fgbar"><div style="flex:20;background:#c14b45;"></div><div style="flex:5;background:#c4892a;"></div><div style="flex:25;background:#4a5568;"></div><div style="flex:25;background:#3a8c4e;"></div><div style="flex:25;background:#2ea043;"></div></div>
@@ -169,8 +190,8 @@
       <h2>Strategy — confirmed move, then ride</h2>
       <div style="font-size:13.5px;line-height:1.7;">Cash by default. A position opens only on a real volume surge <b>confirmed by price</b> on 5-minute candles — never a single noisy candle.</div>
       <div style="margin-top:11px;display:flex;flex-direction:column;gap:8px;">
-        <div class="row" style="gap:9px;"><span class="tag" style="color:var(--blue);">major</span><span class="sub">deep liquidity · active, tight ride</span></div>
-        <div class="row" style="gap:9px;"><span class="tag" style="color:var(--blue);">meme</span><span class="sub">thin · rare, wide ride for the asymmetric tail</span></div>
+        <div class="row" style="gap:9px;"><span class="tag" style="color:var(--blue);">major</span><span class="sub">beta core · momentum-leader basket, held &amp; trailed</span></div>
+        <div class="row" style="gap:9px;"><span class="tag" style="color:var(--purple);">meme</span><span class="sub">lottery · small tickets for the asymmetric tail</span></div>
       </div>
       <div class="foot" style="margin-top:11px;">Exits by take-profit, trailing stop, or hard stop — no time-based exit. A regime valve sizes positions and caps deployment.</div>
     </div>
@@ -199,7 +220,7 @@
     <div class="row between" style="flex-wrap:wrap;gap:10px;">
       <div><div class="label">Tradable universe</div><div class="mono" id="sUniverse" style="font-size:15px;font-weight:600;">—</div></div>
       <div><div class="label">Compliance (≥1/day · 7/wk)</div><div class="mono" id="sCompliance" style="font-size:15px;font-weight:600;">—</div></div>
-      <div><div class="label">Test suite</div><div class="mono" style="font-size:15px;font-weight:600;">405 passing · TDD</div></div>
+      <div><div class="label">Test suite</div><div class="mono" style="font-size:15px;font-weight:600;">442 passing · TDD</div></div>
       <div><div class="label">Agent wallet</div><div class="mono" id="sWallet" style="font-size:13px;">—</div></div>
       <div><div class="label">On-chain proof</div><div style="font-size:13px;"><a id="proofTx" href="https://bscscan.com/tx/0x2727f6d5337a60c1ec2991258fa36c8deaf2652c908743dd29cf3186b11e7d6c">USDT→ETH via 1inch ↗</a></div></div>
     </div>
@@ -269,6 +290,16 @@ function render(d){
     ? '<table><tr><th>Token</th><th>Tier</th><th class="right">Size</th><th class="right">P&amp;L</th></tr>'+
       pos.map(p=>'<tr><td>'+p.symbol+'</td><td class="muted">'+p.class+'</td><td class="right mono">$'+Number(p.usd_size).toFixed(2)+'</td><td class="right mono '+(p.gain_pct>=0?'green':'red')+'">'+pct(p.gain_pct)+'</td></tr>').join('')+'</table>'
     : '<div class="sub">In cash — waiting for a confirmed move. No noise trades.</div>';
+
+  // Barbell — adaptive allocation (derived from regime + held positions; no thresholds leaked)
+  const flag=((d.regime&&d.regime.flag)||'').toLowerCase();
+  el('barbellRegime').textContent={risk_on:'RISK-ON · full deploy',cautious:'CAUTIOUS · light deploy',risk_off:'RISK-OFF · cash'}[flag]||'—';
+  const majors=pos.filter(p=>p.class==='major'), memes=pos.filter(p=>p.class!=='major');
+  el('betaCount').textContent=majors.length+' held';
+  el('memeCount').textContent=memes.length+' held';
+  const chips=a=>a.length?a.map(p=>'<span class="chip" style="color:'+(p.gain_pct>=0?'var(--green)':'var(--red)')+';">'+p.symbol+' '+pct(p.gain_pct)+'</span>').join(''):'<span class="sub">— in cash —</span>';
+  el('betaList').innerHTML=chips(majors); el('memeList').innerHTML=chips(memes);
+  el('barbellAlloc').textContent={risk_on:'Regime risk-on → beta core runs its full momentum basket + the meme lottery is active.',cautious:'Regime cautious → beta core holds a light single-leader basket; meme lottery trimmed to one ticket.',risk_off:'Regime risk-off → new entries halted; holdings step to cash.'}[flag]||'Awaiting the hourly regime read…';
 
   const tx=d.recent_trades||[];
   el('trades').innerHTML=tx.length
