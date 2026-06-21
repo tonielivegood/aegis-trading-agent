@@ -33,6 +33,9 @@ def test_params_both_ride_no_time_exit():
     assert maj.hard_tp_mult == 1.30 and maj.trailing_pct == 0.07 and maj.hard_stop_pct == 0.07
     # MAJOR fires EASIER than meme now (lower bar): cheaper to trade, catch major days.
     assert maj.vol_mult < meme.vol_mult
+    # MEME needs a STRONGER price confirmation than major: it wiggles ±3% on noise, so a
+    # +3% floor caught false starts. Major +3% is a real move; meme requires +6%.
+    assert maj.breakout_min == 0.03 and meme.breakout_min == 0.06
     assert tc.params("unknown").hard_tp_mult == 3.0            # unknown → meme default
 
 
