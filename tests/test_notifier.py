@@ -15,7 +15,7 @@ def test_disabled_when_no_token(mocker):
     mocker.patch.object(notifier.settings, "telegram_chat_id", "")
     assert notifier.is_enabled() is False
     # send is a safe no-op when disabled
-    spy = mocker.patch("src.agent.monitor.notifier.urllib.request.urlopen")
+    spy = mocker.patch("src.agent.monitor.notifier.requests.post")
     assert notifier.send("hello") is False
     spy.assert_not_called()
 
@@ -24,15 +24,15 @@ def test_send_success(mocker):
     mocker.patch.object(notifier.settings, "telegram_bot_token", "tok")
     mocker.patch.object(notifier.settings, "telegram_chat_id", "123")
     resp = mocker.Mock()
-    resp.status = 200
-    mocker.patch("src.agent.monitor.notifier.urllib.request.urlopen", return_value=resp)
+    resp.status_code = 200
+    mocker.patch("src.agent.monitor.notifier.requests.post", return_value=resp)
     assert notifier.send("hello") is True
 
 
 def test_send_failure_never_raises(mocker):
     mocker.patch.object(notifier.settings, "telegram_bot_token", "tok")
     mocker.patch.object(notifier.settings, "telegram_chat_id", "123")
-    mocker.patch("src.agent.monitor.notifier.urllib.request.urlopen",
+    mocker.patch("src.agent.monitor.notifier.requests.post",
                  side_effect=OSError("network down"))
     # must swallow the error and report failure, not raise
     assert notifier.send("hello") is False

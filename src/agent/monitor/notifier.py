@@ -9,8 +9,7 @@ SEND — we never read/act on Telegram messages, so it is not an injection surfa
 """
 from __future__ import annotations
 
-import json
-import urllib.request
+import requests
 
 from ..config import settings
 from .logger import get_logger
@@ -29,12 +28,14 @@ def send(text: str) -> bool:
         return False
     try:
         url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
-        data = json.dumps({"chat_id": settings.telegram_chat_id, "text": text}).encode()
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        resp = urllib.request.urlopen(req, timeout=10)
-        return getattr(resp, "status", 200) == 200
-    except Exception:  # noqa: BLE001 — alerts are best-effort; never break the agent
-        log.warning("telegram_send_failed")
+        # Use requests (not urllib): urllib's TLS handshake to api.telegram.org times
+        # out on the VPS, while requests connects fine. Alerts are the live monitoring
+        # channel, so this must actually deliver.
+        resp = requests.post(url, json={"chat_id": settings.telegram_chat_id, "text": text},
+                             timeout=10)
+        return resp.status_code == 200
+    except Exception as e:  # noqa: BLE001 — alerts are best-effort; never break the agent
+        log.warning("telegram_send_failed", error=type(e).__name__)
         return False
 
 
