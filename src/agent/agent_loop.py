@@ -443,10 +443,11 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
         # (BTC + F&G + Claude) instead of betting a market direction.
         beta_max = (settings.beta_core_max_names if flag == rg.Regime.RISK_ON
                     else 1 if flag == rg.Regime.CAUTIOUS else 0)
-        # Reserve only what the meme sleeve can actually deploy THIS regime (its slot
-        # count × the fixed meme size) — not a rigid flat sum. At small NAV a flat reserve
-        # starved beta in CAUTIOUS (which only runs 1 meme slot); this scales with the regime.
-        meme_reserve = settings.meme_order_usd * rg.params(flag).max_slots
+        # Reserve ONE meme ticket whenever memes can trade this regime (0 in RISK_OFF). At
+        # ~$33 NAV, reserving 2 tickets ($10) starved beta below 2 names; reserving 1 ($5)
+        # lets beta hold 2 majors while memes still get at least one lottery shot (a 2nd meme
+        # is opportunistic from cash left after beta). Scales naturally as equity grows.
+        meme_reserve = settings.meme_order_usd if rg.params(flag).max_slots > 0 else 0.0
         beta_orders, beta_mode = bc.decide_beta(
             state, prices, _beta_momentum(symbols), book=book, regime_flag=flag, now=now_ts,
             max_names=beta_max,

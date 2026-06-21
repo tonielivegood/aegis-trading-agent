@@ -127,14 +127,17 @@ class Settings(BaseModel):
     # --- Beta core (barbell Phase-2): regime-gated momentum-major basket. OFF by default;
     # flip on mid-week after the DRY soak (scripts/beta_diag.py) validates selection. ---
     beta_core_enabled: bool = False          # master switch (live tick wiring is gated on this)
-    beta_core_max_names: int = 3             # basket size (3 × 20% = 60% deploy, 30% DQ cushion)
+    beta_core_max_names: int = 2             # RISK_ON basket size. 2 (not 3): at ~$33 NAV a 3rd name
+                                             # can't clear floor+reserve (3×20% + $6 + $5 > stable). 2×20%
+                                             # = 40% deploy fits + leaves room for a meme. Bump to 3 once equity > ~$45.
     beta_core_position_pct: float = 0.20     # per-name size as a fraction of NAV
-    beta_core_min_momentum: float = 2.0      # min blended (1h+24h) momentum %, only buy real leaders
+    beta_core_min_momentum: float = 4.0      # min blended (1h+24h) momentum %. 4 (not 2): +2% is noise —
+                                             # buying it then trailing at 6% = whipsaw. 4% = only real leaders.
     beta_core_mom_w1h: float = 0.5           # weight on 1h vs 1.0 on 24h in the momentum blend
     beta_core_trail_pct: float = 0.06        # trailing stop — tight, banks major moves (+10-30%) hard;
                                              # majors are less explosive than memes so trail < meme's 10%.
                                              # Watch for whipsaw (majors swing 5-10%/day) → widen if it churns.
-    beta_core_hard_stop_pct: float = 0.10    # hard per-name stop
+    beta_core_hard_stop_pct: float = 0.08    # hard per-name stop — paired with the 6% trail (symmetric, DQ-safe)
     beta_core_exit_rank_mult: int = 2        # keep a held name while it's in the top (max_names×this)
     # (the meme cash reserve is computed dynamically = meme_order_usd × the regime's meme slots)
     # v2 sniper: breakout entry cap + cooldown + hourly regime cadence/staleness
@@ -291,12 +294,12 @@ def get_settings() -> Settings:
         aegis_breakeven_trigger_pct=float(_get("AEGIS_BREAKEVEN_TRIGGER_PCT", "0.05")),
         aegis_breakeven_buffer_pct=float(_get("AEGIS_BREAKEVEN_BUFFER_PCT", "0.005")),
         beta_core_enabled=_get_bool("BETA_CORE_ENABLED", "false"),
-        beta_core_max_names=int(_get("BETA_CORE_MAX_NAMES", "3")),
+        beta_core_max_names=int(_get("BETA_CORE_MAX_NAMES", "2")),
         beta_core_position_pct=float(_get("BETA_CORE_POSITION_PCT", "0.20")),
-        beta_core_min_momentum=float(_get("BETA_CORE_MIN_MOMENTUM", "2.0")),
+        beta_core_min_momentum=float(_get("BETA_CORE_MIN_MOMENTUM", "4.0")),
         beta_core_mom_w1h=float(_get("BETA_CORE_MOM_W1H", "0.5")),
         beta_core_trail_pct=float(_get("BETA_CORE_TRAIL_PCT", "0.12")),
-        beta_core_hard_stop_pct=float(_get("BETA_CORE_HARD_STOP_PCT", "0.10")),
+        beta_core_hard_stop_pct=float(_get("BETA_CORE_HARD_STOP_PCT", "0.08")),
         beta_core_exit_rank_mult=int(_get("BETA_CORE_EXIT_RANK_MULT", "2")),
         aegis_breakout_max_pct=float(_get("AEGIS_BREAKOUT_MAX_PCT", "0.10")),
         aegis_cooldown_seconds=int(_get("AEGIS_COOLDOWN_SECONDS", "5400")),
