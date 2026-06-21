@@ -6,108 +6,144 @@
 <title>Aegis — Live Trading Agent · BNB Hack Track 1</title>
 <style>
   :root{
-    --bg:#0d1117; --surface:#161b22; --surface2:#1c2230; --border:#30363d;
-    --text:#e6edf3; --muted:#8b949e; --green:#3fb950; --red:#f85149;
-    --amber:#d29922; --blue:#58a6ff; --radius:12px;
+    --bg:#0a0e14; --surface:#141a23; --surface2:#1b2330; --line:#283143;
+    --text:#eaf0f7; --muted:#8a97a8; --dim:#5d6a7d;
+    --green:#46d27e; --red:#ff5f56; --amber:#e3b341; --blue:#5aa9ff; --purple:#a78bfa;
+    --r:14px;
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#10182400,#0a0e14),var(--bg);
+    color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     line-height:1.5;-webkit-font-smoothing:antialiased;}
-  .wrap{max-width:920px;margin:0 auto;padding:24px 18px 56px;}
-  a{color:var(--blue);text-decoration:none;}
+  .wrap{max-width:1000px;margin:0 auto;padding:26px 18px 64px;}
+  a{color:var(--blue);text-decoration:none;} a:hover{text-decoration:underline;}
   .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
   .between{justify-content:space-between;}
-  .muted{color:var(--muted);}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
-  .grid{display:grid;gap:12px;}
-  h1{font-size:20px;font-weight:600;margin:0;}
-  h2{font-size:14px;font-weight:600;margin:0 0 12px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);}
+  .muted{color:var(--muted);} .mono{font-variant-numeric:tabular-nums;}
+  .green{color:var(--green);} .red{color:var(--red);} .amber{color:var(--amber);} .blue{color:var(--blue);}
+  .card{background:linear-gradient(180deg,#161d28,#131922);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;}
+  .grid{display:grid;gap:13px;}
+  h1{font-size:21px;font-weight:650;margin:0;letter-spacing:-.01em;}
+  h2{font-size:12px;font-weight:600;margin:0 0 13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
   .sub{font-size:13px;color:var(--muted);}
-  .pill{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:8px;font-size:13px;font-weight:600;}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:9px;font-size:13px;font-weight:600;border:1px solid var(--line);}
   .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
-  .metric .label{font-size:12px;color:var(--muted);}
-  .metric .val{font-size:26px;font-weight:600;line-height:1.15;}
-  .chip{font-size:13px;font-weight:600;background:var(--surface2);border:1px solid var(--border);
-    padding:4px 11px;border-radius:8px;color:var(--blue);}
-  .fgbar{display:flex;height:14px;border-radius:7px;overflow:hidden;}
-  .fgmark{position:relative;height:18px;}
-  .fgneedle{position:absolute;top:-2px;transform:translateX(-50%);transition:left 1s ease;font-size:13px;}
+  .label{font-size:11.5px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;}
+  .val{font-size:27px;font-weight:650;line-height:1.1;letter-spacing:-.02em;}
+  .chip{font-size:12.5px;font-weight:600;background:var(--surface2);border:1px solid var(--line);padding:4px 11px;border-radius:8px;color:var(--blue);}
+  .tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--surface2);color:var(--muted);}
+  .fgbar{display:flex;height:13px;border-radius:7px;overflow:hidden;}
+  .fgmark{position:relative;height:16px;}
+  .fgneedle{position:absolute;top:-3px;transform:translateX(-50%);transition:left 1s ease;font-size:12px;color:var(--text);}
   table{width:100%;border-collapse:collapse;font-size:14px;}
-  td,th{padding:7px 0;text-align:left;}
-  th{font-size:12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);}
-  tr+tr td{border-top:1px solid var(--border);}
+  td,th{padding:8px 0;text-align:left;}
+  th{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--line);}
+  tr+tr td{border-top:1px solid #1e2735;}
   .right{text-align:right;}
-  .green{color:var(--green);} .red{color:var(--red);} .amber{color:var(--amber);}
-  .mono{font-variant-numeric:tabular-nums;}
-  .stale{background:#3d2a12;border-color:#5c3d12;color:var(--amber);}
-  .foot{font-size:12px;color:var(--muted);margin-top:8px;}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-  .live .dot{animation:pulse 1.4s infinite;}
+  .bar{height:7px;background:#222c3c;border-radius:4px;overflow:hidden;}
+  .bar>span{display:block;height:100%;border-radius:4px;background:var(--blue);transition:width .8s ease;}
+  .ok{color:var(--green);} .ico{color:var(--green);font-weight:700;}
+  .foot{font-size:12px;color:var(--muted);}
+  .stale{background:#2a1f0d;border-color:#5c4112;color:var(--amber);}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .live .dot{animation:pulse 1.5s infinite;}
+  .partner{flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:13px 15px;}
+  .partner .nm{font-weight:600;font-size:14px;margin-bottom:3px;}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="row between" style="margin-bottom:18px;">
+  <div class="row between" style="margin-bottom:20px;">
     <div class="row">
-      <div style="width:40px;height:40px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--blue);">A</div>
+      <div style="width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,#1f6feb,#a78bfa);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;color:#fff;">A</div>
       <div>
-        <h1>Aegis <span class="sub" style="font-weight:400;">· self-custody trading agent</span></h1>
+        <h1>Aegis <span class="sub" style="font-weight:400;">· self-custody AI trading agent</span></h1>
         <div class="sub">BNB Hack 2026 · Track 1 · CoinMarketCap × Trust Wallet × BNB Chain</div>
       </div>
     </div>
-    <div id="statusPill" class="pill" style="background:var(--surface2);"><span class="dot" style="background:var(--muted);"></span><span id="modeText">connecting…</span></div>
+    <div id="statusPill" class="pill"><span class="dot" style="background:var(--muted);"></span><span id="modeText">connecting…</span></div>
   </div>
 
-  <div id="freshWarn" class="card stale" style="display:none;margin-bottom:12px;font-size:13px;">
+  <div id="freshWarn" class="card stale" style="display:none;margin-bottom:13px;font-size:13px;">
     Snapshot is stale — the agent may be between ticks or paused. Showing last known state.
   </div>
 
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px;">
-    <div class="card metric"><div class="label">Equity (NAV)</div><div class="val mono" id="mEquity">—</div></div>
-    <div class="card metric"><div class="label">Return</div><div class="val mono" id="mReturn">—</div></div>
-    <div class="card metric"><div class="label">Drawdown</div><div class="val mono" id="mDD">—</div></div>
-    <div class="card metric"><div class="label">Regime</div><div class="val" id="mRegime" style="font-size:22px;">—</div></div>
+  <div class="grid" style="grid-template-columns:1.4fr 1fr 1fr 1fr;margin-bottom:13px;" id="metrics">
+    <div class="card">
+      <div class="label">Equity (NAV)</div>
+      <div class="row between" style="align-items:flex-end;gap:8px;">
+        <div class="val mono" id="mEquity">—</div>
+        <svg id="spark" width="120" height="34" viewBox="0 0 120 34" preserveAspectRatio="none" style="overflow:visible;"></svg>
+      </div>
+    </div>
+    <div class="card"><div class="label">Return</div><div class="val mono" id="mReturn">—</div></div>
+    <div class="card"><div class="label">Drawdown</div><div class="val mono" id="mDD">—</div></div>
+    <div class="card"><div class="label">Regime</div><div class="val" id="mRegime" style="font-size:23px;">—</div></div>
   </div>
 
-  <div class="card" style="margin-bottom:12px;">
+  <div class="card" style="margin-bottom:13px;">
     <h2>CMC AI Agent Hub · #CMCAgentHub</h2>
-    <div class="sub" style="margin-bottom:6px;">Market Fear &amp; Greed — tightens the regime in a panic</div>
-    <div class="fgbar"><div style="flex:20;background:#b03a36;"></div><div style="flex:5;background:#c4892a;"></div><div style="flex:25;background:#6e7681;"></div><div style="flex:25;background:#3a8c4e;"></div><div style="flex:25;background:#2ea043;"></div></div>
+    <div class="sub" style="margin-bottom:7px;">Market Fear &amp; Greed — tightens the regime in a panic (never loosens)</div>
+    <div class="fgbar"><div style="flex:20;background:#c14b45;"></div><div style="flex:5;background:#c4892a;"></div><div style="flex:25;background:#4a5568;"></div><div style="flex:25;background:#3a8c4e;"></div><div style="flex:25;background:#2ea043;"></div></div>
     <div class="fgmark"><span class="fgneedle" id="fgNeedle" style="left:0%;">▲</span></div>
-    <div class="row between" style="margin:2px 0 14px;"><span class="sub">extreme fear</span><span id="fgText" class="mono" style="font-weight:600;">—</span><span class="sub">extreme greed</span></div>
-    <div class="sub" style="margin-bottom:7px;">Community trending — biases token selection</div>
+    <div class="row between" style="margin:2px 0 16px;"><span class="sub">extreme fear</span><span id="fgText" class="mono" style="font-weight:600;font-size:15px;">—</span><span class="sub">extreme greed</span></div>
+    <div class="sub" style="margin-bottom:8px;">Community trending — biases token selection (1.5× rank boost)</div>
     <div class="row" id="trending"></div>
   </div>
 
-  <div class="card" style="margin-bottom:12px;">
-    <h2>Positions</h2>
-    <div id="positions"></div>
+  <div class="card" style="margin-bottom:13px;">
+    <div class="row between" style="margin-bottom:11px;">
+      <h2 style="margin:0;">Live signal scan</h2>
+      <span id="scanSummary" class="tag">—</span>
+    </div>
+    <div id="scan"></div>
+    <div class="foot" style="margin-top:11px;border-top:1px solid var(--line);padding-top:10px;">
+      High volume alone is noise. A token enters only when a volume surge meets a <b>confirmed +3% move</b> — so a high-volume but flat token is watched, not bought. This is the discipline that stops churn.
+    </div>
   </div>
 
-  <div class="card" style="margin-bottom:12px;">
-    <h2>Recent activity</h2>
-    <div id="trades"></div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:13px;" id="twoCol">
+    <div class="card"><h2>Open positions</h2><div id="positions"></div></div>
+    <div class="card"><h2>Recent activity</h2><div id="trades"></div></div>
   </div>
 
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-bottom:12px;">
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:13px;">
     <div class="card">
       <h2>Strategy — confirmed move, then ride</h2>
       <table>
         <tr><th>Tier</th><th class="right">Enter</th><th class="right">Ride</th><th class="right">Stop</th></tr>
-        <tr><td>Major</td><td class="right">2.5× vol · +3%</td><td class="right green">+30% · 7% trail</td><td class="right red">−7%</td></tr>
-        <tr><td>Meme</td><td class="right">4× vol · +3%</td><td class="right green">+200% · 25% trail</td><td class="right red">−12%</td></tr>
+        <tr><td>Major</td><td class="right mono">2.5× · +3%</td><td class="right mono green">+30% · 7%</td><td class="right mono red">−7%</td></tr>
+        <tr><td>Meme</td><td class="right mono">4× · +3%</td><td class="right mono green">+200% · 25%</td><td class="right mono red">−12%</td></tr>
       </table>
-      <div class="foot">5-minute volume candles · exits on TP / stop / trailing only — no time-based exit.</div>
+      <div class="foot" style="margin-top:9px;">5-minute volume candles · exits on take-profit / stop / trailing only — no time-based exit.</div>
     </div>
     <div class="card">
-      <h2>Safety</h2>
+      <h2>Risk engine</h2>
       <table>
-        <tr><td class="muted">Drawdown breaker</td><td class="right" id="sBreaker">—</td></tr>
-        <tr><td class="muted">Custody</td><td class="right">self-signed, local</td></tr>
-        <tr><td class="muted">Execution</td><td class="right mono" id="sBackend">—</td></tr>
-        <tr><td class="muted">Universe</td><td class="right" id="sUniverse">—</td></tr>
+        <tr><td><span class="ico">✓</span> Drawdown breaker</td><td class="right mono" id="sBreaker">—</td></tr>
+        <tr><td><span class="ico">✓</span> Debounce</td><td class="right">3-tick latch (anti-glitch)</td></tr>
+        <tr><td><span class="ico">✓</span> NAV from on-chain truth</td><td class="right">+ last-known-good price</td></tr>
+        <tr><td><span class="ico">✓</span> Kill-switch</td><td class="right">flatten to USDT</td></tr>
+        <tr><td><span class="ico">✓</span> Gas guard · exact approval</td><td class="right">no stuck exits</td></tr>
       </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:13px;">
+    <h2>Built on all three partners</h2>
+    <div class="row" style="align-items:stretch;gap:11px;">
+      <div class="partner"><div class="nm blue">CoinMarketCap</div><div class="sub">Pricing (by-id) + the <b>AI Agent Hub</b> (Fear &amp; Greed + trending) as the risk brain.</div></div>
+      <div class="partner"><div class="nm" style="color:#7dd3fc;">Trust Wallet</div><div class="sub">Working <b>TWAK</b> execution backend (<span class="mono">EXECUTION_BACKEND=twak</span>) on a dedicated wallet.</div></div>
+      <div class="partner"><div class="nm amber">BNB Chain</div><div class="sub">All execution on BSC via the <b>1inch</b> aggregator — calldata signed locally, gas guarded.</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:13px;">
+    <div class="row between" style="flex-wrap:wrap;gap:10px;">
+      <div><div class="label">Tradable universe</div><div class="mono" id="sUniverse" style="font-size:15px;font-weight:600;">—</div></div>
+      <div><div class="label">Test suite</div><div class="mono" style="font-size:15px;font-weight:600;">405 passing · TDD</div></div>
+      <div><div class="label">Agent wallet</div><div class="mono" id="sWallet" style="font-size:13px;">—</div></div>
+      <div><div class="label">On-chain proof</div><div style="font-size:13px;"><a id="proofTx" href="https://bscscan.com/tx/0x2727f6d5337a60c1ec2991258fa36c8deaf2652c908743dd29cf3186b11e7d6c">USDT→ETH via 1inch ↗</a></div></div>
     </div>
   </div>
 
@@ -119,56 +155,74 @@
 
 <script>
 function pct(x){return (x>0?'+':'')+Number(x).toFixed(2)+'%';}
-function fmtTime(iso){try{const d=new Date(iso);return d.toUTCString().replace('GMT','UTC');}catch(e){return iso;}}
 function el(id){return document.getElementById(id);}
+function fmtTime(iso){try{return new Date(iso).toUTCString().replace('GMT','UTC');}catch(e){return iso;}}
+
+function sparkline(hist){
+  const svg=el('spark'); if(!hist||hist.length<2){svg.innerHTML='';return;}
+  const w=120,h=34,mn=Math.min(...hist),mx=Math.max(...hist),rng=(mx-mn)||1;
+  const pts=hist.map((v,i)=>[i/(hist.length-1)*w, h-((v-mn)/rng)*(h-4)-2]);
+  const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const up=hist[hist.length-1]>=hist[0], col=up?'#46d27e':'#ff5f56';
+  svg.innerHTML='<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="1.6"/>'+
+    '<circle cx="'+pts[pts.length-1][0].toFixed(1)+'" cy="'+pts[pts.length-1][1].toFixed(1)+'" r="2.4" fill="'+col+'"/>';
+}
 
 function render(d){
-  const live = d.mode==='LIVE';
-  const pill = el('statusPill');
-  pill.className='pill'+(live?' live':'');
-  pill.style.background = live?'rgba(63,185,80,.15)':'var(--surface2)';
-  pill.querySelector('.dot').style.background = live?'var(--green)':'var(--amber)';
-  el('modeText').textContent = (d.mode||'—')+' · '+(d.backend||'')+' · tick 60s';
+  const live=d.mode==='LIVE';
+  const pill=el('statusPill'); pill.className='pill'+(live?' live':'');
+  pill.style.background=live?'rgba(70,210,126,.12)':'var(--surface2)';
+  pill.querySelector('.dot').style.background=live?'var(--green)':'var(--amber)';
+  el('modeText').textContent=(d.mode||'—')+' · '+(d.backend||'')+' · tick 60s';
 
-  el('mEquity').textContent = '$'+Number(d.equity).toFixed(2);
+  el('mEquity').textContent='$'+Number(d.equity).toFixed(2);
+  sparkline(d.equity_history);
   const r=el('mReturn'); r.textContent=pct(d.return_pct); r.className='val mono '+(d.return_pct>=0?'green':'red');
   const dd=el('mDD'); dd.textContent=Number(d.drawdown_pct).toFixed(2)+'%'; dd.className='val mono '+(d.drawdown_pct>=20?'red':d.drawdown_pct>=10?'amber':'');
-  el('mRegime').textContent = (d.regime&&d.regime.flag||'—').replace('_','-');
+  el('mRegime').textContent=((d.regime&&d.regime.flag)||'—').replace('_','-');
 
   const fg=d.agent_hub&&d.agent_hub.fear_greed;
   if(fg){el('fgText').innerHTML=fg.value+' · <span class="amber">'+(fg.classification||'')+'</span>';el('fgNeedle').style.left=Math.max(0,Math.min(100,fg.value))+'%';}
-  else{el('fgText').textContent='unavailable';}
-  const tr=d.agent_hub&&d.agent_hub.trending||[];
-  el('trending').innerHTML = tr.length?tr.map(t=>'<span class="chip">'+t+'</span>').join(''):'<span class="sub">none</span>';
+  else el('fgText').textContent='unavailable';
+  const tr=(d.agent_hub&&d.agent_hub.trending)||[];
+  el('trending').innerHTML=tr.length?tr.map(t=>'<span class="chip">'+t+'</span>').join(''):'<span class="sub">none</span>';
+
+  const scan=d.scan||[], maxv=Math.max(8,...scan.map(s=>s.vol_x));
+  el('scanSummary').textContent='watching '+(d.universe?d.universe.total:'—')+' · '+(d.scan_firing||0)+' firing';
+  el('scan').innerHTML=scan.length
+    ? '<table><tr><th>Token</th><th>Tier</th><th>Volume vs bar</th><th class="right">Vol</th><th class="right">Move</th><th class="right">Status</th></tr>'+
+      scan.map(s=>{const wd=Math.min(100,Math.round(s.vol_x/maxv*100));
+        const st=s.fires?'<span class="green">● enter</span>':'<span class="muted">watching</span>';
+        const mv=s.bo_pct>=3?'<span class="green">':'<span class="muted">';
+        return '<tr><td>'+s.symbol+'</td><td><span class="tag">'+s.class+'</span></td>'+
+          '<td style="width:30%;"><div class="bar"><span style="width:'+wd+'%;background:'+(s.fires?'var(--green)':'var(--blue)')+';"></span></div></td>'+
+          '<td class="right mono">'+s.vol_x.toFixed(1)+'×</td>'+
+          '<td class="right mono">'+mv+(s.bo_pct>0?'+':'')+s.bo_pct.toFixed(1)+'%</span></td>'+
+          '<td class="right">'+st+'</td></tr>';}).join('')+'</table>'
+    : '<div class="sub">Scanning…</div>';
 
   const pos=d.positions||[];
-  el('positions').innerHTML = pos.length
+  el('positions').innerHTML=pos.length
     ? '<table><tr><th>Token</th><th>Tier</th><th class="right">Size</th><th class="right">P&amp;L</th></tr>'+
       pos.map(p=>'<tr><td>'+p.symbol+'</td><td class="muted">'+p.class+'</td><td class="right mono">$'+Number(p.usd_size).toFixed(2)+'</td><td class="right mono '+(p.gain_pct>=0?'green':'red')+'">'+pct(p.gain_pct)+'</td></tr>').join('')+'</table>'
     : '<div class="sub">In cash — waiting for a confirmed move. No noise trades.</div>';
 
   const tx=d.recent_trades||[];
-  el('trades').innerHTML = tx.length
-    ? '<table><tr><th>Time</th><th>Swap</th><th class="right">USD</th><th class="right">Tx</th></tr>'+
-      tx.map(t=>{const link=t.tx?('<a href="https://bscscan.com/tx/'+t.tx+'">'+t.tx.slice(0,8)+'…</a>'):(t.simulated?'<span class="sub">dry</span>':'—');
+  el('trades').innerHTML=tx.length
+    ? '<table>'+tx.map(t=>{const link=t.tx?('<a href="https://bscscan.com/tx/'+t.tx+'">'+t.tx.slice(0,8)+'…</a>'):(t.simulated?'<span class="sub">dry</span>':'—');
         return '<tr><td class="sub mono">'+(t.time||'').slice(11,19)+'</td><td>'+t.token_in+' → '+t.token_out+'</td><td class="right mono">$'+Number(t.usd).toFixed(2)+'</td><td class="right mono">'+link+'</td></tr>';}).join('')+'</table>'
     : '<div class="sub">No trades yet.</div>';
 
-  if(d.breaker) el('sBreaker').textContent = '−'+d.breaker.alert_pct+'% / −'+d.breaker.cap_pct+'% DQ';
-  el('sBackend').textContent = d.backend||'—';
-  if(d.universe) el('sUniverse').textContent = d.universe.total+' ('+d.universe.majors+' major · '+d.universe.memes+' meme)';
+  if(d.breaker) el('sBreaker').textContent='−'+d.breaker.alert_pct+'% / −'+d.breaker.cap_pct+'% DQ';
+  if(d.universe) el('sUniverse').textContent=d.universe.total+' · '+d.universe.majors+' major · '+d.universe.memes+' meme';
+  if(d.wallet){el('sWallet').innerHTML='<a href="https://bscscan.com/address/'+d.wallet+'">'+d.wallet.slice(0,6)+'…'+d.wallet.slice(-4)+' ↗</a>';}
 
-  el('updated').textContent = 'Updated '+fmtTime(d.updated_at);
-  const ageMs = Date.now()-new Date(d.updated_at).getTime();
-  el('freshWarn').style.display = (ageMs>180000)?'block':'none';
+  el('updated').textContent='Updated '+fmtTime(d.updated_at);
+  el('freshWarn').style.display=(Date.now()-new Date(d.updated_at).getTime()>180000)?'block':'none';
 }
 
-function tick(){
-  fetch('status.json?_='+Date.now()).then(r=>r.json()).then(render).catch(()=>{
-    el('modeText').textContent='waiting for first tick…';
-  });
-}
-tick(); setInterval(tick, 15000);
+function tick(){fetch('status.json?_='+Date.now()).then(r=>r.json()).then(render).catch(()=>{el('modeText').textContent='waiting for first tick…';});}
+tick(); setInterval(tick,15000);
 </script>
 </body>
 </html>

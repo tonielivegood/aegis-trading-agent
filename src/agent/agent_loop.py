@@ -273,7 +273,7 @@ def _load_trending(now_ts: float) -> frozenset[str]:
 
 
 def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
-                           results, dry_run: bool, now) -> None:
+                           results, dry_run: bool, now, scan_rows=None) -> None:
     """Write a MASKED, public-safe snapshot for the live dashboard. Fail-safe — never
     raises into the tick. Contains NO secrets: only on-chain/market state already public
     (equity, regime, the CMC Agent Hub reads, open positions, and recent trade hashes)."""
@@ -295,11 +295,15 @@ def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
                               "usd_size": round(p.usd_size, 2)})
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         prior: list = []
+        equity_hist: list = []
         if STATUS_FILE.exists():
             try:
-                prior = json.loads(STATUS_FILE.read_text(encoding="utf-8")).get("recent_trades", [])
+                _prev = json.loads(STATUS_FILE.read_text(encoding="utf-8"))
+                prior = _prev.get("recent_trades", [])
+                equity_hist = _prev.get("equity_history", [])
             except Exception:  # noqa: BLE001
-                prior = []
+                prior, equity_hist = [], []
+        equity_hist = (equity_hist + [round(equity, 2)])[-90:]   # ~90 ticks for the sparkline
         fresh = [{"time": ts, "token_in": r.get("token_in"), "token_out": r.get("token_out"),
                   "usd": round(r.get("amount_usd", 0) or 0, 2), "tx": r.get("tx"),
                   "simulated": bool(r.get("simulated", True))}
@@ -318,8 +322,12 @@ def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
             "agent_hub": {"fear_greed": fng, "trending": trending},
             "positions": positions,
             "recent_trades": recent,
+            "equity_history": equity_hist,
+            "scan": scan_rows or [],
+            "scan_firing": sum(1 for r in (scan_rows or []) if r.get("fires")),
             "universe": {"total": len(syms), "majors": majors, "memes": len(syms) - majors},
             "backend": settings.execution_backend,
+            "wallet": settings.agent_wallet_address,
             "breaker": {"alert_pct": round(settings.max_drawdown_alert * 100),
                         "cap_pct": round(settings.max_drawdown_cap * 100)},
         }
@@ -349,7 +357,27 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str]):
     book.save(POSITIONS_FILE)
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
     cooldowns.save(COOLDOWN_FILE)
-    return orders, f"{mode}:{flag.value}"
+    return orders, f"{mode}:{flag.value}", _scan_rows(feed.last_snapshots)
+
+
+def _scan_rows(snapshots, limit: int = 8) -> list[dict]:
+    """Top scan candidates for the dashboard — ranked by volume multiple. Shows WHY a
+    high-volume token is or isn't firing (a flat price = no confirmed move = no entry)."""
+    from .aegis import token_class as tc
+    rows = []
+    for sym, s in (snapshots or {}).items():
+        if s.baseline_vol <= 0 or not s.has_route:
+            continue
+        vol_x = s.vol_5m / s.baseline_vol
+        bo = (s.price_now - s.price_5m_ago) / s.price_5m_ago if s.price_5m_ago > 0 else 0.0
+        cls = token_list.token_class(sym)
+        cp = tc.params(cls)
+        fires = (vol_x >= cp.vol_mult and cp.breakout_min <= bo <= cp.breakout_max
+                 and s.liquidity_ok)
+        rows.append({"symbol": sym, "class": cls, "vol_x": round(vol_x, 1),
+                     "bo_pct": round(bo * 100, 1), "bar": cp.vol_mult, "fires": fires})
+    rows.sort(key=lambda r: r["vol_x"], reverse=True)
+    return rows[:limit]
 
 
 def _load_drawdown() -> DrawdownTracker:
@@ -441,6 +469,7 @@ def tick(dry_run: bool | None = None) -> dict:
                       min_trade_interval_h=settings.min_trade_interval_h,
                       low_equity_usd=LOW_EQUITY_USD)
 
+    scan_rows: list[dict] = []
     if action.derisk:
         orders = rebalance_strategy.derisk_orders(state)
         mode = "derisk"
@@ -448,7 +477,7 @@ def tick(dry_run: bool | None = None) -> dict:
             _clear_position_book()          # flatten simulated event positions too
     elif event_mode:
         # Layer B primary (event radar) with Layer A (eligible basket) fallback.
-        orders, mode = _event_decision(state, prices, symbols)
+        orders, mode, scan_rows = _event_decision(state, prices, symbols)
         if action.halt_buys:
             orders = [o for o in orders if o.token_in not in STABLECOINS]
     else:
@@ -486,7 +515,7 @@ def tick(dry_run: bool | None = None) -> dict:
     trade_counter.save(TRADES_FILE)
     _save_drawdown(drawdown)
     _notify(action, results, equity, drawdown, cum_return, now)
-    _write_status_snapshot(equity, drawdown, cum_return, mode, prices, results, dry_run, now)
+    _write_status_snapshot(equity, drawdown, cum_return, mode, prices, results, dry_run, now, scan_rows)
     return {"equity": equity, "action": action.reason, "orders": len(orders), "results": results}
 
 

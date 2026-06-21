@@ -63,6 +63,7 @@ class MarketFeed:
         self.cache_path = cache_path or DEFAULT_CACHE
         self.cache: dict[str, list[tuple[float, float]]] = self._load()
         self._lock = threading.Lock()
+        self.last_snapshots: dict[str, MarketSnapshot] = {}  # most recent scan (for diagnostics/dashboard)
 
     # --- rolling price cache (persisted) ---
     def _load(self) -> dict[str, list[tuple[float, float]]]:
@@ -150,4 +151,5 @@ class MarketFeed:
                 results = ex.map(lambda s: (s, self.snapshot(s, price=prices.get(s))), symbols)
                 out = dict(results)
         self.save()
+        self.last_snapshots = out
         return out
