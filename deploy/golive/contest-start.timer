@@ -1,0 +1,10 @@
+[Unit]
+Description=BNB Hack Track1 — fire the contest-start sequence at window open
+
+[Timer]
+OnCalendar=2026-06-22 00:00:00 UTC
+Persistent=true
+Unit=contest-start.service
+
+[Install]
+WantedBy=timers.target
