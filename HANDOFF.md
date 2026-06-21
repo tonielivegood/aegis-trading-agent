@@ -1,8 +1,8 @@
 # HANDOFF — Aegis Track-1 Trading Agent (BNB Hack 2026)
 
 > **GOAL: win Track-1** (ranked by RAW total wallet return; ≥30% drawdown = DQ).
-> Updated **2026-06-21 ~12:20 UTC**. Read this once → full context. Code is at commit
-> `8c9bd1c` on branch `harden/breaker-and-pricing` (pushed to `main`).
+> Updated **2026-06-21 ~13:30 UTC**. Read this once → full context. Code is at commit
+> `51cd50e` on branch `harden/breaker-and-pricing` (pushed to `main`, deployed to VPS).
 
 ---
 
@@ -23,7 +23,21 @@
 
 - **Bot is LIVE NOW** (`run --live`, flipped early **21/6** for strategy validation). **Trades 21/6 do NOT count** — the scored contest window is **22–28/6**. Equity ~$33.25, holds dust + a few small meme positions (RAVE/GUA/etc.). Regime currently **CAUTIOUS** (Claude tightened on Fear & Greed 22).
 - **Dashboard is LIVE + public:** **http://2.25.184.43:8080/dashboard.html** (served by `aegis-dash.service` from `web/`). Auto-refreshes from `web/status.json` (a MASKED snapshot the bot writes each tick — verified 0 secrets).
-- **⚠️ At 22/6 00:00 UTC (contest start):** just run **`reset`** to re-baseline drawdown/compliance from the contest-start equity, and KEEP it live. **Do NOT run `/root/go-live.sh`** — its guard aborts when the unit is already `--live`. (To go back to DRY instead: `sed -i 's#run --live#run#' /etc/systemd/system/agent.service` + `daemon-reload` + restart.)
+- **⚠️ At 22/6 00:00 UTC (contest start) — run `panic --live` → `reset`, then KEEP it live.**
+  Sequence (NOT just `reset`):
+  1. `systemctl stop agent`
+  2. `sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent panic --live` — flatten ALL non-stable holdings to USDT.
+  3. `sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent reset` — re-baseline drawdown/compliance + clear the books.
+  4. `systemctl start agent` — keep it `--live`.
+
+  **WHY panic first (this is the fix, 21/6):** the wallet holds ~24 leftover meme/dust
+  tokens (RAVE/NEX/GUA/SAHARA/…) but the position book tracks only RAVE → every other
+  holding is ORPHANED (no stop/trail manages it; `decide_exits` only iterates the book).
+  A bare `reset` clears the book → it would ORPHAN **RAVE too**, and `reset` does NOT sell
+  coins. `panic --live` consolidates everything to USDT first, so the contest starts 100%
+  in cash with a clean drawdown baseline and zero unmanaged positions. (Sub-$2 dust may
+  remain — harmless.) **Do NOT run `/root/go-live.sh`** — its guard aborts when the unit
+  is already `--live`. (To go back to DRY instead: `sed -i 's#run --live#run#' /etc/systemd/system/agent.service` + `daemon-reload` + restart.)
 
 ---
 
@@ -45,6 +59,7 @@
 7. **Go-live verified** — the unit is `run` (DRY) by design; `go-live.sh` sed-flips it to `run --live` which forces `dry_run=False` explicitly. (We flipped early — see §1.)
 8. **Docs synced** to the current architecture: `README.md`, `ARCHITECTURE.md`, `docs/JUDGE_DEMO_RUNBOOK.md`, `SPEC.md`/`PLAN.md` banners.
 9. **Real on-chain trade test passed** — forced buy + panic sell via 1inch, all status 1 (proves the live path with the receipt-status fix).
+10. **Dashboard leak fixed (21/6, commit `51cd50e`, deployed + live-verified)** — the public `status.json` scan rows had been publishing `bar` = the exact volume-multiple entry threshold (2.5 major / 4.0 meme). Removed it; the scan now exposes only observed market state (`vol_x`/`bo_pct`) + the `fires` boolean (can't be inverted to the bar). +regression test (412 pass). Verified on the live VPS: `any bar field leaked: False`.
 
 ---
 
@@ -53,7 +68,7 @@
 - [ ] **Paste the rewritten BUIDL** on DoraHacks (shorter, professional, NO exact strategy numbers = no "lộ bài"). Add the dashboard link. (The full text was given in chat; regenerate if needed — keep numbers out.)
 - [ ] **Post #CMCAgentHub** on X (tag @CoinMarketCap) for the $2k side prize — code requirement is met; can link the dashboard.
 - [ ] **Repo PUBLIC before 29/6** — but keep it **PRIVATE during the trading week (22–28/6)** to protect the strategy from competitors. Also delete the old `TONiE8668` repo + revoke its PAT.
-- [ ] **22/6 00:00 UTC:** `reset` (re-baseline), keep live (see §1 warning).
+- [ ] **22/6 00:00 UTC:** `panic --live` → `reset` → keep live (see §1 — flatten orphans to USDT first, NOT a bare reset).
 - Optional/nice: a demo video; update README/BUIDL to mention the Claude advisor (now a true claim).
 
 ---
