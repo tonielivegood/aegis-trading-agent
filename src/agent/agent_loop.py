@@ -40,6 +40,7 @@ COOLDOWN_FILE = RUNTIME / "aegis_cooldown.json"
 REGIME_FILE = RUNTIME / "regime.json"
 PRICECACHE_FILE = RUNTIME / "last_prices.json"
 CMC_SIGNAL_FILE = RUNTIME / "cmc_signal.json"   # cached CMC Agent Hub trending set (hourly)
+CLAUDE_FILE = RUNTIME / "claude_regime.json"    # cached Claude regime advisory (hourly, for dashboard)
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 STATUS_FILE = WEB_DIR / "status.json"           # public, MASKED snapshot for the live dashboard (no secrets)
 LOW_EQUITY_USD = max(5.0, settings.min_portfolio_value_usd * 2)
@@ -235,12 +236,20 @@ def _maybe_update_regime(now_ts: float):
         # CMC Agent Hub: market Fear & Greed refines the BTC regime (tightening-only).
         fear_greed = cmc_agent_hub.get_fear_greed()
         flag, reason = rg.decide_regime(quote, fear_greed=fear_greed)
+        # Claude regime advisor (hourly, advisory, TIGHTENING-ONLY, fail-safe): an LLM
+        # read of BTC + Fear & Greed that can only step risk DOWN, never up.
+        from .aegis import claude_advisor
+        flag, claude_rec, claude_reason = claude_advisor.advise_regime(
+            flag, btc_quote=quote, fear_greed=fear_greed)
+        if claude_reason:
+            reason = f"{reason}; Claude: {claude_reason}"
         st = rg.RegimeState(flag=flag.value, updated_at=now_ts, reason=reason)
         st.save(REGIME_FILE)
         log.info("regime_updated", flag=flag.value, reason=reason,
-                 fear_greed=(fear_greed or {}).get("value"))
+                 fear_greed=(fear_greed or {}).get("value"), claude=claude_rec or None)
         # CMC Agent Hub: refresh the community-trending set for the token-selection bias.
         _refresh_trending(now_ts)
+        _write_claude_advice(now_ts, claude_rec, claude_reason, flag.value)
     except Exception as e:  # noqa: BLE001 — never let a data hiccup break the tick
         log.info("regime_update_failed", error=type(e).__name__)
     return st
@@ -256,6 +265,30 @@ def _refresh_trending(now_ts: float) -> None:
             json.dumps({"trending": sorted(syms), "updated_at": now_ts}), encoding="utf-8")
     except Exception as e:  # noqa: BLE001
         log.info("cmc_trending_refresh_failed", error=type(e).__name__)
+
+
+def _write_claude_advice(now_ts: float, rec: str, reason: str, applied: str) -> None:
+    """Cache the hourly Claude regime advisory for the dashboard (fail-safe)."""
+    try:
+        CLAUDE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CLAUDE_FILE.write_text(json.dumps(
+            {"recommendation": rec, "reason": reason, "applied": applied,
+             "updated_at": now_ts}), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        log.info("claude_advice_write_failed", error=type(e).__name__)
+
+
+def _load_claude_advice(now_ts: float) -> dict | None:
+    """Read the cached Claude advisory; None if absent, stale, or empty."""
+    try:
+        if not CLAUDE_FILE.exists():
+            return None
+        d = json.loads(CLAUDE_FILE.read_text(encoding="utf-8"))
+        if now_ts - float(d.get("updated_at", 0.0)) > settings.regime_max_age_seconds:
+            return None
+        return d if d.get("recommendation") else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _load_trending(now_ts: float) -> frozenset[str]:
@@ -327,6 +360,7 @@ def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
             "drawdown_pct": round(drawdown.current_drawdown() * 100, 2),
             "return_pct": round(cum_return * 100, 2),
             "regime": {"flag": rstate.flag, "reason": rstate.reason},
+            "claude": _load_claude_advice(time.time()),
             "agent_hub": {"fear_greed": fng, "trending": trending},
             "positions": positions,
             "recent_trades": recent,

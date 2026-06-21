@@ -61,6 +61,7 @@ class Settings(BaseModel):
     cmc_api_base: str = "https://pro-api.coinmarketcap.com"
     anthropic_api_key: str = Field(default="", repr=False)
     anthropic_model: str = "claude-haiku-4-5-20251001"
+    claude_advisor_enabled: bool = True   # hourly, advisory, TIGHTENING-ONLY Claude regime overlay
 
     # --- Telegram alerts (optional; both empty = disabled) ---
     telegram_bot_token: str = Field(default="", repr=False)
@@ -225,6 +226,7 @@ def get_settings() -> Settings:
         cmc_api_base=_get("CMC_API_BASE", "https://pro-api.coinmarketcap.com"),
         anthropic_api_key=_get("ANTHROPIC_API_KEY", ""),
         anthropic_model=_get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
+        claude_advisor_enabled=_get_bool("CLAUDE_ADVISOR_ENABLED", "true"),
         telegram_bot_token=_get("TELEGRAM_BOT_TOKEN", ""),
         telegram_chat_id=_get("TELEGRAM_CHAT_ID", ""),
         total_budget_usd=float(_get("TOTAL_BUDGET_USD", "100")),

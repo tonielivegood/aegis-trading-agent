@@ -139,6 +139,13 @@
     <div class="row between" style="margin:2px 0 16px;"><span class="sub">extreme fear</span><span id="fgText" class="mono" style="font-weight:600;font-size:15px;">—</span><span class="sub">extreme greed</span></div>
     <div class="sub" style="margin-bottom:8px;">Community trending — biases token selection (1.5× rank boost)</div>
     <div class="row" id="trending"></div>
+    <div id="claudeRow" style="display:none;border-top:1px solid var(--line);margin-top:13px;padding-top:12px;">
+      <div class="row between" style="margin-bottom:5px;">
+        <span class="sub" style="color:var(--purple);font-weight:600;">Claude risk officer — hourly, tightening-only</span>
+        <span id="claudeRec" class="tag"></span>
+      </div>
+      <div id="claudeReason" class="sub" style="line-height:1.55;"></div>
+    </div>
   </div>
 
   <div class="card" style="margin-bottom:13px;">
@@ -237,6 +244,11 @@ function render(d){
   else el('fgText').textContent='unavailable';
   const tr=(d.agent_hub&&d.agent_hub.trending)||[];
   el('trending').innerHTML=tr.length?tr.map(t=>'<span class="chip">'+t+'</span>').join(''):'<span class="sub">none</span>';
+  const cl=d.claude;
+  if(cl&&cl.recommendation){el('claudeRow').style.display='block';
+    el('claudeRec').textContent='reads: '+String(cl.recommendation).replace('_','-');
+    el('claudeReason').textContent=cl.reason||'';}
+  else{el('claudeRow').style.display='none';}
 
   const scan=d.scan||[], maxv=Math.max(8,...scan.map(s=>s.vol_x));
   el('scanSummary').textContent='watching '+(d.universe?d.universe.total:'—')+' · '+(d.scan_firing||0)+' firing';
