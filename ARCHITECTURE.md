@@ -67,6 +67,7 @@ updater and cached — they never sit in the 60 s hot path.
 | `aegis/` | **Live strategy**: volume-breakout sniper — regime valve, two-tier params, market feed, positions, cooldown. |
 | `execution/oneinch.py` | **Live execution**: 1inch v6 aggregator; returns calldata, signed LOCALLY (self-custody). |
 | `execution/openocean.py` · `pancakeswap.py` | Keyless aggregator backup · PancakeSwap V2 fallback + BNB pricing. |
+| `execution/twak_executor.py` | **Trust Wallet Agent Kit** backend (`EXECUTION_BACKEND=twak`) on a dedicated wallet — the Trust Wallet leg of the stack. |
 | `signal/` *(research, not in live path)* | Momentum + Claude sentiment behind a prompt-injection firewall. |
 | `strategy/adaptive_hold_strategy.py` | Deep fallback: fractional diversified hold + breaker (walk-forward-validated). |
 | `monitor/safeguard.py` | Per-tick derisk / halt / compliance-trade decision. |
@@ -77,12 +78,14 @@ updater and cached — they never sit in the 60 s hot path.
 
 ## 4. Key decisions & rationale
 
-- **Strategy = cash-default volume-breakout sniper, two-tier by cost.** Sits in cash,
-  deploys only on a confirmed volume breakout; cheap majors take modest profit (TP +10%),
-  expensive memes ride for the asymmetric tail (TP +100%), all bounded by tight stops and
-  an hourly regime valve. The fractional-hold strategy remains as the walk-forward-validated
-  deep fallback. (Honest: the momentum edge is unproven; the engineering minimizes
-  operational + DQ risk, not market risk.)
+- **Strategy = cash-default confirmed-momentum sniper, then ride.** Sits in cash; enters
+  only on a CONFIRMED move (sustained **5-minute** volume + price already up **≥3%**, not a
+  one-minute blip), then RIDES — majors to a +30% cap on a 7% trail, memes to +200% on a
+  wide 25% trail — exiting only on take-profit, a trailing stop, or a hard stop (−7% / −12%).
+  There is **no time-based exit** (an earlier no-progress timer was removed after a live soak
+  proved it churned). An hourly regime valve throttles **exposure** (size/slots). The
+  fractional-hold strategy remains as the walk-forward-validated deep fallback. (Honest: the
+  momentum edge is unproven; the engineering minimizes operational + DQ risk, not market risk.)
 - **Execution via the 1inch DEX aggregator.** Single-DEX (PancakeSwap V2) slippage
   capped the tradable set at ~18 tokens; the aggregator routes across all BSC DEXs and
   unlocks ~91 routable tokens (incl. the meme tail). 1inch returns calldata that the agent
@@ -116,7 +119,7 @@ updater and cached — they never sit in the 60 s hot path.
 
 ## 6. Verification
 
-- **401 unit/integration tests** (`pytest tests/`), every module built test-first.
+- **403 unit/integration tests** (`pytest tests/`), every module built test-first.
 - **Backtest + walk-forward** over real Binance history selected the fallback strategy.
 - **Live-verified** self-custody execution: a real on-chain swap routed through the 1inch
   AggregationRouterV6 (USDT→ETH, status `0x1`), calldata signed locally — tx

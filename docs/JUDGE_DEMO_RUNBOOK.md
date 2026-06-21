@@ -34,10 +34,11 @@ Point out: Aegis consumes two **CMC AI Agent Hub** REST skills with our Pro key 
 ## 2. Real Binance volume confirmation (no faked volume)
 ```bash
 python scripts/build_alpha_symbol_map.py        # maps eligible meme contracts -> Binance Alpha symbols
-python scripts/check_binance_alpha_volume.py     # live 5m/1m quote volume, trade count, freshness
+python scripts/check_binance_alpha_volume.py     # live 5m quote volume, trade count, freshness
 ```
 Point out: real quote volume + trade count from Binance Alpha (memes) and Binance spot
-(majors); stale candles fail safe; an entry needs a genuine volume spike — **no faked volume**.
+(majors), on **5-minute candles** so a one-minute spike of noise can't trigger; stale
+candles fail safe; an entry needs a genuine volume spike on a confirmed move — **no faked volume**.
 
 ## 3. Two-tier sniper logic + risk gates (proven by tests)
 ```bash
@@ -75,8 +76,10 @@ locally** — the key never left the machine:
 BscScan: https://bscscan.com/tx/0x2727f6d5337a60c1ec2991258fa36c8deaf2652c908743dd29cf3186b11e7d6c
 
 Point out: self-custody (the agent signs, never hands out a key); execution is real and
-verifiable; the contest wallet is registered on the hackathon contract. OpenOcean is a
-keyless backup; PancakeSwap V2 is the emergency fallback and the BNB/WBNB price source.
+verifiable; the contest wallet is registered on the hackathon contract. The **Trust Wallet
+Agent Kit (TWAK)** is a working alternative backend (`EXECUTION_BACKEND=twak`, on a
+dedicated wallet); OpenOcean is a keyless backup; PancakeSwap V2 is the emergency fallback
+and the BNB/WBNB price source.
 
 ## 6. Kill-switch (emergency flatten)
 ```bash
@@ -86,11 +89,12 @@ Point out: one command flattens the wallet to the settlement asset; DRY by defau
 
 ## 7. Closing story
 > **Survival first. Asymmetric upside second.**
-> Aegis sits in cash, confirms real Binance volume, prices the universe via CoinMarketCap,
-> reads the CMC AI Agent Hub for market regime + community attention, routes execution
-> through the 1inch aggregator with **local self-custody signing**, takes modest profit on
-> cheap majors while letting a rare meme ride to +100%, and caps drawdown well under the
-> 30% DQ gate — DRY_RUN-safe by default.
+> Aegis sits in cash, enters only on a **confirmed move** (sustained 5-minute volume +
+> price already up ≥3%), prices the universe via CoinMarketCap, reads the CMC AI Agent Hub
+> for market regime + community attention, routes execution through the 1inch aggregator
+> with **local self-custody signing**, then **rides** — a major to +30%, a rare meme to
+> +200% on a wide trail — exiting only on take-profit, a trailing stop, or a hard stop
+> (no time-based exit), and caps drawdown well under the 30% DQ gate — DRY_RUN-safe by default.
 
 ## Full verification (optional)
 ```bash
