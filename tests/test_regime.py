@@ -69,8 +69,10 @@ def test_params_per_regime():
     assert params(Regime.RISK_OFF).allow_new is False
     # RISK_ON total deployment stays under 100% NAV (DQ cushion).
     assert params(Regime.RISK_ON).size_pct * params(Regime.RISK_ON).max_slots <= 0.75
-    # Beta-capture valve: RISK_ON loosens the entry bar; CAUTIOUS keeps it strict.
-    assert params(Regime.RISK_ON).entry_vol_factor < 1.0
+    # Regime throttles EXPOSURE (size/slots), not signal quality: the entry bar is
+    # full (1.0) in every regime — the old RISK_ON beta-valve was removed after it
+    # over-fired live (churn bleed). RISK_ON still risks more via bigger size + 2 slots.
+    assert params(Regime.RISK_ON).entry_vol_factor == 1.0
     assert params(Regime.CAUTIOUS).entry_vol_factor == 1.0
 
 

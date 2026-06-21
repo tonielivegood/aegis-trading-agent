@@ -47,18 +47,21 @@ def test_breakout_opens_regime_sized_entry():
     assert book.is_open("ETH")
 
 
-def test_risk_on_loosens_major_entry_for_beta_capture():
-    # A MAJOR 1.6x-vol mild move: RISK_ON enters it (bar 2.0*0.75=1.5), CAUTIOUS does
-    # not (2.0). The beta-capture valve loosens the cheap MAJOR tier only (ETH=major).
-    snaps = {"ETH": _snap("ETH", vol_5m=160, baseline_vol=100, price_now=1.02, price_5m_ago=1.0)}
-    on, _ = sniper.run(_state(), {"ETH": 1.02}, book=PositionBook(), feed=FakeFeed(snaps),
+def test_risk_on_no_longer_loosens_entry_bar():
+    # The beta-capture valve was REMOVED (it over-fired live → churn bleed). A MAJOR
+    # 1.6x-vol mild move is now BELOW the full 2.5x bar in EVERY regime → no entry,
+    # even in RISK_ON (regime risks more via SIZE/SLOTS, not a looser bar).
+    weak = {"ETH": _snap("ETH", vol_5m=160, baseline_vol=100, price_now=1.02, price_5m_ago=1.0)}
+    on, _ = sniper.run(_state(), {"ETH": 1.02}, book=PositionBook(), feed=FakeFeed(weak),
                        cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
                        universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)
-    assert len(on) == 1 and on[0].token_out == "ETH"
-    cau, _ = sniper.run(_state(), {"ETH": 1.02}, book=PositionBook(), feed=FakeFeed(snaps),
-                        cooldowns=CooldownBook(), regime_flag=Regime.CAUTIOUS,
+    assert on == []
+    # A genuine 2.6x breakout still clears the bar and enters in RISK_ON.
+    strong = {"ETH": _snap("ETH", vol_5m=260, baseline_vol=100, price_now=1.02, price_5m_ago=1.0)}
+    on2, _ = sniper.run(_state(), {"ETH": 1.02}, book=PositionBook(), feed=FakeFeed(strong),
+                        cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
                         universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)
-    assert cau == []
+    assert len(on2) == 1 and on2[0].token_out == "ETH"
 
 
 def test_cautious_uses_smaller_size():

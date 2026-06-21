@@ -39,9 +39,12 @@ class ClassParams:
 
 
 PARAMS: dict[str, ClassParams] = {
-    # MAJOR: cheap (~0.6% round-trip) → ACTIVE, MODEST profit. Tight exit captures
-    # the small +5–10% major moves; fast no-progress recycles capital.
-    MAJOR: ClassParams(vol_mult=2.0, breakout_min=0.003, breakout_max=0.05,
+    # MAJOR: cheap (~0.6% round-trip) but a low bar OVER-TRADES. A live soak (21/6)
+    # at an effective 1.5× bar fired ~18 entries/2h on marginal spikes that reverted →
+    # slippage churn bled ~4%/2h. Raised to 2.5× + a clearer 0.5% breakout floor so
+    # majors fire SELDOM, only on a real move worth the round-trip. Tight exit
+    # (+10% TP, 5% trail, −5% stop, 20m recycle) still banks the small major moves.
+    MAJOR: ClassParams(vol_mult=2.5, breakout_min=0.005, breakout_max=0.05,
                        hard_tp_mult=1.10, trailing_pct=0.05, hard_stop_pct=0.05,
                        no_progress_min=20),
     # MEME: expensive/thin (~6–12% round-trip) → RARE, BIG ride. Cap at +100% (a

@@ -44,15 +44,16 @@ class RegimeParams:
     entry_vol_factor: float = 1.0  # scales the volume-breakout bar (<1 = more aggressive)
 
 
-# entry_vol_factor = the BETA-CAPTURE valve. The only safely tradable tokens are
-# ~13 deep majors that rarely produce a sharp 2-3x volume breakout, so a pure
-# breakout sniper sits in cash and misses a rising market (raw-return contest →
-# sitting out ≈ losing). In RISK_ON (BTC calm/up) we LOOSEN the entry bar so the
-# agent deploys into mild deep-major momentum and rides the market; in CAUTIOUS we
-# keep the strict bar; in RISK_OFF we don't enter at all. Downside stays bounded by
-# the −7% per-position stop, the regime flip to cash, and the −20% breaker.
+# entry_vol_factor scales the volume-breakout bar per regime. It is now 1.0 in every
+# regime: the regime expresses RISK APPETITE via position SIZE and SLOTS, NOT by
+# loosening signal quality. The earlier RISK_ON 0.75 "beta-capture valve" (major bar
+# 2.0→1.5×) was REMOVED after a live soak (21/6) showed it over-fired in an active
+# market — many marginal 1.5× spikes that mean-reverted → fee/slippage churn that bled
+# equity ~4%/2h. Fewer, higher-conviction entries (full bar) + the meme asymmetric ride
+# are the raw-return edge; regime still throttles exposure (RISK_ON 35%/2 vs CAUTIOUS
+# 20%/1 vs RISK_OFF 0). Downside bounded by per-position stop, regime-to-cash, breaker.
 _PARAMS: dict[Regime, RegimeParams] = {
-    Regime.RISK_ON: RegimeParams(0.35, 2, True, entry_vol_factor=0.75),
+    Regime.RISK_ON: RegimeParams(0.35, 2, True, entry_vol_factor=1.0),
     Regime.CAUTIOUS: RegimeParams(0.20, 1, True, entry_vol_factor=1.0),
     Regime.RISK_OFF: RegimeParams(0.0, 0, False, entry_vol_factor=1.0),
 }

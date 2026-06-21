@@ -59,8 +59,8 @@ def _snap(sym, vol_5m, baseline, now_p, ago_p):
 
 
 def test_major_entry_looser_than_meme():
-    # a 2.2x-volume, +1% move: a MAJOR breakout (≥2x), but NOT a meme one (needs 3x)
-    snaps = {"M": _snap("M", vol_5m=220, baseline=100, now_p=1.01, ago_p=1.0)}
+    # a 2.6x-volume, +1% move: a MAJOR breakout (≥2.5x), but NOT a meme one (needs 3x)
+    snaps = {"M": _snap("M", vol_5m=260, baseline=100, now_p=1.01, ago_p=1.0)}
     mp, ep = tc.params("major"), tc.params("meme")
     assert len(scan_breakouts(snaps, vol_mult=mp.vol_mult, breakout_min=mp.breakout_min,
                               breakout_max=mp.breakout_max)) == 1
@@ -69,7 +69,7 @@ def test_major_entry_looser_than_meme():
 
 
 def test_major_requires_minimum_rise():
-    # 2.7x volume but essentially flat (+0.1%) → below major's +0.3% floor → no entry
+    # 2.7x volume but essentially flat (+0.1%) → below major's +0.5% floor → no entry
     snaps = {"M": _snap("M", vol_5m=270, baseline=100, now_p=1.001, ago_p=1.0)}
     mp = tc.params("major")
     assert scan_breakouts(snaps, vol_mult=mp.vol_mult, breakout_min=mp.breakout_min,
