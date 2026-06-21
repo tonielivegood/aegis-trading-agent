@@ -28,8 +28,8 @@ never hands a key to any API). It combines:
    valuation and the drawdown breaker never trip on a bad on-chain read.
 3. **CoinMarketCap AI Agent Hub** — market Fear & Greed + community-trending feed
    the regime and token ranking (see the #CMCAgentHub section below).
-4. **Live volume confirmation** — Binance Alpha 5m/1m klines (memes) + Binance spot
-   klines (majors); no entry without a real volume spike. No faked volume, ever.
+4. **Live volume confirmation** — Binance Alpha 5-minute klines (memes) + Binance spot
+   klines (majors); no entry without a real volume spike on a confirmed move. No faked volume, ever.
 5. **Aegis risk engine** — regime valve, two-tier exits, debounced drawdown breaker,
    last-known-good pricing, kill-switch, gas guard, DRY_RUN-by-default.
 
@@ -38,36 +38,39 @@ and **`DRY_RUN=true` by default**.
 
 ---
 
-## Track 1 strategy — cash-default volume-breakout sniper
+## Track 1 strategy — confirmed-momentum sniper, then ride
 
 For Track 1, Aegis trades **only the official 149-token BEP-20 allowlist** (matched
 by **contract address**), on the liquid, aggregator-routable subset (~91 tokens =
 56 majors + 35 Binance-Alpha memes). It is **cash by default** and enters only on a
-real volume breakout, sized by an hourly market regime.
+*confirmed* move, sized by an hourly market regime.
 
 **Entry** requires *all*: eligible by contract + aggregator-liquid + a real volume
-spike (≥ class bar × baseline) + price rising but not already blown off + the regime
+spike on **5-minute candles** (≥ class bar × baseline) + price already up **≥3%**
+(the move is confirmed, not a one-minute blip) but not already blown off + the regime
 allowing new risk + cooldown clear + a free slot + the stablecoin floor respected.
 A flat/quiet token never trades; a single noisy candle is not enough.
 
-**Two tiers by trading cost** (`aegis/token_class.py`):
+**Two tiers** (`aegis/token_class.py`):
 
-| Tier | Volume bar | Take-profit | Trail | Stop | No-progress cut | Size |
+| Tier | Volume bar | Confirm | Take-profit | Trail | Stop | Size |
 |---|---|---|---|---|---|---|
-| **MAJOR** (cheap ~0.6% round-trip) | ≥ 2.0× (RISK_ON ×0.75 = 1.5×) | +10% | 5% | −5% | 20 min | regime % of NAV |
-| **MEME** (expensive) | ≥ 3.0× (strict every regime) | **+100%** | 15% | −8% | 25 min | $5 lottery |
+| **MAJOR** (deep liquidity) | ≥ 2.5× | price +3% | +30% cap | 7% | −7% | regime % of NAV |
+| **MEME** (thin, explosive) | ≥ 4.0× | price +3% | **+200% cap** | 25% | −12% | $5 lottery |
 
-The 35 memes are the **asymmetric-tail win lever** — memecoin contests are won by one
-big +100–300% hit, so memes ride far while majors take modest, frequent profit.
+A major having a good day routinely runs +10–30%; the 35 memes are the
+**asymmetric-tail win lever** (memecoin contests are won by one big +100–300% hit), so
+memes ride far on a wide trail while majors lock a tighter, more frequent gain.
 
 **Regime valve** (`aegis/regime.py`, refreshed hourly from CMC BTC momentum + the
-Agent Hub Fear & Greed read): `RISK_ON` 35% NAV / 2 slots (loosens the major bar to
-ride a rising market) · `CAUTIOUS` 20% / 1 slot · `RISK_OFF` 0 (no new entries).
-Total deploy ≤ 70% NAV, leaving a 30% cushion under the DQ breaker.
+Agent Hub Fear & Greed read): `RISK_ON` 35% NAV / 2 slots · `CAUTIOUS` 20% / 1 slot ·
+`RISK_OFF` 0 (no new entries). The regime throttles **exposure** (size/slots), never
+the signal bar. Total deploy ≤ 70% NAV, leaving a 30% cushion under the DQ breaker.
 
-**Exit priority:** drawdown breaker → hard take-profit → stop-loss → no-progress cut
-→ volume-death-in-profit → trailing stop. Meme/major positions are temporary
-instruments to earn back the stablecoin settlement asset — never long-term holdings.
+**Exits are take-profit, hard-stop, and trailing only — there is no time-based exit.**
+A position rides until it hits its cap, trails out from its peak, or stops out; the
+global drawdown breaker overrides everything and flattens to cash. (An earlier
+time-based no-progress exit was removed after a live soak proved it churned.)
 
 The majors-hold strategy below is the **validated deep fallback**, available when the
 sniper path is disabled.
@@ -114,7 +117,8 @@ python -m src.agent signals
 | 1inch aggregator quote / route / slippage gate | **LIVE** (read-only quotes) |
 | Trade execution (1inch, self-custody local signing) | **LIVE-PROVEN** on-chain; **DRY_RUN by default** until go-live |
 | Transaction signing / broadcast | **never hands out a key**; local/self-custody only |
-| Binance Web3 API / Trust Wallet Agent Kit | adapters present but **deferred/unused** (1inch is the live path) |
+| Trust Wallet Agent Kit (TWAK) execution backend | **working** — `EXECUTION_BACKEND=twak` routes `.swap()` through the `twak swap … --chain bsc` CLI on a dedicated Trust Wallet wallet; 1inch is the scoring-wallet path |
+| Binance Web3 API | adapter present but **deferred/unused** |
 
 ## Track 1 compliance (eligibility + minimum trades)
 
@@ -151,7 +155,7 @@ python -m src.agent signals
 data/      market data: RPC (multi-endpoint failover), CMC quotes + AI Agent Hub, price feed, token universe
 aegis/     volume-breakout sniper: regime valve, two-tier params, market feed, positions, cooldown, orchestrator
 risk/      debounced drawdown breaker, position sizing, trade counter, portfolio valuation, input guards
-execution/ 1inch (live) + OpenOcean aggregator + PancakeSwap V2 (fallback + BNB pricing); local self-custody signing
+execution/ 1inch (live) + OpenOcean + PancakeSwap V2 (fallback + BNB pricing) + TWAK (Trust Wallet backend); local self-custody signing
 signal/    momentum + Claude sentiment, behind a prompt-injection firewall (research; not in the live hot path)
 strategy/  event-driven alpha momentum (sniper) + adaptive fractional-hold fallback + variants
 monitor/   safeguard (derisk/halt/compliance), contest PnL accounting, structured logging
@@ -286,7 +290,7 @@ Run in order, shortly before the trading window opens:
 7. [ ] **Monitor:** watch logs; spot-check `status` and BscScan periodically.
 
 ### During the window
-- The agent ticks every `STRATEGY_TICK_MIN` (default 15 min).
+- The agent ticks every `EVENT_TICK_SECONDS` (default 60s) in event mode.
 - It auto-derisks to stablecoin if drawdown hits −20% (and stays in cash — by
   design, capital preservation for the rest of the week).
 - It places a small compliance trade if no trade has occurred within
@@ -306,7 +310,7 @@ Run in order, shortly before the trading window opens:
 ## Testing
 
 ```bash
-python -m pytest tests/        # 129 unit/integration tests
+python -m pytest tests/        # 403 unit/integration tests
 ```
 
 Every module was built test-first (TDD) with a security threat model and a
