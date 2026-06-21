@@ -48,9 +48,14 @@
    | Tier | Vol bar | Confirm | TP cap | Trail | Stop | Size |
    |---|---|---|---|---|---|---|
    | **MAJOR** | 2.5× | +3% | +30% | 7% | −7% | ~35% NAV (regime) |
-   | **MEME** | 4× | **+6%** | **+80%** | **10%** | **−8%** | **$5 fixed lottery** |
+   | **MEME** | 4× | **+3%** | **+80%** | **10%** | **−8%** | **$5 fixed lottery** |
 
-   (Meme +6%/+80%/10%/−8% are user-tuned this session: memes wiggle on +3% noise; wide trail gave back too much.)
+   Plus a **BREAKEVEN stop** on both tiers (21/6): once a trade runs to **+5%** peak, exit ~flat
+   (entry +0.5% fee buffer) if it falls back to entry — closes the gap where the trailing stop
+   (gated on price>entry) let a "+5% pop then fade" ride down to the −8% hard stop. Meme entry is
+   **+3%** (was +6% earlier 21/6): the meme sleeve is a bounded-downside/huge-upside lottery →
+   optimise for SHOTS ON GOAL, and let the breakeven stop (not a higher entry floor) handle the
+   pop-then-fade false starts.
 2. **CMC AI Agent Hub (#CMCAgentHub, $2k prize)** — `data/cmc_agent_hub.py`. Two REST skills: **Fear & Greed** tightens the regime (tightening-only, ≤20=extreme fear); **community trending** re-ranks qualified breakouts (1.5× boost). Out of the 60s hot path, cached, fail-safe. Demo: `python -m src.agent signals`.
 3. **Claude regime advisor** — `aegis/claude_advisor.py`. **Real LLM in the loop.** Hourly, Haiku reads BTC H1/24h + Fear & Greed → recommends a regime. **TIGHTENING-ONLY** (can only step risk DOWN, enforced in code), **FAIL-SAFE** (error → base regime), out of hot path, output is a bounded enum. Calibrated to keep the base unless concrete danger. Toggle `CLAUDE_ADVISOR_ENABLED`. Shown on the dashboard ("Claude risk officer") + `regime.reason`.
 4. **Receipt-status fix** — all 3 execution backends (`oneinch.py` live / `openocean.py` / `pancakeswap.py`) now RAISE on `receipt.status != 1`, so a mined-but-reverted swap is no longer counted as a valid trade or trusted as a fill.
@@ -61,7 +66,8 @@
 9. **Real on-chain trade test passed** — forced buy + panic sell via 1inch, all status 1 (proves the live path with the receipt-status fix).
 10. **Dashboard leak fixed (21/6, commit `51cd50e`, deployed + live-verified)** — the public `status.json` scan rows had been publishing `bar` = the exact volume-multiple entry threshold (2.5 major / 4.0 meme). Removed it; the scan now exposes only observed market state (`vol_x`/`bo_pct`) + the `fires` boolean (can't be inverted to the bar). +regression test. Verified on the live VPS: `any bar field leaked: False`.
 11. **Contest-start AUTOMATED (21/6, commit `eaebd94`, installed + scheduled on VPS)** — a one-shot systemd timer `contest-start.timer` fires at **2026-06-22 00:00:00 UTC** and runs `contest-start.sh`: stop agent → `panic --live` (flatten all >$2 holdings to USDT, clearing orphaned positions) → `reset` (re-baseline) → start agent (stays `--live`) → Telegram-confirm the clean baseline. Sentinel-guarded against double-fire; always restarts the agent. Files in `deploy/golive/`. Verified scheduled + components (equity-parse/notify/panic-dry) green. **This replaces the manual §1 step — it will run itself; just confirm afterward.**
-12. **Signal fix — breakout% now from same-source kline move (21/6, commit `7bafb89`, deployed + live-verified)** — the entry gate measured the 5m price move from a tick-sampled CMC price cache, which lags thin Alpha memes → bought the top as the spike faded (RAVE/GUA). Now `MarketSnapshot.breakout_pct` is fed the `price_change_5m_pct` from the SAME klines as the volume (Binance Alpha for memes / spot for majors) via a new `volume_and_move()` provider method (one fetch, 3-tuple). `scan_breakouts`/dashboard/`scan_diag` all use the shared `breakout_pct()` helper; falls back to the cache when no kline move is supplied. +6 tests (418 pass). `scan_diag` on the VPS confirmed real kline moves (BEAT −2.7%, FORM +0.7%) with discipline intact (GENIUS 242% of vol bar but flat → no fire).
+12. **Signal fix — breakout% now from same-source kline move (21/6, commit `7bafb89`, deployed + live-verified)** — the entry gate measured the 5m price move from a tick-sampled CMC price cache, which lags thin Alpha memes → bought the top as the spike faded (RAVE/GUA). Now `MarketSnapshot.breakout_pct` is fed the `price_change_5m_pct` from the SAME klines as the volume (Binance Alpha for memes / spot for majors) via a new `volume_and_move()` provider method (one fetch, 3-tuple). `scan_breakouts`/dashboard/`scan_diag` all use the shared `breakout_pct()` helper; falls back to the cache when no kline move is supplied. +6 tests. `scan_diag` on the VPS confirmed real kline moves (BEAT −2.7%, FORM +0.7%) with discipline intact (GENIUS 242% of vol bar but flat → no fire).
+13. **Breakeven stop + meme entry +3% (21/6, commit `0237a45`, deployed + live-verified)** — phased-barbell day-1 safe fixes (see §6 for the strategy direction). (a) **Breakeven stop**: once a trade runs to +5% peak, exit ~flat (+0.5% fee buffer) if it falls back to entry — closes the gap where the trailing stop (gated on price>entry) let a pop-then-fade ride to the −8% hard stop. Global knobs `aegis_breakeven_trigger_pct`/`_buffer_pct`. (b) **Meme entry +6%→+3%**: the lottery sleeve optimises for shots-on-goal; the breakeven stop (not a higher entry floor) handles pop-then-fade false starts. +6 tests (421 pass).
 
 ---
 
@@ -77,7 +83,8 @@
 
 ## 4. LOCKED DECISIONS (don't revisit/revert without a strong reason — and never SILENTLY)
 
-- **Strategy = confirmed-momentum + ride** with the table in §2. Exits TP/stop/trailing only (NO time exit).
+- **Strategy = confirmed-momentum + ride** with the table in §2. Exits TP/stop/trailing/**breakeven** only (NO time exit).
+- **STRATEGY DIRECTION = PHASED BARBELL (user decision 21/6).** Framing: Track-1 is a 7-day raw-return *tournament* with a 30% DD gate → you don't win from cash (median = ~0% = mid-pack); you need the right tail, bounded by the DD gate. The barbell = **(A) a beta core** (regime-gated long basket of strong momentum majors, hold+trail — the reliable up-week return source) **+ (B) a meme lottery** (small fixed, convex tail ticket); the momentum **scalp middle is the bleeder to demote**. **Phase 1 (live now, 22/6):** current sniper + the two safe fixes (breakeven stop, meme +3%); observe whether we're stuck in cash during a green week. **Phase 2 (mid-week, PENDING/NOT BUILT):** build + DRY-soak the beta core, enable it if the market is trending and we're missing beta. Items #4 (meme adverse-selection) and #5 (breakeven) from the review are now ADDRESSED; the beta core is the remaining lever.
 - **Execution = 1inch** (live-proven, self-custody calldata signing). OpenOcean = keyless backup; PancakeSwap-18 (`tradable_alpha.bak.json` + `EXECUTION_BACKEND=pancake`) = emergency fallback + BNB/WBNB on-chain pricing. **TWAK** (`twak_executor.py`) is a WORKING backend on a SEPARATE Trust Wallet wallet (the Trust Wallet partner leg) — NOT a collision (user runs 2 wallets). Contest wallet registered directly on the hackathon contract (NOT via twak).
 - **Pricing = CMC-by-id** (on-chain V2 is garbage for the aggregator universe). Universe = 91 tradable (56 majors + 35 Alpha memes) in `data/tradable_alpha.json`.
 - **Claude = tightening-only, hourly, advisory, fail-safe.** Never let it loosen risk or enter the 60s hot path.
