@@ -1,177 +1,88 @@
 # HANDOFF — Aegis Track-1 Trading Agent (BNB Hack 2026)
 
-> **GOAL: win the Track-1 main prize** (ranked by RAW total wallet return over the contest window).
-> Written 2026-06-20 ~22:30 UTC. Go-live = **2026-06-22 00:00 UTC**. Read this once → you have 100% context.
+> **GOAL: win Track-1** (ranked by RAW total wallet return; ≥30% drawdown = DQ).
+> Updated **2026-06-21 ~12:20 UTC**. Read this once → full context. Code is at commit
+> `8c9bd1c` on branch `harden/breaker-and-pricing` (pushed to `main`).
 
 ---
 
-## 0. ENVIRONMENT (where everything lives)
+## 0. ENVIRONMENT / ACCESS
 
-- **Local repo:** `E:\Track1-trade-onchain` (Windows; Git Bash + PowerShell available)
-- **Remote (live bot):** VPS `root@2.25.184.43`, agent dir `/home/agent/bnbhack-track1-agent`
+- **Local repo:** `E:\Track1-trade-onchain` (Windows; Git Bash + PowerShell). Tests: `python -m pytest -q` (**411 pass / 2 skip**), lint `python -m ruff check src tests`.
+- **VPS (live bot):** `root@2.25.184.43`, dir `/home/agent/bnbhack-track1-agent`.
   - SSH: `ssh -i "$USERPROFILE/.ssh/hostinger_openclaw" root@2.25.184.43`
-  - Run agent commands as the `agent` user: `sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent <cmd>`
-  - Service: systemd unit **`agent`** (`systemctl {status|stop|start} agent`, logs `journalctl -u agent`)
-- **Git:** GitHub `github.com/tonielivegood/aegis-trading-agent`. Work branch **`harden/breaker-and-pricing`**,
-  pushed to **`main`** (VPS does `git fetch && git reset --hard origin/main`). ~19 commits on 20/6.
-- **Wallet (registered, self-custody):** `0xA5200DC306d8273f9Ccdbf5221a6cC3916aC2Ffa` — ~$36
-  (≈ $24 USDT + ~$4 ETH from the smoke + ~$7.5 BNB gas/0.012 + dust). `.env` holds `AGENT_PRIVATE_KEY`.
-- **`.env` (gitignored; on BOTH local + VPS):** `ONEINCH_API_KEY`, `EXECUTION_BACKEND=1inch`, `CMC_API_KEY`
-  (Pro plan), `BSC_RPC_URL` (NodeReal), `AGENT_PRIVATE_KEY`, `BINANCE_WEB3_API_KEY` (unused),
-  `TELEGRAM_*`. Mask secrets in any output; never commit `.env`.
+  - Run agent cmds as the `agent` user: `sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent <cmd>`
+  - systemd units: **`agent`** (the bot) and **`aegis-dash`** (the dashboard static server).
+- **Git:** `github.com/tonielivegood/aegis-trading-agent` (PRIVATE). Work on `harden/breaker-and-pricing`, push to `main` (VPS does `git fetch && git reset --hard origin/main`).
+- **Wallet (registered, self-custody):** `0xA5200DC306d8273f9Ccdbf5221a6cC3916aC2Ffa` — ~$33. `.env` holds `AGENT_PRIVATE_KEY`.
+- **`.env` (gitignored, on local + VPS):** `ONEINCH_API_KEY`, `EXECUTION_BACKEND=1inch`, `CMC_API_KEY` (Pro), `ANTHROPIC_API_KEY`, `BSC_RPC_URL` (NodeReal), `AGENT_PRIVATE_KEY`, `TELEGRAM_*`. **Mask secrets in any output; never commit `.env`.**
 
 ---
 
-## 1. CURRENT STATUS — DONE ✅
+## 1. CURRENT STATE (very important)
 
-- **Universe: 91 tradable tokens** (56 majors + 35 memes), rebuilt 20/6 from the official 149-eligible set via
-  **1inch aggregator slippage** (up from ~14 effectively-tradable on PancakeSwap-V2-only). Majors incl
-  ETH/XRP/TRX/DOGE/ADA/LINK/BCH/AVAX/DOT/UNI/AAVE/ATOM/FIL/BONK/CAKE...
-- **Execution: 1inch** (`EXECUTION_BACKEND=1inch`) — **LIVE-PROVEN** with a real on-chain tx:
-  `0x2727f6d5337a60c1ec2991258fa36c8deaf2652c908743dd29cf3186b11e7d6c` (status 0x1, routed through 1inch
-  AggregationRouterV6 `0x1111…842a65`, $4 USDT→0.002294 ETH). Self-custody: 1inch returns calldata, WE sign locally.
-- **Pricing: CMC-by-id** (`cmc_client.get_prices_by_id`) — on-chain V2 price is GARBAGE for these tokens
-  (AAVE read $0.81 vs ~$76). CMC verified correct (AAVE $76, AVAX $6.1, UNI $3.03 == 1inch). BNB/WBNB stay on-chain.
-- **Strategy: two-tier by cost** + regime beta valve:
-  - MAJOR (cheap ~0.6% round-trip) = ACTIVE/modest: vol≥2.0× (RISK_ON ×0.75=1.5×), TP +10%, trail 5%, stop −5%, no-prog 20m.
-  - MEME (expensive) = RARE/big ride: vol≥3.0× (strict every regime), TP **+100%**, trail 15%, stop −8%, no-prog 25m, $5 size.
-  - The 35 memes are the **asymmetric-tail win-lever** (memecoin contests are won by one big +100-300% meme hit).
-- **Hardening:** breaker DEBOUNCE (latches only after 3 consecutive breach ticks — a 1-tick price glitch no longer
-  DQs us); last-known-good price fallback (`_apply_price_fallback`); kill-switch (`panic`); gas guard; min-trade
-  compliance; full-wallet valuation (`valuation_tokens` = core∪alpha).
-- **Soak:** new setup ran ~6h DRY, equity stable ~$36.15, drawdown ~0, **ZERO errors**, tick ~8s.
-- **Tests:** **387 pass / 2 skip, ruff clean.** Bot currently **DRY soak** on the 91-token/1inch/CMC setup.
-
-✅ **DRY→LIVE flip VERIFIED (21/6 — earlier ⚠️ was a misread, not a bug):** the systemd unit ExecStart is
-`python -m src.agent run` (NO `--live`) → that is exactly why DRY ticks show `dry_run=True` (intended soak state).
-`go-live.sh` step 3/5 `sed s#src.agent run#src.agent run --live#` flips it to LIVE. Robust: `run --live` passes
-`dry_run=False` explicitly down `scheduler.run → tick(False)`, which never consults `settings.dry_run`, so a stray
-`DRY_RUN=true` in `.env` cannot override the live flip. `reset` only clears runtime-state files (never config/universe).
+- **Bot is LIVE NOW** (`run --live`, flipped early **21/6** for strategy validation). **Trades 21/6 do NOT count** — the scored contest window is **22–28/6**. Equity ~$33.25, holds dust + a few small meme positions (RAVE/GUA/etc.). Regime currently **CAUTIOUS** (Claude tightened on Fear & Greed 22).
+- **Dashboard is LIVE + public:** **http://2.25.184.43:8080/dashboard.html** (served by `aegis-dash.service` from `web/`). Auto-refreshes from `web/status.json` (a MASKED snapshot the bot writes each tick — verified 0 secrets).
+- **⚠️ At 22/6 00:00 UTC (contest start):** just run **`reset`** to re-baseline drawdown/compliance from the contest-start equity, and KEEP it live. **Do NOT run `/root/go-live.sh`** — its guard aborts when the unit is already `--live`. (To go back to DRY instead: `sed -i 's#run --live#run#' /etc/systemd/system/agent.service` + `daemon-reload` + restart.)
 
 ---
 
-## 2. KEY FILES / SCRIPTS (full paths from repo root `src/agent/...`)
+## 2. WHAT THIS SESSION BUILT (don't forget any of it)
 
-**Universe & token data**
-- `src/agent/data/tradable_alpha.json` — **THE LIVE UNIVERSE** (91 tokens: symbol, contract, decimals, token_class, slippage_12usd, id)
-- `src/agent/data/tradable_alpha_new.json` — full 103-token 1inch scan (incl 12 memes NOT on Binance Alpha = no volume, parked)
-- `src/agent/data/tradable_alpha.bak.json` — **Pancake-18 SAFE FALLBACK** (use with `EXECUTION_BACKEND=pancake`)
-- `src/agent/data/alpha_symbol_map.json` — contract→Binance-Alpha-symbol (meme 1m volume); 53 entries
-- `src/agent/data/eligible_resolved.json` — 147 eligible: symbol, CMC id, contract, vol24h, token_class (source of truth for ids)
-- `src/agent/data/eligible_tokens.json` — official allowlist by contract (`is_eligible`)
-- `src/agent/data/curated_core.json` — 20 core blue-chips (WBNB/BTCB/etc., for gas + valuation)
-- `src/agent/data/runtime/` — drawdown.json, baseline.json, aegis_positions.json, aegis_cooldown.json,
-  regime.json, track1_compliance.json, last_prices.json, market_cache.json (cleared by `reset`)
+1. **Strategy redesign — "confirmed momentum, then RIDE"** (`aegis/token_class.py`). Replaced the old scalp/churn design after a live soak proved it bled. Cash by default. Entry needs a **5-minute** volume surge **AND** a confirmed price move (filters 1-min noise). Exits are **take-profit / hard-stop / trailing ONLY — no time-based exit** (the no-progress timer + volume-death exits were removed). The regime throttles **exposure** (size/slots), never the signal bar (beta valve removed).
 
-**Execution backends** (all share `.swap(token_in, token_out, amount_human) -> SwapResult`)
-- `src/agent/execution/oneinch.py` — **1inch v6 (ACTIVE, live-proven)**. Needs `ONEINCH_API_KEY`. Approves router `0x1111…842a65`.
-- `src/agent/execution/openocean.py` — OpenOcean (keyless alternative aggregator)
-- `src/agent/execution/pancakeswap.py` — PancakeSwap V2 (default/fallback) + `ERC20_ABI`, `SwapResult`, `_to_hex`
-- `src/agent/execution/twak_executor.py` — Trust Wallet Agent Kit CLI (unused)
-- `src/agent/execution/tx_builder.py` — wei/slippage/deadline helpers
-- `src/agent/execution/binance_web3.py` — Binance Wallet connectivity stub (NOT built; swap spec behind portal login)
-- backend selection: `agent_loop._make_executor` (reads `settings.execution_backend`: pancake|twak|openocean|1inch)
+   | Tier | Vol bar | Confirm | TP cap | Trail | Stop | Size |
+   |---|---|---|---|---|---|---|
+   | **MAJOR** | 2.5× | +3% | +30% | 7% | −7% | ~35% NAV (regime) |
+   | **MEME** | 4× | **+6%** | **+80%** | **10%** | **−8%** | **$5 fixed lottery** |
 
-**Pricing**
-- `src/agent/data/cmc_client.py` — `get_quotes` (by symbol), **`get_prices_by_id`** (by CMC id, used for the universe)
-- `src/agent/data/price_feed.py` — on-chain PancakeSwap price (BNB/WBNB only now) + CMC fallback
-- `src/agent/agent_loop.py` → **`_event_prices`** (CMC-by-id universe pricing) + **`_apply_price_fallback`** (last-known-good)
-
-**Strategy (aegis)**
-- `src/agent/aegis/sniper.py` — orchestrator (`run`, `_scan_by_class`); exits→cooldown→regime-gated entries
-- `src/agent/aegis/token_class.py` — **two-tier params** (MAJOR active / MEME ride). TUNE HERE.
-- `src/agent/aegis/regime.py` — regime params (RISK_ON 35%/2, CAUTIOUS 20%/1) + **`entry_vol_factor`** (RISK_ON 0.75 beta valve) + BTC classifier
-- `src/agent/aegis/volume_breakout.py` — `scan_breakouts` + `decide_breakout_entries` (gates: eligible, cooldown, floor, slots, meme_usd sizing)
-- `src/agent/aegis/market_feed.py` — `MarketFeed` snapshots; **static slippage gate** via `token_list.tradable_slippage`
-- `src/agent/aegis/binance_alpha_volume.py` — meme 1m volume (Binance Alpha klines, via alpha_symbol_map)
-- `src/agent/aegis/binance_spot_volume.py` — major 1m volume (Binance spot klines, data-api.binance.vision)
-- `src/agent/aegis/cooldown.py`, `positions.py`, `compliance.py`
-
-**Risk / safety**
-- `src/agent/risk/drawdown.py` — **debounced breaker** (`latch_ticks`, alert 0.20, cap 0.30)
-- `src/agent/risk/portfolio.py` — `valuation_tokens` (core∪alpha), `read_onchain_balances` (multicall), `Portfolio.equity`
-- `src/agent/agent_loop.py` → `flatten_to_cash` (kill-switch), `_make_executor`, `tick`
-
-**Config**
-- `src/agent/config.py` — all knobs (see §5). `__main__.py` = CLI (`status|reset|tick|run|panic|compliance|notify-test`)
-
-**Scripts**
-- `scripts/build_alpha_symbol_map.py` — refresh meme→Binance-Alpha volume map (run when memes change)
-- `scripts/rebuild_universe_1inch.py` — rebuild universe via 1inch slippage (writes `tradable_alpha_new.json`)
-- `scripts/build_universe_from_resolved.py`, `build_alpha_universe.py` — older universe builders
-- `scripts/slippage_scan.py`, `scripts/wallet_check.py`, `scripts/scan_diag.py` — diagnostics (read-only)
-- **`/root/go-live.sh`** (on VPS) — reset + flip live + 3 Telegram reminder timers (21/6 12:00, 21/6 22:00, 22/6 00:00 UTC)
+   (Meme +6%/+80%/10%/−8% are user-tuned this session: memes wiggle on +3% noise; wide trail gave back too much.)
+2. **CMC AI Agent Hub (#CMCAgentHub, $2k prize)** — `data/cmc_agent_hub.py`. Two REST skills: **Fear & Greed** tightens the regime (tightening-only, ≤20=extreme fear); **community trending** re-ranks qualified breakouts (1.5× boost). Out of the 60s hot path, cached, fail-safe. Demo: `python -m src.agent signals`.
+3. **Claude regime advisor** — `aegis/claude_advisor.py`. **Real LLM in the loop.** Hourly, Haiku reads BTC H1/24h + Fear & Greed → recommends a regime. **TIGHTENING-ONLY** (can only step risk DOWN, enforced in code), **FAIL-SAFE** (error → base regime), out of hot path, output is a bounded enum. Calibrated to keep the base unless concrete danger. Toggle `CLAUDE_ADVISOR_ENABLED`. Shown on the dashboard ("Claude risk officer") + `regime.reason`.
+4. **Receipt-status fix** — all 3 execution backends (`oneinch.py` live / `openocean.py` / `pancakeswap.py`) now RAISE on `receipt.status != 1`, so a mined-but-reverted swap is no longer counted as a valid trade or trusted as a fill.
+5. **Telegram fix** — `monitor/notifier.py` switched urllib→`requests` (urllib's TLS handshake to Telegram times out on the VPS). Alerts (heartbeat/trades/breaker) now deliver.
+6. **Live dashboard** — `web/dashboard.html` (self-contained) + `_write_status_snapshot` in `agent_loop.py` (masked `web/status.json` each tick, NO secrets, fail-safe). Shows: equity+sparkline, regime, CMC Agent Hub (F&G gauge + trending + **Claude panel**), live signal scan (proves discipline), positions, trade feed, strategy (genericized — no exact numbers), risk engine, 3-partner stack, compliance, on-chain proof. `aegis-dash.service` = `python -m http.server 8080 --directory web` (read-only, only serves `web/`).
+7. **Go-live verified** — the unit is `run` (DRY) by design; `go-live.sh` sed-flips it to `run --live` which forces `dry_run=False` explicitly. (We flipped early — see §1.)
+8. **Docs synced** to the current architecture: `README.md`, `ARCHITECTURE.md`, `docs/JUDGE_DEMO_RUNBOOK.md`, `SPEC.md`/`PLAN.md` banners.
+9. **Real on-chain trade test passed** — forced buy + panic sell via 1inch, all status 1 (proves the live path with the receipt-status fix).
 
 ---
 
-## 3. REMAINING TO "WIN" (prioritized roadmap)
+## 3. REMAINING TO WIN (user actions — code is done)
 
-**MUST DO before 22/6 (verify, not build):**
-- [x] **Verify `go-live.sh` / DRY→LIVE flip** — DONE 21/6 (see §1 ✅). Mechanism is correct: unit is `run` (DRY),
-      go-live.sh sed-flips to `run --live` (forces `dry_run=False` explicitly), `reset` is config-safe. Wallet funded,
-      gas plenty, tests 399 pass. Go-live needs no more code — just `bash /root/go-live.sh` at 22/6 00:00 UTC.
-- [ ] **Repo PUBLIC** before 29/6 (judges must see the code). Also: delete the old TONiE8668 repo + revoke its PAT.
-- [ ] Confirm gas (BNB ~0.012 = ~1000+ swaps @ 0.05 gwei = plenty) + wallet funded.
-
-**BUILD to raise win odds (full power, agreed priority order):**
-1. **(done-ish) go-live readiness** — verify above.
-2. **(BUILT 21/6, commit 7334456 — not yet pushed/deployed) CMC Agent Hub skill** → **$2k side prize** (#CMCAgentHub).
-   `src/agent/data/cmc_agent_hub.py` calls 2 Agent Hub REST skills with our Pro key: `/v3/fear-and-greed/latest`
-   (market sentiment) + `/v1/community/trending/token` (community trending; endpoint caps limit=5). Wired OUT of the
-   60s hot path, fail-safe: F&G tightens RISK_ON→CAUTIOUS at ≤20 (tightening-only); trending re-ranks qualified
-   breakouts via `TRENDING_BOOST` (cached hourly to `cmc_signal.json`, stale-guarded). +12 tests (399 pass).
-3. **Claude catalyst layer** → news-driven entry bias (the original sniper alpha; currently volume-only). Hourly
-   Claude reads CMC/social → flags a token with a real catalyst → bias entry. More build; keep Claude OUT of the
-   60s hot path (rails stay mechanical).
+- [ ] **Paste the rewritten BUIDL** on DoraHacks (shorter, professional, NO exact strategy numbers = no "lộ bài"). Add the dashboard link. (The full text was given in chat; regenerate if needed — keep numbers out.)
+- [ ] **Post #CMCAgentHub** on X (tag @CoinMarketCap) for the $2k side prize — code requirement is met; can link the dashboard.
+- [ ] **Repo PUBLIC before 29/6** — but keep it **PRIVATE during the trading week (22–28/6)** to protect the strategy from competitors. Also delete the old `TONiE8668` repo + revoke its PAT.
+- [ ] **22/6 00:00 UTC:** `reset` (re-baseline), keep live (see §1 warning).
+- Optional/nice: a demo video; update README/BUIDL to mention the Claude advisor (now a true claim).
 
 ---
 
-## 4. TIMELINE
-- **Today:** 2026-06-20 (DRY soak running, product feature-complete)
-- **Go-live:** **2026-06-22 00:00 UTC** (= 07:00 VN) — run `bash /root/go-live.sh`
-- **Contest window:** 22–28/6 (ranked by raw total return; drawdown ≥30% = DQ gate)
-- **Repo public + final submission housekeeping:** before **29/6**
+## 4. LOCKED DECISIONS (don't revisit/revert without a strong reason — and never SILENTLY)
+
+- **Strategy = confirmed-momentum + ride** with the table in §2. Exits TP/stop/trailing only (NO time exit).
+- **Execution = 1inch** (live-proven, self-custody calldata signing). OpenOcean = keyless backup; PancakeSwap-18 (`tradable_alpha.bak.json` + `EXECUTION_BACKEND=pancake`) = emergency fallback + BNB/WBNB on-chain pricing. **TWAK** (`twak_executor.py`) is a WORKING backend on a SEPARATE Trust Wallet wallet (the Trust Wallet partner leg) — NOT a collision (user runs 2 wallets). Contest wallet registered directly on the hackathon contract (NOT via twak).
+- **Pricing = CMC-by-id** (on-chain V2 is garbage for the aggregator universe). Universe = 91 tradable (56 majors + 35 Alpha memes) in `data/tradable_alpha.json`.
+- **Claude = tightening-only, hourly, advisory, fail-safe.** Never let it loosen risk or enter the 60s hot path.
+- **Breaker:** alert −20% (latched after 3 consecutive breach ticks), cap −30% (instant). Valuation from on-chain balances (last-known-good fallback). Self-custody is absolute.
+- **DON'T LỘ BÀI:** keep exact thresholds OUT of the public BUIDL and the public dashboard (the dashboard strategy panel is already genericized).
 
 ---
 
-## 5. LOCKED DECISIONS (do NOT revisit without a strong reason)
-
-- **Universe = the 91 tokens in `tradable_alpha.json`** (56 majors + 35 Alpha-memes). Don't expand unless you
-  rebuild via 1inch slippage AND add Binance-Alpha volume mapping. The 12 no-Alpha memes stay parked.
-- **Execution = 1inch** (live-proven, self-custody calldata signing). Do NOT switch to a CEX or another DEX.
-  OpenOcean is the keyless backup; PancakeSwap-18 (`tradable_alpha.bak.json` + `EXECUTION_BACKEND=pancake`) is the
-  emergency fallback only.
-- **Pricing = CMC-by-id** as primary (on-chain V2 prices are unreliable for the aggregator universe). BNB/WBNB on-chain.
-- **Slippage:** `SLIPPAGE_BPS=400` (4% gate+exec for majors) · `MEME_SLIPPAGE_BPS=600` (6%) · `MEME_ORDER_USD=5`.
-- **Sizing:** RISK_ON 35%/2 slots (`entry_vol_factor` 0.75) · CAUTIOUS 20%/1 · RISK_OFF 0. Total deploy ≤70% NAV.
-- **Exits — MAJOR:** TP +10% / trail 5% / stop −5% / no-prog 20m. **MEME:** TP +100% / trail 15% / stop −8% / no-prog 25m.
-- **Breaker:** alert 20% (latched after **3 consecutive** breach ticks), cap 30% (instant). Never lower latch_ticks to 1.
-- **Compliance:** ≥1 valid (eligible-by-contract) trade/day, fires after hour 20 UTC, order $10, picks deepest eligible.
-- **Self-custody is absolute:** the agent signs locally; never hand a key/seed to any API. Claude does NOT manually
-  broadcast txs — only the agent's own commands (run/panic/go-live.sh) move real money, at the user's direction.
-
----
-
-## 6. HOW TO OPERATE (quick reference)
+## 5. HOW TO OPERATE
 
 ```bash
-# status / health
+# health
 ssh -i "$USERPROFILE/.ssh/hostinger_openclaw" root@2.25.184.43 \
-  "systemctl status agent; journalctl -u agent -n 20 --no-pager"
-
-# deploy latest code to VPS
+  "systemctl status agent --no-pager | head; journalctl -u agent -n 20 --no-pager"
+# deploy latest main → VPS
 ssh ... "cd /home/agent/bnbhack-track1-agent && systemctl stop agent && \
   sudo -u agent git fetch origin -q && sudo -u agent git reset --hard origin/main && systemctl start agent"
-
-# one DRY tick (no real money) / verify pricing
-sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent tick
-
-# KILL-SWITCH (emergency: sell all non-stable → USDT)
-sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent panic --live
-
-# GO-LIVE (22/6)
-bash /root/go-live.sh
+sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent signals     # live CMC Agent Hub read
+sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent compliance   # min-trade report
+sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent panic --live # KILL-SWITCH → USDT
+sudo -u agent env PYTHONPATH=. .venv/bin/python scripts/scan_diag.py      # read-only signal scan
 ```
 
-Tests: `python -m pytest -q` (387 pass) · lint: `python -m ruff check src tests`.
-Build standard: TDD + security-hardening + code-review per module. Convert relative dates to absolute.
+- Honest caveat (unchanged): the momentum **edge is unproven**; the engineering minimizes operational + DQ risk, not market risk. Winning the main prize depends on catching a real move in the 22–28/6 window.
+- Build standard: TDD + security-hardening + code-review per module. **Be a flexible thinking partner — retain decisions across the work, never silently revert an agreed tuning.**
