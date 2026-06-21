@@ -27,8 +27,8 @@ def test_params_both_ride_no_time_exit():
     maj, meme = tc.params("major"), tc.params("meme")
     # No time-based exit on either tier — rides exit on TP/stop/trail only.
     assert maj.no_progress_min == 0 and meme.no_progress_min == 0
-    # MEME = asymmetric ride: a REACHABLE +100% cap (not +200%), wide trail + stop.
-    assert meme.hard_tp_mult == 2.0 and meme.trailing_pct == 0.25 and meme.hard_stop_pct == 0.12
+    # MEME = tight asymmetric ride: +80% cap, 10% trail (lock fast), −8% stop.
+    assert meme.hard_tp_mult == 1.80 and meme.trailing_pct == 0.10 and meme.hard_stop_pct == 0.08
     # MAJOR = active on confirmed +10-30% days: tight 7% trail, +30% cap lock, −7% stop.
     assert maj.hard_tp_mult == 1.30 and maj.trailing_pct == 0.07 and maj.hard_stop_pct == 0.07
     # MAJOR fires EASIER than meme now (lower bar): cheaper to trade, catch major days.
@@ -36,7 +36,7 @@ def test_params_both_ride_no_time_exit():
     # MEME needs a STRONGER price confirmation than major: it wiggles ±3% on noise, so a
     # +3% floor caught false starts. Major +3% is a real move; meme requires +6%.
     assert maj.breakout_min == 0.03 and meme.breakout_min == 0.06
-    assert tc.params("unknown").hard_tp_mult == 2.0            # unknown → meme default
+    assert tc.params("unknown").hard_tp_mult == 1.80           # unknown → meme default
 
 
 # --- exits: both RIDE; cap is far, stop diverges, NO time exit ---
@@ -51,7 +51,7 @@ def test_both_ride_through_a_small_gain():
 
 
 def test_take_profit_caps_diverge():
-    # +50%: MAJOR hits its +30% cap; MEME still rides toward its +100% cap.
+    # +50%: MAJOR hits its +30% cap; MEME still rides toward its +80% cap.
     maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 1.5}, {},
                             _state({"FOO": 13.2}), class_aware=True, now=60)
     assert maj and "hard TP" in maj[0].reason

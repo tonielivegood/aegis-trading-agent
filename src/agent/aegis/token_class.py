@@ -55,11 +55,11 @@ PARAMS: dict[str, ClassParams] = {
     # MEME — the asymmetric tail (primary). Confirmed ignition: 4x sustained 5m volume
     # AND price already **+6%** (up to +20%, so we still catch a fast starter). Memes wiggle
     # ±3% on noise, so a +3% floor caught false starts that reverted (live: GUA/RAVE went red
-    # right after entry); +6% demands a more decisive move before committing. Then RIDE: 25%
-    # trail, cap **+100%** (a REACHABLE target that locks the win — +200% rarely prints and
-    # gives back too much), −12% stop. No time exit — a winner runs until trail/cap.
+    # right after entry); +6% demands a more decisive move before committing. Then a TIGHT
+    # ride that locks fast and gives back little: 10% trail, cap **+80%**, −8% stop. (Wide
+    # 25%/+200% gave back too much on a meme that spikes then fades.) No time exit.
     MEME: ClassParams(vol_mult=4.0, breakout_min=0.06, breakout_max=0.20,
-                      hard_tp_mult=2.0, trailing_pct=0.25, hard_stop_pct=0.12,
+                      hard_tp_mult=1.80, trailing_pct=0.10, hard_stop_pct=0.08,
                       no_progress_min=0),
 }
 
