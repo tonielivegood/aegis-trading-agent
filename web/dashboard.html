@@ -160,12 +160,12 @@
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-bottom:13px;">
     <div class="card">
       <h2>Strategy — confirmed move, then ride</h2>
-      <table>
-        <tr><th>Tier</th><th class="right">Enter</th><th class="right">Ride</th><th class="right">Stop</th></tr>
-        <tr><td>Major</td><td class="right mono">2.5× · +3%</td><td class="right mono green">+30% · 7%</td><td class="right mono red">−7%</td></tr>
-        <tr><td>Meme</td><td class="right mono">4× · +3%</td><td class="right mono green">+200% · 25%</td><td class="right mono red">−12%</td></tr>
-      </table>
-      <div class="foot" style="margin-top:9px;">5-minute volume candles · exits on take-profit / stop / trailing only — no time-based exit.</div>
+      <div style="font-size:13.5px;line-height:1.7;">Cash by default. A position opens only on a real volume surge <b>confirmed by price</b> on 5-minute candles — never a single noisy candle.</div>
+      <div style="margin-top:11px;display:flex;flex-direction:column;gap:8px;">
+        <div class="row" style="gap:9px;"><span class="tag" style="color:var(--blue);">major</span><span class="sub">deep liquidity · active, tight ride</span></div>
+        <div class="row" style="gap:9px;"><span class="tag" style="color:var(--blue);">meme</span><span class="sub">thin · rare, wide ride for the asymmetric tail</span></div>
+      </div>
+      <div class="foot" style="margin-top:11px;">Exits by take-profit, trailing stop, or hard stop — no time-based exit. A regime valve sizes positions and caps deployment.</div>
     </div>
     <div class="card">
       <h2>Risk engine</h2>
