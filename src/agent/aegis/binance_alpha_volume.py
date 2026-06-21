@@ -221,6 +221,17 @@ class BinanceAlphaKlinesVolumeProvider:
             return v.current_quote_volume_5m, v.baseline_quote_volume
         return v.current_volume_5m, v.baseline_volume
 
+    # MarketFeed adapter incl. the SAME-SOURCE 5m move: (vol, baseline, move), or
+    # (0, 0, None) when unavailable. One fetch — the kline price-change comes from the
+    # very candles the volume spike is measured on, so the breakout gate is consistent.
+    def volume_and_move(self, symbol_or_contract: str) -> tuple[float, float, float | None]:
+        v = self.get(symbol_or_contract)
+        if not v.available:
+            return 0.0, 0.0, None
+        if v.baseline_quote_volume > 0 and v.current_quote_volume_5m > 0:
+            return v.current_quote_volume_5m, v.baseline_quote_volume, v.price_change_5m_pct
+        return v.current_volume_5m, v.baseline_volume, v.price_change_5m_pct
+
     def _write_cache(self, v: AlphaVolume) -> None:
         try:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)

@@ -13,6 +13,7 @@ from __future__ import annotations
 from src.agent.agent_loop import _event_prices, _volume_provider
 from src.agent.aegis import token_class as tc
 from src.agent.aegis.market_feed import MarketFeed
+from src.agent.aegis.volume_breakout import breakout_pct
 from src.agent.config import settings
 from src.agent.data import token_list
 from src.agent.risk.portfolio import read_onchain_balances
@@ -30,7 +31,7 @@ def main() -> None:
         cls = token_list.token_class(sym)
         bar = tc.params(cls).vol_mult
         vm = (s.vol_5m / s.baseline_vol) if s.baseline_vol > 0 else 0.0
-        bo = ((s.price_now - s.price_5m_ago) / s.price_5m_ago) if s.price_5m_ago > 0 else 0.0
+        bo = breakout_pct(s)   # same-source kline move when available (matches live entry)
         rows.append((vm / bar if bar else 0.0, sym, cls, bar, vm, bo, s))
 
     rows.sort(reverse=True)

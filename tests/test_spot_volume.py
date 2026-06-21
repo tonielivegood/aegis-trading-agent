@@ -59,6 +59,21 @@ def test_volume_tuple_shape():
     assert cur == 250 and base == 100
 
 
+def test_volume_and_move_returns_same_source_move():
+    # current close 1.05 vs prior 1.0 => +5% move, from the SAME klines as the volume.
+    sess = _Session(_rows(baseline_qv=100, current_qv=300, current_close=1.05))
+    p = BinanceSpotKlinesVolumeProvider(session=sess, freshness_s=600)
+    cur, base, move = p.volume_and_move("CAKE")
+    assert cur == 300 and base == 100
+    assert move is not None and abs(move - 0.05) < 1e-9
+
+
+def test_volume_and_move_unavailable_returns_none_move():
+    sess = _Session(_rows(100, 300, 1.05, fresh=False))   # stale → unavailable
+    p = BinanceSpotKlinesVolumeProvider(session=sess, freshness_s=600)
+    assert p.volume_and_move("CAKE") == (0.0, 0.0, None)
+
+
 def test_allowlist_blocks_non_major():
     sess = _Session(_rows(100, 300, 1.05))
     p = BinanceSpotKlinesVolumeProvider(session=sess, symbols={"CAKE", "ETH"})

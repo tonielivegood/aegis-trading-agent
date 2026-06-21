@@ -35,6 +35,11 @@ class MarketSnapshot:
     baseline_vol: float = 0.0        # recent average 5-minute volume
     price_now: float = 0.0
     price_5m_ago: float = 0.0
+    # Authoritative 5m move from the SAME kline source as the volume (Binance Alpha for
+    # memes / spot for majors). When set, the breakout scan uses THIS instead of the
+    # tick-sampled CMC price cache (which lags thin memes → late entries). None = fall
+    # back to the cache computation (legacy path / providers that don't supply a move).
+    breakout_pct: float | None = None
     recent_pump_pct: float = 0.0     # max % up over a short recent window (0.20 = +20%)
     slippage_est: float = 1.0        # estimated slippage for our order size (0.01 = 1%)
     has_route: bool = False          # a PancakeSwap route exists

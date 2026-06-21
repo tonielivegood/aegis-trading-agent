@@ -53,10 +53,19 @@ class BreakoutSignal:
         return self.vol_multiple * (TRENDING_BOOST if self.trending else 1.0)
 
 
-def _breakout_pct(snap: MarketSnapshot) -> float:
+def breakout_pct(snap: MarketSnapshot) -> float:
+    """The 5m breakout used for the entry gate. Prefer the same-source kline move
+    (snap.breakout_pct, from Binance Alpha/spot — the SAME window/source as the volume
+    spike), which removes the lag of the tick-sampled CMC price cache that bought thin
+    memes late on a fading spike. Fall back to the cache when no kline move is supplied."""
+    if snap.breakout_pct is not None:
+        return snap.breakout_pct
     if snap.price_5m_ago <= 0:
         return 0.0
     return (snap.price_now - snap.price_5m_ago) / snap.price_5m_ago
+
+
+_breakout_pct = breakout_pct   # back-compat alias
 
 
 def scan_breakouts(snapshots: dict[str, MarketSnapshot], *,

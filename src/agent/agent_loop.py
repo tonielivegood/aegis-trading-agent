@@ -212,10 +212,12 @@ def _volume_provider():
     majors = {s for s in token_list.alpha_symbols() if token_list.token_class(s) == "major"}
     spot = BinanceSpotKlinesVolumeProvider(symbols=majors)
 
-    def provider(symbol: str) -> tuple[float, float]:
+    def provider(symbol: str) -> tuple[float, float, float | None]:
+        # 3-tuple (vol, baseline, 5m move): the move comes from the SAME klines as the
+        # volume, so the breakout gate no longer lags on the tick-sampled CMC cache.
         if token_list.token_class(symbol) == "major":
-            return spot.volume_tuple(symbol)
-        return alpha.volume_tuple(symbol)
+            return spot.volume_and_move(symbol)
+        return alpha.volume_and_move(symbol)
 
     return provider
 
@@ -407,12 +409,13 @@ def _scan_rows(snapshots, limit: int = 8) -> list[dict]:
     """Top scan candidates for the dashboard — ranked by volume multiple. Shows WHY a
     high-volume token is or isn't firing (a flat price = no confirmed move = no entry)."""
     from .aegis import token_class as tc
+    from .aegis.volume_breakout import breakout_pct
     rows = []
     for sym, s in (snapshots or {}).items():
         if s.baseline_vol <= 0 or not s.has_route:
             continue
         vol_x = s.vol_5m / s.baseline_vol
-        bo = (s.price_now - s.price_5m_ago) / s.price_5m_ago if s.price_5m_ago > 0 else 0.0
+        bo = breakout_pct(s)   # same source the live entry uses (kline move when available)
         cls = token_list.token_class(sym)
         cp = tc.params(cls)
         fires = (vol_x >= cp.vol_mult and cp.breakout_min <= bo <= cp.breakout_max

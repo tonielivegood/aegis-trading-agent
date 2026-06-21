@@ -30,6 +30,26 @@ def test_clean_breakout_passes():
     assert s.contract == "0xabc"
 
 
+def test_breakout_prefers_same_source_kline_move_over_cache():
+    """When the snapshot carries an authoritative kline move (breakout_pct), the scan
+    uses THAT, not the cache-derived price_now/price_5m_ago — even if they disagree."""
+    from src.agent.aegis.volume_breakout import breakout_pct
+    # Cache says flat (price_now == price_5m_ago) but the kline move says +7%.
+    snap = _snap("AAA", vol_5m=400, baseline_vol=100, price_now=100, price_5m_ago=100)
+    snap = snap.__class__(**{**snap.__dict__, "breakout_pct": 0.07})
+    assert abs(breakout_pct(snap) - 0.07) < 1e-9
+    sigs = scan_breakouts({"AAA": snap}, vol_mult=3.0, breakout_min=0.06, breakout_max=0.20)
+    assert len(sigs) == 1 and abs(sigs[0].breakout_pct - 0.07) < 1e-9
+
+
+def test_breakout_falls_back_to_cache_when_no_kline_move():
+    """No kline move supplied (breakout_pct is None) → use the price cache (legacy)."""
+    from src.agent.aegis.volume_breakout import breakout_pct
+    snap = _snap("AAA", vol_5m=400, baseline_vol=100, price_now=105, price_5m_ago=100)
+    assert snap.breakout_pct is None
+    assert abs(breakout_pct(snap) - 0.05) < 1e-9
+
+
 def test_low_volume_rejected():
     snaps = {"AAA": _snap("AAA", vol_5m=200, baseline_vol=100, price_now=105, price_5m_ago=100)}
     assert scan_breakouts(snaps, vol_mult=3.0) == []

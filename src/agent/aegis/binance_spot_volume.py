@@ -96,3 +96,10 @@ class BinanceSpotKlinesVolumeProvider:
         if not v.available:
             return 0.0, 0.0
         return v.current_quote_volume_5m, v.baseline_quote_volume
+
+    # Same-source variant: (vol, baseline, 5m move) from one fetch, or (0, 0, None).
+    def volume_and_move(self, symbol: str) -> tuple[float, float, float | None]:
+        v = self.get(symbol)
+        if not v.available:
+            return 0.0, 0.0, None
+        return v.current_quote_volume_5m, v.baseline_quote_volume, v.price_change_5m_pct

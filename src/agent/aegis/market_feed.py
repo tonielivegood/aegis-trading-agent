@@ -38,8 +38,11 @@ DEFAULT_WINDOW_S = 1800          # keep 30 min of price samples per token
 RUNTIME = Path(__file__).resolve().parents[2].parent / "data" / "runtime"
 DEFAULT_CACHE = RUNTIME / "market_cache.json"
 
-# (symbol) -> (vol_5m, baseline_vol). Returns (0, 0) when volume is unknown.
-VolumeProvider = Callable[[str], tuple[float, float]]
+# (symbol) -> (vol_5m, baseline_vol[, move_5m]). Returns (0, 0[, None]) when unknown.
+# A 3rd element (the 5m % move from the SAME kline source as the volume) is optional:
+# when present it becomes the snapshot's authoritative breakout_pct; legacy 2-tuple
+# providers leave it None and the scan falls back to the price cache.
+VolumeProvider = Callable[[str], tuple[float, ...]]
 
 
 def _price_5m_and_min(samples: list[tuple[float, float]], now: float) -> tuple[float, float]:
@@ -132,11 +135,14 @@ class MarketFeed:
         self._record(symbol, now, price)
         p5, recent_min = _price_5m_and_min(self.cache.get(symbol, []), now)
         recent_pump = (price - recent_min) / recent_min if recent_min > 0 else 0.0
-        vol5, basevol = self.volume_provider(symbol) if self.volume_provider else (0.0, 0.0)
+        vp = self.volume_provider(symbol) if self.volume_provider else (0.0, 0.0)
+        vol5, basevol = vp[0], vp[1]
+        move = vp[2] if len(vp) > 2 else None   # same-source 5m move (authoritative if present)
 
         return MarketSnapshot(
             symbol=symbol, contract=tok.address, vol_5m=vol5, baseline_vol=basevol,
-            price_now=price, price_5m_ago=p5, recent_pump_pct=max(0.0, recent_pump),
+            price_now=price, price_5m_ago=p5, breakout_pct=move,
+            recent_pump_pct=max(0.0, recent_pump),
             slippage_est=slippage, has_route=True, liquidity_ok=slippage <= max_slip,
         )
 

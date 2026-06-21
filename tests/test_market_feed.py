@@ -35,6 +35,25 @@ def test_snapshot_builds_with_price_slippage_and_volume(mocker, tmp_path):
     assert snap.vol_5m == 500.0 and snap.baseline_vol == 100.0
 
 
+def test_snapshot_uses_3tuple_provider_move_as_breakout(mocker, tmp_path):
+    # A 3-tuple provider (vol, baseline, move) sets the snapshot's authoritative move.
+    feed = MarketFeed(order_usd=10, max_slippage=0.05, cache_path=tmp_path / "c.json",
+                      volume_provider=lambda s: (500.0, 100.0, 0.08))
+    mocker.patch("src.agent.aegis.market_feed.token_list.tradable_slippage", return_value=0.01)
+    snap = feed.snapshot("TWT", price=1.0)
+    assert snap.vol_5m == 500.0 and snap.baseline_vol == 100.0
+    assert snap.breakout_pct == 0.08
+
+
+def test_snapshot_2tuple_provider_leaves_move_none(mocker, tmp_path):
+    # Legacy 2-tuple provider → breakout_pct stays None (scan falls back to the cache).
+    feed = MarketFeed(order_usd=10, max_slippage=0.05, cache_path=tmp_path / "c.json",
+                      volume_provider=lambda s: (500.0, 100.0))
+    mocker.patch("src.agent.aegis.market_feed.token_list.tradable_slippage", return_value=0.01)
+    snap = feed.snapshot("TWT", price=1.0)
+    assert snap.breakout_pct is None
+
+
 def test_snapshot_marks_illiquid_when_slippage_exceeds_max(mocker, tmp_path):
     feed = MarketFeed(order_usd=10, max_slippage=0.05, cache_path=tmp_path / "c.json")
     mocker.patch("src.agent.aegis.market_feed.token_list.tradable_slippage", return_value=0.20)
