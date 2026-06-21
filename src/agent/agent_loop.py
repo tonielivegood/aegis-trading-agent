@@ -417,8 +417,12 @@ def _scan_rows(snapshots, limit: int = 8) -> list[dict]:
         cp = tc.params(cls)
         fires = (vol_x >= cp.vol_mult and cp.breakout_min <= bo <= cp.breakout_max
                  and s.liquidity_ok)
+        # NOTE: do NOT publish cp.vol_mult / breakout bounds here — status.json is a
+        # PUBLIC file and the exact entry thresholds are the strategy edge ("don't lộ
+        # bài"). The dashboard renders the bar from vol_x alone; `fires` is the only
+        # threshold-derived field exposed, and it can't be inverted to the bar.
         rows.append({"symbol": sym, "class": cls, "vol_x": round(vol_x, 1),
-                     "bo_pct": round(bo * 100, 1), "bar": cp.vol_mult, "fires": fires})
+                     "bo_pct": round(bo * 100, 1), "fires": fires})
     rows.sort(key=lambda r: r["vol_x"], reverse=True)
     return rows[:limit]
 

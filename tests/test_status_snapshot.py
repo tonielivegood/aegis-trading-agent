@@ -38,6 +38,23 @@ def test_snapshot_is_valid_and_public_safe(tmp_path, mocker):
     assert settings.cmc_api_key not in blob
 
 
+def test_scan_rows_do_not_leak_strategy_thresholds():
+    """status.json is PUBLIC — the live scan must NOT expose the exact entry bar
+    (vol_mult) or breakout bounds, which are the strategy edge. Only vol_x / bo_pct
+    / fires may be shown (observed market state, not the secret thresholds)."""
+    from src.agent.aegis.volume_anomaly_detector import MarketSnapshot
+
+    snap = MarketSnapshot(symbol="DOGE", contract="0xabc", vol_5m=100.0, baseline_vol=10.0,
+                          price_now=1.05, price_5m_ago=1.0, has_route=True, liquidity_ok=True)
+    rows = al._scan_rows({"DOGE": snap})
+    assert rows, "expected at least one scan row"
+    allowed = {"symbol", "class", "vol_x", "bo_pct", "fires"}
+    for r in rows:
+        leaked = set(r) - allowed
+        assert not leaked, f"scan row leaks non-public fields: {leaked}"
+        assert "bar" not in r
+
+
 def test_snapshot_never_raises_on_bad_state(tmp_path, mocker):
     mocker.patch.object(al, "STATUS_FILE", tmp_path / "status.json")
     mocker.patch.object(al.cmc_agent_hub, "get_fear_greed", side_effect=RuntimeError("boom"))
