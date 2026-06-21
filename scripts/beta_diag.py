@@ -29,11 +29,14 @@ def main() -> None:
     balances = read_onchain_balances(settings.agent_wallet_address)
     prices = _event_prices(majors, balances)
 
+    # Momentum sourced by CMC id (same as pricing) to avoid same-symbol collisions.
+    id_of = {s: token_list.cmc_id(s) for s in majors}
     try:
-        quotes = cmc_client.get_quotes(majors)
+        by_id = cmc_client.get_quotes_by_id([i for i in id_of.values() if i])
     except Exception as e:  # noqa: BLE001 — diagnostic must never traceback
         print(f"CMC quotes unavailable ({type(e).__name__}); cannot rank momentum.")
         return
+    quotes = {s: by_id[i] for s, i in id_of.items() if i and i in by_id}
     momentum = bc.build_momentum(quotes, w_1h=settings.beta_core_mom_w1h)
 
     flag = rg.current_regime(rg.RegimeState.load(REGIME_FILE),

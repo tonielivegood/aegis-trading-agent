@@ -115,7 +115,7 @@ def main() -> None:
         for f in (agent_loop.DRAWDOWN_FILE, agent_loop.TRADES_FILE, agent_loop.BASELINE_FILE,
                   agent_loop.POSITIONS_FILE, agent_loop.COMPLIANCE_FILE,
                   agent_loop.COOLDOWN_FILE, agent_loop.REGIME_FILE, agent_loop.CMC_SIGNAL_FILE,
-                  agent_loop.CLAUDE_FILE):
+                  agent_loop.CLAUDE_FILE, agent_loop.DAYSTATE_FILE):
             if f.exists():
                 f.unlink()
                 print(f"removed {f.name}")

@@ -55,6 +55,37 @@ def get_quotes(symbols: list[str], convert: str = "USD") -> dict[str, dict]:
     return out
 
 
+def get_quotes_by_id(ids: list[int], convert: str = "USD") -> dict[int, dict]:
+    """Full quote dict per CMC id (price + percent_change_*), unambiguous by id — avoids
+    the same-symbol collisions that `get_quotes` (by symbol) can hit. Used by the beta
+    core so its momentum ranking is sourced from the SAME id as the price feed."""
+    ids = sorted({int(i) for i in ids if i})
+    if not ids:
+        return {}
+    key = "idq:" + ",".join(map(str, ids)) + "|" + convert
+    now = time.time()
+    if key in _CACHE and now - _CACHE[key][0] < _CACHE_TTL:
+        return _CACHE[key][1]
+    url = f"{settings.cmc_api_base}/v2/cryptocurrency/quotes/latest"
+    resp = requests.get(url, headers=_headers(),
+                        params={"id": ",".join(map(str, ids)), "convert": convert}, timeout=30)
+    resp.raise_for_status()
+    out: dict[int, dict] = {}
+    for cid, entry in resp.json().get("data", {}).items():
+        e = entry[0] if isinstance(entry, list) else entry
+        q = e.get("quote", {}).get(convert, {})
+        out[int(cid)] = {
+            "price": q.get("price"),
+            "volume_24h": q.get("volume_24h"),
+            "percent_change_1h": q.get("percent_change_1h"),
+            "percent_change_24h": q.get("percent_change_24h"),
+            "percent_change_7d": q.get("percent_change_7d"),
+        }
+    _CACHE[key] = (now, out)
+    log.debug("cmc_quotes_by_id_fetched", ids=len(out))
+    return out
+
+
 def get_prices_by_id(ids: list[int], convert: str = "USD") -> dict[int, float]:
     """USD price per CMC id (unambiguous — avoids same-symbol collisions). One cached
     call. Used to price the tradable universe accurately when the on-chain DEX-V2 price

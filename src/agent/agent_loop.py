@@ -22,6 +22,7 @@ from .execution.pancakeswap import PancakeSwap
 from .monitor import notifier, pnl
 from .monitor.logger import get_logger
 from .monitor.safeguard import evaluate
+from .risk.daily_breaker import DailyBreaker
 from .risk.drawdown import DrawdownTracker
 from .risk.portfolio import Portfolio, read_onchain_balances
 from .risk.trade_counter import TradeCounter, utcnow
@@ -38,6 +39,7 @@ POSITIONS_FILE = RUNTIME / "aegis_positions.json"
 COMPLIANCE_FILE = RUNTIME / "track1_compliance.json"
 COOLDOWN_FILE = RUNTIME / "aegis_cooldown.json"
 REGIME_FILE = RUNTIME / "regime.json"
+DAYSTATE_FILE = RUNTIME / "daily_breaker.json"
 PRICECACHE_FILE = RUNTIME / "last_prices.json"
 CMC_SIGNAL_FILE = RUNTIME / "cmc_signal.json"   # cached CMC Agent Hub trending set (hourly)
 CLAUDE_FILE = RUNTIME / "claude_regime.json"    # cached Claude regime advisory (hourly, for dashboard)
@@ -382,9 +384,14 @@ def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
         log.info("status_snapshot_failed", error=type(e).__name__)
 
 
-def _event_decision(state: PortfolioState, prices: dict, symbols: list[str]):
+def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
+                    block_entries: bool = False):
     """Run the v2 sniper decision (volume breakout + regime valve + cooldown),
-    persisting the position book + cooldown. DRY_RUN-safe; never broadcasts here."""
+    persisting the position book + cooldown. DRY_RUN-safe; never broadcasts here.
+
+    `block_entries` (daily soft breaker) forces the entry valve to RISK_OFF so NO new
+    positions are opened this tick — at the SOURCE, so the book is never mutated with a
+    buy we won't execute (no phantom positions). Exits/stops still run unconditionally."""
     from .aegis import regime as rg
     from .aegis import sniper
     from .aegis.cooldown import CooldownBook
@@ -396,13 +403,15 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str]):
     feed = MarketFeed(volume_provider=_volume_provider())
     rstate = _maybe_update_regime(now_ts)
     flag = rg.current_regime(rstate, max_age_s=settings.regime_max_age_seconds, now=now_ts)
+    entry_flag = rg.Regime.RISK_OFF if block_entries else flag   # daily breaker: entries off
     trending = _load_trending(now_ts)
     orders, mode = sniper.run(state, prices, book=book, feed=feed, cooldowns=cooldowns,
-                              regime_flag=flag, universe=symbols, now=now_ts, trending=trending)
+                              regime_flag=entry_flag, universe=symbols, now=now_ts, trending=trending)
     book.save(POSITIONS_FILE)
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
     cooldowns.save(COOLDOWN_FILE)
-    return orders, f"{mode}:{flag.value}", _scan_rows(feed.last_snapshots)
+    label = f"{mode}:{flag.value}" + (":dayhalt" if block_entries else "")
+    return orders, label, _scan_rows(feed.last_snapshots)
 
 
 def _scan_rows(snapshots, limit: int = 8) -> list[dict]:
@@ -507,6 +516,12 @@ def tick(dry_run: bool | None = None) -> dict:
 
     drawdown = _load_drawdown()
     drawdown.update(equity)
+    # Daily soft breaker: anchor today's open equity and decide whether intraday bleed has
+    # hit the threshold (→ block NEW entries for the rest of the UTC day; exits still run).
+    day = DailyBreaker.load(DAYSTATE_FILE)
+    day.roll(equity, now.strftime("%Y-%m-%d"))
+    day.save(DAYSTATE_FILE)
+    daily_halt = day.should_halt_new(equity, settings.daily_soft_breaker_pct)
     trade_counter = TradeCounter.load(TRADES_FILE)
 
     state = PortfolioState(
@@ -527,7 +542,8 @@ def tick(dry_run: bool | None = None) -> dict:
             _clear_position_book()          # flatten simulated event positions too
     elif event_mode:
         # Layer B primary (event radar) with Layer A (eligible basket) fallback.
-        orders, mode, scan_rows = _event_decision(state, prices, symbols)
+        # daily_halt blocks new entries at the SOURCE (no phantom book positions).
+        orders, mode, scan_rows = _event_decision(state, prices, symbols, block_entries=daily_halt)
         if action.halt_buys:
             orders = [o for o in orders if o.token_in not in STABLECOINS]
     else:
@@ -535,7 +551,7 @@ def tick(dry_run: bool | None = None) -> dict:
         mode = "baseline-hold"
         basket = token_list.basket_symbols(settings.basket_size)
         orders = adaptive_hold_strategy.decide(state, basket, settings.deploy_frac)
-        if action.halt_buys:
+        if action.halt_buys or daily_halt:   # baseline is stateless → safe to strip buys here
             orders = [o for o in orders if o.token_in not in STABLECOINS]
         if action.needs_compliance_trade and not orders:
             orders = _compliance_orders(state)
@@ -553,6 +569,9 @@ def tick(dry_run: bool | None = None) -> dict:
                         n_blocked=len(buys))
             orders = [o for o in orders if o.token_in not in STABLECOINS]
 
+    if daily_halt:
+        log.warning("daily_soft_breaker_active", intraday_dd=round(day.drawdown(equity), 4),
+                    threshold=settings.daily_soft_breaker_pct, day_open=round(day.open_equity, 2))
     cum_return = pnl.cumulative_return(_baseline_equity(equity), equity)
     log.info("tick", equity=round(equity, 2), drawdown=round(drawdown.current_drawdown(), 4),
              cumulative_return=round(cum_return, 4), strategy=mode,
