@@ -443,11 +443,15 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
         # (BTC + F&G + Claude) instead of betting a market direction.
         beta_max = (settings.beta_core_max_names if flag == rg.Regime.RISK_ON
                     else 1 if flag == rg.Regime.CAUTIOUS else 0)
+        # Reserve only what the meme sleeve can actually deploy THIS regime (its slot
+        # count × the fixed meme size) — not a rigid flat sum. At small NAV a flat reserve
+        # starved beta in CAUTIOUS (which only runs 1 meme slot); this scales with the regime.
+        meme_reserve = settings.meme_order_usd * rg.params(flag).max_slots
         beta_orders, beta_mode = bc.decide_beta(
             state, prices, _beta_momentum(symbols), book=book, regime_flag=flag, now=now_ts,
             max_names=beta_max,
             position_usd=state.equity_usd * settings.beta_core_position_pct,
-            floor_usd=base_floor + settings.beta_core_cash_reserve_usd,
+            floor_usd=base_floor + meme_reserve,
             min_momentum=settings.beta_core_min_momentum, trail_pct=settings.beta_core_trail_pct,
             hard_stop_pct=settings.beta_core_hard_stop_pct,
             breakeven_trigger=settings.aegis_breakeven_trigger_pct,

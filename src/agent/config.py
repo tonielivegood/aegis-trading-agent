@@ -134,7 +134,7 @@ class Settings(BaseModel):
     beta_core_trail_pct: float = 0.12        # trailing stop (wide — a multi-day beta hold, not a scalp)
     beta_core_hard_stop_pct: float = 0.10    # hard per-name stop
     beta_core_exit_rank_mult: int = 2        # keep a held name while it's in the top (max_names×this)
-    beta_core_cash_reserve_usd: float = 10.0  # beta leaves this much stable for the meme sleeve (no starving)
+    # (the meme cash reserve is computed dynamically = meme_order_usd × the regime's meme slots)
     # v2 sniper: breakout entry cap + cooldown + hourly regime cadence/staleness
     aegis_breakout_max_pct: float = 0.10     # entry: price rising but <= this (don't chase a blow-off)
     aegis_cooldown_seconds: int = 5400       # no re-entry into a token for 90 min after an exit
@@ -296,7 +296,6 @@ def get_settings() -> Settings:
         beta_core_trail_pct=float(_get("BETA_CORE_TRAIL_PCT", "0.12")),
         beta_core_hard_stop_pct=float(_get("BETA_CORE_HARD_STOP_PCT", "0.10")),
         beta_core_exit_rank_mult=int(_get("BETA_CORE_EXIT_RANK_MULT", "2")),
-        beta_core_cash_reserve_usd=float(_get("BETA_CORE_CASH_RESERVE_USD", "10")),
         aegis_breakout_max_pct=float(_get("AEGIS_BREAKOUT_MAX_PCT", "0.10")),
         aegis_cooldown_seconds=int(_get("AEGIS_COOLDOWN_SECONDS", "5400")),
         regime_update_seconds=int(_get("REGIME_UPDATE_SECONDS", "3600")),
