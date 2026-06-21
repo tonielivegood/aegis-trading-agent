@@ -35,3 +35,6 @@ Thumbs.db
 # Nested/unrelated
 agent-skills/
 .claude/
+
+# live dashboard snapshot (generated)
+web/status.json

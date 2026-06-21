@@ -40,6 +40,8 @@ COOLDOWN_FILE = RUNTIME / "aegis_cooldown.json"
 REGIME_FILE = RUNTIME / "regime.json"
 PRICECACHE_FILE = RUNTIME / "last_prices.json"
 CMC_SIGNAL_FILE = RUNTIME / "cmc_signal.json"   # cached CMC Agent Hub trending set (hourly)
+WEB_DIR = Path(__file__).resolve().parents[2] / "web"
+STATUS_FILE = WEB_DIR / "status.json"           # public, MASKED snapshot for the live dashboard (no secrets)
 LOW_EQUITY_USD = max(5.0, settings.min_portfolio_value_usd * 2)
 COMPLIANCE_ORDER_USD = 2.0
 
@@ -270,6 +272,63 @@ def _load_trending(now_ts: float) -> frozenset[str]:
         return frozenset()
 
 
+def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
+                           results, dry_run: bool, now) -> None:
+    """Write a MASKED, public-safe snapshot for the live dashboard. Fail-safe — never
+    raises into the tick. Contains NO secrets: only on-chain/market state already public
+    (equity, regime, the CMC Agent Hub reads, open positions, and recent trade hashes)."""
+    try:
+        from datetime import datetime, timezone
+
+        from .aegis import regime as rg
+        from .aegis.positions import PositionBook
+        rstate = rg.RegimeState.load(REGIME_FILE)
+        fng = cmc_agent_hub.get_fear_greed()
+        trending = sorted(_load_trending(time.time()))
+        book = PositionBook.load(POSITIONS_FILE)
+        positions = []
+        for sym, p in book.positions.items():
+            px = prices.get(sym, 0.0)
+            gain = ((px - p.entry_price) / p.entry_price) if p.entry_price else 0.0
+            positions.append({"symbol": sym, "class": p.token_class,
+                              "price": px, "gain_pct": round(gain * 100, 1),
+                              "usd_size": round(p.usd_size, 2)})
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        prior: list = []
+        if STATUS_FILE.exists():
+            try:
+                prior = json.loads(STATUS_FILE.read_text(encoding="utf-8")).get("recent_trades", [])
+            except Exception:  # noqa: BLE001
+                prior = []
+        fresh = [{"time": ts, "token_in": r.get("token_in"), "token_out": r.get("token_out"),
+                  "usd": round(r.get("amount_usd", 0) or 0, 2), "tx": r.get("tx"),
+                  "simulated": bool(r.get("simulated", True))}
+                 for r in (results or []) if r.get("token_in")]
+        recent = (fresh + prior)[:10]
+        syms = token_list.alpha_symbols()
+        majors = sum(1 for s in syms if token_list.token_class(s) == "major")
+        snap = {
+            "updated_at": ts,
+            "mode": "DRY" if dry_run else "LIVE",
+            "strategy": strategy_mode,
+            "equity": round(equity, 2),
+            "drawdown_pct": round(drawdown.current_drawdown() * 100, 2),
+            "return_pct": round(cum_return * 100, 2),
+            "regime": {"flag": rstate.flag, "reason": rstate.reason},
+            "agent_hub": {"fear_greed": fng, "trending": trending},
+            "positions": positions,
+            "recent_trades": recent,
+            "universe": {"total": len(syms), "majors": majors, "memes": len(syms) - majors},
+            "backend": settings.execution_backend,
+            "breaker": {"alert_pct": round(settings.max_drawdown_alert * 100),
+                        "cap_pct": round(settings.max_drawdown_cap * 100)},
+        }
+        WEB_DIR.mkdir(parents=True, exist_ok=True)
+        STATUS_FILE.write_text(json.dumps(snap), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001 — dashboard export must never break a tick
+        log.info("status_snapshot_failed", error=type(e).__name__)
+
+
 def _event_decision(state: PortfolioState, prices: dict, symbols: list[str]):
     """Run the v2 sniper decision (volume breakout + regime valve + cooldown),
     persisting the position book + cooldown. DRY_RUN-safe; never broadcasts here."""
@@ -427,6 +486,7 @@ def tick(dry_run: bool | None = None) -> dict:
     trade_counter.save(TRADES_FILE)
     _save_drawdown(drawdown)
     _notify(action, results, equity, drawdown, cum_return, now)
+    _write_status_snapshot(equity, drawdown, cum_return, mode, prices, results, dry_run, now)
     return {"equity": equity, "action": action.reason, "orders": len(orders), "results": results}
 
 

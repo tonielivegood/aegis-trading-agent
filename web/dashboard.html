@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aegis — Live Trading Agent · BNB Hack Track 1</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --surface2:#1c2230; --border:#30363d;
+    --text:#e6edf3; --muted:#8b949e; --green:#3fb950; --red:#f85149;
+    --amber:#d29922; --blue:#58a6ff; --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:920px;margin:0 auto;padding:24px 18px 56px;}
+  a{color:var(--blue);text-decoration:none;}
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .between{justify-content:space-between;}
+  .muted{color:var(--muted);}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
+  .grid{display:grid;gap:12px;}
+  h1{font-size:20px;font-weight:600;margin:0;}
+  h2{font-size:14px;font-weight:600;margin:0 0 12px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);}
+  .sub{font-size:13px;color:var(--muted);}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:8px;font-size:13px;font-weight:600;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .metric .label{font-size:12px;color:var(--muted);}
+  .metric .val{font-size:26px;font-weight:600;line-height:1.15;}
+  .chip{font-size:13px;font-weight:600;background:var(--surface2);border:1px solid var(--border);
+    padding:4px 11px;border-radius:8px;color:var(--blue);}
+  .fgbar{display:flex;height:14px;border-radius:7px;overflow:hidden;}
+  .fgmark{position:relative;height:18px;}
+  .fgneedle{position:absolute;top:-2px;transform:translateX(-50%);transition:left 1s ease;font-size:13px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  td,th{padding:7px 0;text-align:left;}
+  th{font-size:12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);}
+  tr+tr td{border-top:1px solid var(--border);}
+  .right{text-align:right;}
+  .green{color:var(--green);} .red{color:var(--red);} .amber{color:var(--amber);}
+  .mono{font-variant-numeric:tabular-nums;}
+  .stale{background:#3d2a12;border-color:#5c3d12;color:var(--amber);}
+  .foot{font-size:12px;color:var(--muted);margin-top:8px;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .live .dot{animation:pulse 1.4s infinite;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row between" style="margin-bottom:18px;">
+    <div class="row">
+      <div style="width:40px;height:40px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--blue);">A</div>
+      <div>
+        <h1>Aegis <span class="sub" style="font-weight:400;">· self-custody trading agent</span></h1>
+        <div class="sub">BNB Hack 2026 · Track 1 · CoinMarketCap × Trust Wallet × BNB Chain</div>
+      </div>
+    </div>
+    <div id="statusPill" class="pill" style="background:var(--surface2);"><span class="dot" style="background:var(--muted);"></span><span id="modeText">connecting…</span></div>
+  </div>
+
+  <div id="freshWarn" class="card stale" style="display:none;margin-bottom:12px;font-size:13px;">
+    Snapshot is stale — the agent may be between ticks or paused. Showing last known state.
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px;">
+    <div class="card metric"><div class="label">Equity (NAV)</div><div class="val mono" id="mEquity">—</div></div>
+    <div class="card metric"><div class="label">Return</div><div class="val mono" id="mReturn">—</div></div>
+    <div class="card metric"><div class="label">Drawdown</div><div class="val mono" id="mDD">—</div></div>
+    <div class="card metric"><div class="label">Regime</div><div class="val" id="mRegime" style="font-size:22px;">—</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <h2>CMC AI Agent Hub · #CMCAgentHub</h2>
+    <div class="sub" style="margin-bottom:6px;">Market Fear &amp; Greed — tightens the regime in a panic</div>
+    <div class="fgbar"><div style="flex:20;background:#b03a36;"></div><div style="flex:5;background:#c4892a;"></div><div style="flex:25;background:#6e7681;"></div><div style="flex:25;background:#3a8c4e;"></div><div style="flex:25;background:#2ea043;"></div></div>
+    <div class="fgmark"><span class="fgneedle" id="fgNeedle" style="left:0%;">▲</span></div>
+    <div class="row between" style="margin:2px 0 14px;"><span class="sub">extreme fear</span><span id="fgText" class="mono" style="font-weight:600;">—</span><span class="sub">extreme greed</span></div>
+    <div class="sub" style="margin-bottom:7px;">Community trending — biases token selection</div>
+    <div class="row" id="trending"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <h2>Positions</h2>
+    <div id="positions"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <h2>Recent activity</h2>
+    <div id="trades"></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-bottom:12px;">
+    <div class="card">
+      <h2>Strategy — confirmed move, then ride</h2>
+      <table>
+        <tr><th>Tier</th><th class="right">Enter</th><th class="right">Ride</th><th class="right">Stop</th></tr>
+        <tr><td>Major</td><td class="right">2.5× vol · +3%</td><td class="right green">+30% · 7% trail</td><td class="right red">−7%</td></tr>
+        <tr><td>Meme</td><td class="right">4× vol · +3%</td><td class="right green">+200% · 25% trail</td><td class="right red">−12%</td></tr>
+      </table>
+      <div class="foot">5-minute volume candles · exits on TP / stop / trailing only — no time-based exit.</div>
+    </div>
+    <div class="card">
+      <h2>Safety</h2>
+      <table>
+        <tr><td class="muted">Drawdown breaker</td><td class="right" id="sBreaker">—</td></tr>
+        <tr><td class="muted">Custody</td><td class="right">self-signed, local</td></tr>
+        <tr><td class="muted">Execution</td><td class="right mono" id="sBackend">—</td></tr>
+        <tr><td class="muted">Universe</td><td class="right" id="sUniverse">—</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="row between foot">
+    <span id="updated">—</span>
+    <a href="https://github.com/tonielivegood/aegis-trading-agent">github.com/tonielivegood/aegis-trading-agent</a>
+  </div>
+</div>
+
+<script>
+function pct(x){return (x>0?'+':'')+Number(x).toFixed(2)+'%';}
+function fmtTime(iso){try{const d=new Date(iso);return d.toUTCString().replace('GMT','UTC');}catch(e){return iso;}}
+function el(id){return document.getElementById(id);}
+
+function render(d){
+  const live = d.mode==='LIVE';
+  const pill = el('statusPill');
+  pill.className='pill'+(live?' live':'');
+  pill.style.background = live?'rgba(63,185,80,.15)':'var(--surface2)';
+  pill.querySelector('.dot').style.background = live?'var(--green)':'var(--amber)';
+  el('modeText').textContent = (d.mode||'—')+' · '+(d.backend||'')+' · tick 60s';
+
+  el('mEquity').textContent = '$'+Number(d.equity).toFixed(2);
+  const r=el('mReturn'); r.textContent=pct(d.return_pct); r.className='val mono '+(d.return_pct>=0?'green':'red');
+  const dd=el('mDD'); dd.textContent=Number(d.drawdown_pct).toFixed(2)+'%'; dd.className='val mono '+(d.drawdown_pct>=20?'red':d.drawdown_pct>=10?'amber':'');
+  el('mRegime').textContent = (d.regime&&d.regime.flag||'—').replace('_','-');
+
+  const fg=d.agent_hub&&d.agent_hub.fear_greed;
+  if(fg){el('fgText').innerHTML=fg.value+' · <span class="amber">'+(fg.classification||'')+'</span>';el('fgNeedle').style.left=Math.max(0,Math.min(100,fg.value))+'%';}
+  else{el('fgText').textContent='unavailable';}
+  const tr=d.agent_hub&&d.agent_hub.trending||[];
+  el('trending').innerHTML = tr.length?tr.map(t=>'<span class="chip">'+t+'</span>').join(''):'<span class="sub">none</span>';
+
+  const pos=d.positions||[];
+  el('positions').innerHTML = pos.length
+    ? '<table><tr><th>Token</th><th>Tier</th><th class="right">Size</th><th class="right">P&amp;L</th></tr>'+
+      pos.map(p=>'<tr><td>'+p.symbol+'</td><td class="muted">'+p.class+'</td><td class="right mono">$'+Number(p.usd_size).toFixed(2)+'</td><td class="right mono '+(p.gain_pct>=0?'green':'red')+'">'+pct(p.gain_pct)+'</td></tr>').join('')+'</table>'
+    : '<div class="sub">In cash — waiting for a confirmed move. No noise trades.</div>';
+
+  const tx=d.recent_trades||[];
+  el('trades').innerHTML = tx.length
+    ? '<table><tr><th>Time</th><th>Swap</th><th class="right">USD</th><th class="right">Tx</th></tr>'+
+      tx.map(t=>{const link=t.tx?('<a href="https://bscscan.com/tx/'+t.tx+'">'+t.tx.slice(0,8)+'…</a>'):(t.simulated?'<span class="sub">dry</span>':'—');
+        return '<tr><td class="sub mono">'+(t.time||'').slice(11,19)+'</td><td>'+t.token_in+' → '+t.token_out+'</td><td class="right mono">$'+Number(t.usd).toFixed(2)+'</td><td class="right mono">'+link+'</td></tr>';}).join('')+'</table>'
+    : '<div class="sub">No trades yet.</div>';
+
+  if(d.breaker) el('sBreaker').textContent = '−'+d.breaker.alert_pct+'% / −'+d.breaker.cap_pct+'% DQ';
+  el('sBackend').textContent = d.backend||'—';
+  if(d.universe) el('sUniverse').textContent = d.universe.total+' ('+d.universe.majors+' major · '+d.universe.memes+' meme)';
+
+  el('updated').textContent = 'Updated '+fmtTime(d.updated_at);
+  const ageMs = Date.now()-new Date(d.updated_at).getTime();
+  el('freshWarn').style.display = (ageMs>180000)?'block':'none';
+}
+
+function tick(){
+  fetch('status.json?_='+Date.now()).then(r=>r.json()).then(render).catch(()=>{
+    el('modeText').textContent='waiting for first tick…';
+  });
+}
+tick(); setInterval(tick, 15000);
+</script>
+</body>
+</html>

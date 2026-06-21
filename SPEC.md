@@ -3,9 +3,10 @@
 > ⚠️ **Historical design doc (original spec).** The live system evolved during the
 > build: execution is now the **1inch DEX aggregator** (self-custody local signing),
 > the universe is ~91 aggregator-routable tokens priced via **CoinMarketCap**, and the
-> live strategy is a **cash-default two-tier volume-breakout sniper** with a CMC
-> AI Agent Hub regime overlay. For the *current* architecture see
-> [`README.md`](README.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
+> live strategy is a **cash-default confirmed-momentum + ride sniper** (5-minute volume
+> confirmation; exits on take-profit / stop / trailing only) with a CMC AI Agent Hub regime
+> overlay, and the Trust Wallet Agent Kit is a working alternative execution backend. For the
+> *current* architecture see [`README.md`](README.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Objective
 
