@@ -26,10 +26,27 @@ def _enable(mocker):
     mocker.patch.object(ca.settings, "anthropic_api_key", "test-key")
 
 
-def test_claude_can_tighten_risk_on_to_cautious(mocker):
-    _mock_reply(mocker, "CAUTIOUS\nBTC momentum is fading into resistance.")
-    eff, rec, reason = ca.advise_regime(Regime.RISK_ON, btc_quote=BTC, fear_greed={"value": 40})
+def test_claude_tightens_under_real_danger(mocker):
+    # A genuine BTC drop (24h <= -3%) is hard danger → Claude's caution IS applied.
+    danger_btc = {"percent_change_1h": -2.5, "percent_change_24h": -4.0}
+    _mock_reply(mocker, "CAUTIOUS\nBTC momentum is breaking down.")
+    eff, rec, reason = ca.advise_regime(Regime.RISK_ON, btc_quote=danger_btc, fear_greed={"value": 35})
     assert eff == Regime.CAUTIOUS and rec == "cautious" and "BTC" in reason
+
+
+def test_caution_ignored_without_real_danger(mocker):
+    # (b) DANGER GATE: BTC flat/up + only mild fear (F&G 40) → Claude's caution is RECORDED
+    # but NOT applied; we keep the mechanical RISK_ON (don't sit out a rally on sentiment).
+    _mock_reply(mocker, "CAUTIOUS\nFear sentiment looks elevated.")
+    eff, rec, _ = ca.advise_regime(Regime.RISK_ON, btc_quote=BTC, fear_greed={"value": 40})
+    assert eff == Regime.RISK_ON and rec == "cautious"
+
+
+def test_extreme_fear_still_lets_claude_tighten(mocker):
+    # True extreme fear (F&G <= 20) is hard danger → caution applies even with flat BTC.
+    _mock_reply(mocker, "CAUTIOUS\nExtreme fear with no momentum.")
+    eff, _, _ = ca.advise_regime(Regime.RISK_ON, btc_quote=BTC, fear_greed={"value": 18})
+    assert eff == Regime.CAUTIOUS
 
 
 def test_claude_can_never_loosen(mocker):
