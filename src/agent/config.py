@@ -73,6 +73,8 @@ class Settings(BaseModel):
     max_drawdown_cap: float = 0.30
     drawdown_latch_ticks: int = 3      # breaker latches only after N consecutive breach ticks (anti-glitch debounce)
     daily_soft_breaker_pct: float = 0.08  # halt NEW entries for the rest of the UTC day if intraday DD >= this (0 disables)
+    max_concurrent_positions: int = 2     # GLOBAL cap on simultaneous positions in RISK_ON (CAUTIOUS=1, RISK_OFF=0).
+                                          # Alts are BTC-correlated → total exposure is the DD-gate risk; keep it small.
     max_position_pct: float = 0.10
     stablecoin_floor_pct: float = 0.15
     deploy_frac: float = 0.65          # fraction of equity deployed to the basket (walk-forward sweet spot: more upside, 0% DQ over 5.7yr)
@@ -256,6 +258,7 @@ def get_settings() -> Settings:
         max_drawdown_cap=float(_get("MAX_DRAWDOWN_CAP", "0.30")),
         drawdown_latch_ticks=int(_get("DRAWDOWN_LATCH_TICKS", "3")),
         daily_soft_breaker_pct=float(_get("DAILY_SOFT_BREAKER_PCT", "0.08")),
+        max_concurrent_positions=int(_get("MAX_CONCURRENT_POSITIONS", "2")),
         max_position_pct=float(_get("MAX_POSITION_PCT", "0.10")),
         stablecoin_floor_pct=float(_get("STABLECOIN_FLOOR_PCT", "0.15")),
         deploy_frac=float(_get("DEPLOY_FRAC", "0.50")),

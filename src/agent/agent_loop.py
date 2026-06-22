@@ -459,15 +459,21 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
     beta_label = ""
     sniper_state = state
     sniper_classes: set[str] | None = None
+    meme_cap: int | None = None
     if settings.beta_core_enabled:
         from .aegis import beta_core as bc
         cooling = cooldowns.cooling_down(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
         base_floor = max(settings.stablecoin_floor_usd, state.equity_usd * settings.stablecoin_floor_pct)
-        # GRADUATED exposure: full basket in RISK_ON, a light 1-name basket in CAUTIOUS,
-        # nothing new in RISK_OFF (which also flattens) — the agent flexes with the regime
-        # (BTC + F&G + Claude) instead of betting a market direction.
-        beta_max = (settings.beta_core_max_names if flag == rg.Regime.RISK_ON
-                    else 1 if flag == rg.Regime.CAUTIOUS else 0)
+        # GLOBAL concurrent-position cap (shared across BOTH sleeves): RISK_ON N / CAUTIOUS 1 /
+        # RISK_OFF 0. Alts are highly correlated to BTC, so total exposure — not per-sleeve — is
+        # what a BTC dump hits; capping TOTAL positions is the real DD-gate control. Beta fills
+        # the cap first (majors), memes get whatever slots remain (often 0-1). Graduated by
+        # regime so the agent flexes with the market, never betting a direction.
+        cap = (settings.max_concurrent_positions if flag == rg.Regime.RISK_ON
+               else 1 if flag == rg.Regime.CAUTIOUS else 0)
+        beta_names = (settings.beta_core_max_names if flag == rg.Regime.RISK_ON
+                      else 1 if flag == rg.Regime.CAUTIOUS else 0)
+        beta_max = min(beta_names, cap)
         # Reserve ONE meme ticket whenever memes can trade this regime (0 in RISK_OFF). At
         # ~$33 NAV, reserving 2 tickets ($10) starved beta below 2 names; reserving 1 ($5)
         # lets beta hold 2 majors while memes still get at least one lottery shot (a 2nd meme
@@ -491,10 +497,14 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
                     - sum(o.amount_in_usd for o in beta_orders if o.token_out == "USDT"))
         sniper_state = replace(state, stable_value_usd=max(0.0, state.stable_value_usd - net_beta))
         sniper_classes = {"meme"}                  # beta owns majors → sniper handles memes only
+        # Memes get only the slots left under the GLOBAL cap after beta took its majors.
+        majors_held = sum(1 for p in book.positions.values() if p.token_class == "major")
+        meme_cap = max(0, cap - majors_held)
         beta_label = f"+beta:{beta_mode}"
 
     orders, mode = sniper.run(sniper_state, prices, book=book, feed=feed, cooldowns=cooldowns,
                               regime_flag=entry_flag, universe=symbols, now=now_ts, trending=trending,
+                              max_meme_positions=meme_cap,
                               manage_classes=sniper_classes)
     book.save(POSITIONS_FILE)
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
