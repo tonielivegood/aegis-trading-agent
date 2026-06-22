@@ -93,6 +93,31 @@ def _apply_min_trade_compliance(orders, state, prices, now_ts):
     return orders
 
 
+def _reconcile_failed_entries(results) -> None:
+    """Remove phantom positions left by a reverted BUY.
+
+    The position book is opened OPTIMISTICALLY at decision time (in sniper/beta, before the
+    swap), so a stable->token entry that reverts on-chain leaves a book entry for a token we
+    don't actually hold. The phantom is valued correctly at $0 (balance read), but it occupies
+    a sleeve slot until a price-triggered exit self-heals it. Here we close any position whose
+    ENTRY (stable->token) swap FAILED this tick — precise: a real prior position is never in
+    this tick's failed results, so a good position can't be touched."""
+    from .aegis.positions import PositionBook
+    phantoms = [r.get("token_out") for r in results
+                if "error" in r and r.get("token_in") in STABLECOINS and r.get("token_out")]
+    if not phantoms:
+        return
+    book = PositionBook.load(POSITIONS_FILE)
+    changed = False
+    for sym in phantoms:
+        if book.is_open(sym):
+            book.close(sym)
+            changed = True
+            log.warning("phantom_entry_removed", symbol=sym)
+    if changed:
+        book.save(POSITIONS_FILE)
+
+
 def _record_valid_trades(results, now_ts) -> None:
     """Record executed eligible-by-contract trades into the compliance tracker."""
     if not settings.track1_compliance_enabled:
@@ -644,6 +669,7 @@ def tick(dry_run: bool | None = None) -> dict:
     results = _execute(orders, prices, dry_run, trade_counter, now)
     if event_mode:
         _record_valid_trades(results, time.time())
+        _reconcile_failed_entries(results)   # drop phantom positions from reverted buys
 
     trade_counter.save(TRADES_FILE)
     _save_drawdown(drawdown)

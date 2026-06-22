@@ -38,6 +38,36 @@ def test_snapshot_is_valid_and_public_safe(tmp_path, mocker):
     assert settings.cmc_api_key not in blob
 
 
+def test_reconcile_removes_phantom_failed_buy(tmp_path, mocker):
+    """A reverted BUY (error result, stable->token) must have its optimistic book entry
+    removed; a successful entry and an unrelated holding stay."""
+    from src.agent.aegis.positions import OpenPosition, PositionBook
+    mocker.patch.object(al, "POSITIONS_FILE", tmp_path / "pos.json")
+    book = PositionBook()
+    book.open(OpenPosition(symbol="TRIA", contract="0x", entry_price=1.0, usd_size=5.0, token_class="meme"))
+    book.open(OpenPosition(symbol="FORM", contract="0x", entry_price=1.0, usd_size=6.0, token_class="major"))
+    book.save(tmp_path / "pos.json")
+    results = [
+        {"token_in": "USDT", "token_out": "TRIA", "error": "reverted"},          # phantom
+        {"token_in": "USDT", "token_out": "FORM", "simulated": False, "tx": "0x"},  # real
+    ]
+    al._reconcile_failed_entries(results)
+    b2 = PositionBook.load(tmp_path / "pos.json")
+    assert not b2.is_open("TRIA") and b2.is_open("FORM")
+
+
+def test_reconcile_ignores_failed_sells(tmp_path, mocker):
+    """A failed SELL (token_in is the token, not a stablecoin) must NOT close the position —
+    only failed entries are phantoms."""
+    from src.agent.aegis.positions import OpenPosition, PositionBook
+    mocker.patch.object(al, "POSITIONS_FILE", tmp_path / "pos.json")
+    book = PositionBook()
+    book.open(OpenPosition(symbol="FORM", contract="0x", entry_price=1.0, usd_size=6.0, token_class="major"))
+    book.save(tmp_path / "pos.json")
+    al._reconcile_failed_entries([{"token_in": "FORM", "token_out": "USDT", "error": "x"}])
+    assert PositionBook.load(tmp_path / "pos.json").is_open("FORM")
+
+
 def test_scan_rows_do_not_leak_strategy_thresholds():
     """status.json is PUBLIC — the live scan must NOT expose the exact entry bar
     (vol_mult) or breakout bounds, which are the strategy edge. Only vol_x / bo_pct
