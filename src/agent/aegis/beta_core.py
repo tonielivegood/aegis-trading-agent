@@ -75,6 +75,45 @@ def select_basket(momentum: dict[str, float], *, max_names: int, min_momentum: f
     return [s for s, _ in ranked[:max_names]]
 
 
+def _momentum_rotations(
+    *, held: list[str], momentum: dict[str, float], max_names: int,
+    entry_min: float, exit_min: float, rotation_margin: float,
+    allow: Callable[[str], bool],
+) -> set[str]:
+    """Which held majors to rotate out for MOMENTUM reasons, with hysteresis.
+
+    Two distinct triggers, both designed to avoid whipsaw churn:
+      * WEAK — a held name whose own blended momentum fell below `exit_min` (a LOWER
+        floor than the `entry_min` admission gate) always rotates out. The gap between
+        entry_min and exit_min is the hold band: a name admitted at 4% is kept until it
+        truly deteriorates below 2%, not the instant it dips under 4%.
+      * DISPLACED — an incumbent keeps its slot unless an *entry-worthy* challenger
+        (momentum >= entry_min, not already held) out-ranks it by >= `rotation_margin`.
+        Implemented as an incumbency BONUS (held momentum + margin) in a top-`max_names`
+        ranking, so a marginally-stronger newcomer cannot bump a held name, but a clearly
+        stronger leader (large momentum gap) still rotates in.
+    Pure; price-based risk exits (stop/breakeven/trail) are handled by the caller and are
+    never gated by this function."""
+    held_mom = {s: float(momentum.get(s, 0.0)) for s in held}
+    weak = {s for s, m in held_mom.items() if m < exit_min}
+    survivors = [s for s in held if s not in weak]
+    if not survivors:
+        return weak
+    challengers = [
+        (s, float(m)) for s, m in momentum.items()
+        if s not in held and m >= entry_min and allow(s)
+    ]
+    # Incumbents carry a margin bonus and win exact ties (the trailing 1 vs 0 flag) → hysteresis.
+    ranked = sorted(
+        [(s, held_mom[s] + rotation_margin, 1) for s in survivors]
+        + [(s, m, 0) for s, m in challengers],
+        key=lambda t: (t[1], t[2]), reverse=True,
+    )
+    keep = {s for s, _, _ in ranked[: max(0, max_names)]}
+    displaced = {s for s in survivors if s not in keep}
+    return weak | displaced
+
+
 def _sell_full(symbol: str, held_usd: float, reason: str) -> TradeOrder:
     return TradeOrder(symbol, STABLE, held_usd, reason)
 
@@ -90,7 +129,8 @@ def decide_beta(
     max_names: int, position_usd: float, floor_usd: float,
     min_momentum: float = 2.0, trail_pct: float = 0.12, hard_stop_pct: float = 0.10,
     breakeven_trigger: float = 0.05, breakeven_buffer: float = 0.005,
-    exit_rank_mult: int = 2, settlement: str = STABLE,
+    exit_min_momentum: float = 2.0, rotation_margin: float = 3.0, min_hold_sec: float = 0.0,
+    settlement: str = STABLE,
     cooldown_symbols: frozenset[str] | set[str] = frozenset(),
     block_entries: bool = False,
     allow: Callable[[str], bool] | None = None,
@@ -114,9 +154,11 @@ def decide_beta(
             book.close(sym)
         return orders, "beta-flat"
 
-    # Keep a wider "still a leader" set so a name that merely slipped a rank isn't churned.
-    leaders = set(select_basket(momentum, max_names=max_names * max(1, exit_rank_mult),
-                                min_momentum=min_momentum, allow=allow))
+    # Momentum-based rotations with hysteresis (held band + incumbency margin). Price-based
+    # risk exits below always win; this only governs the discretionary momentum rotation.
+    rotate_out = _momentum_rotations(
+        held=held, momentum=momentum, max_names=max_names, entry_min=min_momentum,
+        exit_min=exit_min_momentum, rotation_margin=rotation_margin, allow=allow)
 
     # --- exits on held beta names (trailing / breakeven / hard stop / momentum lost) ---
     exited_now: set[str] = set()
@@ -141,7 +183,7 @@ def decide_beta(
         elif price > p.entry_price and p.peak_price > 0 and price <= p.peak_price * (1 - trail_pct):
             orders.append(_sell_full(sym, held_usd, "beta exit: trailing stop"))
             book.close(sym)
-        elif sym not in leaders:
+        elif sym in rotate_out and (min_hold_sec <= 0 or p.age_s(now) >= min_hold_sec):
             orders.append(_sell_full(sym, held_usd, "beta exit: momentum lost"))
             book.close(sym)
         if not book.is_open(sym):

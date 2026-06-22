@@ -25,9 +25,10 @@ def _book(*positions):
     return b
 
 
-def _major(sym, entry, *, peak=None, usd=20.0):
+def _major(sym, entry, *, peak=None, usd=20.0, entry_time=None):
+    kw = {} if entry_time is None else {"entry_time": entry_time}
     return OpenPosition(symbol=sym, contract="0x", entry_price=entry, usd_size=usd,
-                        peak_price=peak or entry, token_class="major")
+                        peak_price=peak or entry, token_class="major", **kw)
 
 
 # --- momentum + selection ---
@@ -145,10 +146,80 @@ def test_block_entries_suppresses_new_without_flattening():
 
 
 def test_momentum_lost_exit():
-    # Held name is no longer among the (max_names*exit_rank_mult) leaders → rotate out.
+    # Held name's own momentum collapsed below the exit floor → rotate out (weak).
     mom = {"AAA": 12.0, "BBB": 10.0, "CCC": 8.0, "OLD": -2.0}
     book = _book(_major("OLD", 1.0))
     orders, _ = bc.decide_beta(_state(holdings={"OLD": 20.0}), {"OLD": 1.0}, mom, book=book,
                                regime_flag=Regime.RISK_ON, now=0.0, max_names=2,
-                               position_usd=20.0, floor_usd=6.0, exit_rank_mult=2, allow=ALLOW)
+                               position_usd=20.0, floor_usd=6.0, allow=ALLOW)
     assert any("momentum lost" in o.reason for o in orders) and not book.is_open("OLD")
+
+
+# --- hysteresis: don't churn a held name on a MARGINAL momentum slip ---
+
+def test_marginal_challenger_does_not_churn_incumbent():
+    # Reproduces the live HOME→BAT whipsaw: incumbent at 3.4%, challenger at 4.8% (only
+    # +1.4pp). With rotation_margin=3 the challenger must beat the held name by >=3pp to
+    # displace it → incumbent KEEPS its slot, no churn.
+    mom = {"HELD": 3.4, "CHAL": 4.8}
+    book = _book(_major("HELD", 1.0))
+    orders, _ = bc.decide_beta(_state(holdings={"HELD": 20.0}), {"HELD": 1.0, "CHAL": 2.0},
+                               mom, book=book, regime_flag=Regime.RISK_ON, now=0.0, max_names=1,
+                               position_usd=20.0, floor_usd=6.0, min_momentum=4.0,
+                               exit_min_momentum=2.0, rotation_margin=3.0, allow=ALLOW)
+    assert orders == [] and book.is_open("HELD")          # held, not rotated
+
+
+def test_strong_challenger_rotates_incumbent():
+    # A CLEARLY stronger leader (12.3pp gap) DOES displace the incumbent → rotate.
+    mom = {"HELD": 3.7, "CHAL": 16.0}
+    book = _book(_major("HELD", 1.0))
+    orders, _ = bc.decide_beta(_state(holdings={"HELD": 20.0}), {"HELD": 1.0, "CHAL": 2.0},
+                               mom, book=book, regime_flag=Regime.RISK_ON, now=0.0, max_names=1,
+                               position_usd=20.0, floor_usd=6.0, min_momentum=4.0,
+                               exit_min_momentum=2.0, rotation_margin=3.0, allow=ALLOW)
+    assert any("momentum lost" in o.reason and o.token_in == "HELD" for o in orders)
+    assert any(o.token_out == "CHAL" for o in orders) and not book.is_open("HELD")
+
+
+def test_weak_incumbent_below_exit_floor_rotates_to_cash():
+    # No challenger, but the held name's own momentum fell below the exit floor → sell.
+    mom = {"HELD": 1.0}
+    book = _book(_major("HELD", 1.0))
+    orders, _ = bc.decide_beta(_state(holdings={"HELD": 20.0}), {"HELD": 1.0}, mom, book=book,
+                               regime_flag=Regime.RISK_ON, now=0.0, max_names=1,
+                               position_usd=20.0, floor_usd=6.0, min_momentum=4.0,
+                               exit_min_momentum=2.0, rotation_margin=3.0, allow=ALLOW)
+    assert any("momentum lost" in o.reason for o in orders) and not book.is_open("HELD")
+
+
+def test_min_hold_blocks_fresh_rotation_then_allows():
+    # A fresh entry (age < min_hold) is NOT rotated even by a strong challenger; once it
+    # has aged past min_hold, the same challenger displaces it.
+    mom = {"HELD": 3.7, "CHAL": 16.0}
+    prices = {"HELD": 1.0, "CHAL": 2.0}
+    fresh = _book(_major("HELD", 1.0, entry_time=1000.0))
+    orders, _ = bc.decide_beta(_state(holdings={"HELD": 20.0}), prices, mom, book=fresh,
+                               regime_flag=Regime.RISK_ON, now=1000.0 + 600, max_names=1,
+                               position_usd=20.0, floor_usd=6.0, min_momentum=4.0,
+                               exit_min_momentum=2.0, rotation_margin=3.0, min_hold_sec=1800.0,
+                               allow=ALLOW)
+    assert orders == [] and fresh.is_open("HELD")         # too fresh to rotate
+
+    aged = _book(_major("HELD", 1.0, entry_time=1000.0))
+    orders2, _ = bc.decide_beta(_state(holdings={"HELD": 20.0}), prices, mom, book=aged,
+                                regime_flag=Regime.RISK_ON, now=1000.0 + 2000, max_names=1,
+                                position_usd=20.0, floor_usd=6.0, min_momentum=4.0,
+                                exit_min_momentum=2.0, rotation_margin=3.0, min_hold_sec=1800.0,
+                                allow=ALLOW)
+    assert any("momentum lost" in o.reason for o in orders2) and not aged.is_open("HELD")
+
+
+def test_min_hold_never_blocks_hard_stop():
+    # Risk exits ALWAYS fire regardless of min_hold — a fresh position that craters still stops out.
+    book = _book(_major("HELD", 1.0, entry_time=1000.0))
+    orders, _ = bc.decide_beta(_state(holdings={"HELD": 18.0}), {"HELD": 0.88}, {"HELD": 5.0},
+                               book=book, regime_flag=Regime.RISK_ON, now=1000.0 + 60, max_names=1,
+                               position_usd=20.0, floor_usd=6.0, hard_stop_pct=0.10,
+                               min_hold_sec=1800.0, allow=ALLOW)
+    assert any("hard stop" in o.reason for o in orders) and not book.is_open("HELD")

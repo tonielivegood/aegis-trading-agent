@@ -140,7 +140,15 @@ class Settings(BaseModel):
                                              # majors are less explosive than memes so trail < meme's 10%.
                                              # Watch for whipsaw (majors swing 5-10%/day) → widen if it churns.
     beta_core_hard_stop_pct: float = 0.08    # hard per-name stop — paired with the 6% trail (symmetric, DQ-safe)
-    beta_core_exit_rank_mult: int = 2        # keep a held name while it's in the top (max_names×this)
+    # Rotation hysteresis (anti-whipsaw). Day-1 live churned majors FORM→HOME→BAT→DEXE (a name held
+    # 24 min) because the entry & exit momentum thresholds were the same — a major hovering near 4%
+    # got bought-and-sold each tick. The hold band + margin + min-hold stop that churn.
+    beta_core_exit_min_momentum: float = 2.0  # hold a name until momentum truly decays below this (< the
+                                              # 4% entry gate) — the band that prevents dip-under-4% churn.
+    beta_core_rotation_margin: float = 3.0    # a challenger must beat a held name by >= this many momentum
+                                              # points to displace it (incumbency advantage) → no marginal rotations.
+    beta_core_min_hold_sec: float = 1800.0    # min hold (30 min) before a momentum rotation; price stops
+                                              # (hard/breakeven/trail) ALWAYS fire regardless. Blocks sub-tick flips.
     # (the meme cash reserve is computed dynamically = meme_order_usd × the regime's meme slots)
     # v2 sniper: breakout entry cap + cooldown + hourly regime cadence/staleness
     aegis_breakout_max_pct: float = 0.10     # entry: price rising but <= this (don't chase a blow-off)
@@ -303,7 +311,9 @@ def get_settings() -> Settings:
         beta_core_mom_w1h=float(_get("BETA_CORE_MOM_W1H", "0.5")),
         beta_core_trail_pct=float(_get("BETA_CORE_TRAIL_PCT", "0.12")),
         beta_core_hard_stop_pct=float(_get("BETA_CORE_HARD_STOP_PCT", "0.08")),
-        beta_core_exit_rank_mult=int(_get("BETA_CORE_EXIT_RANK_MULT", "2")),
+        beta_core_exit_min_momentum=float(_get("BETA_CORE_EXIT_MIN_MOMENTUM", "2.0")),
+        beta_core_rotation_margin=float(_get("BETA_CORE_ROTATION_MARGIN", "3.0")),
+        beta_core_min_hold_sec=float(_get("BETA_CORE_MIN_HOLD_SEC", "1800.0")),
         aegis_breakout_max_pct=float(_get("AEGIS_BREAKOUT_MAX_PCT", "0.10")),
         aegis_cooldown_seconds=int(_get("AEGIS_COOLDOWN_SECONDS", "5400")),
         regime_update_seconds=int(_get("REGIME_UPDATE_SECONDS", "3600")),

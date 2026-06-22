@@ -79,7 +79,9 @@ def main() -> None:
         hard_stop_pct=settings.beta_core_hard_stop_pct,
         breakeven_trigger=settings.aegis_breakeven_trigger_pct,
         breakeven_buffer=settings.aegis_breakeven_buffer_pct,
-        exit_rank_mult=settings.beta_core_exit_rank_mult)
+        exit_min_momentum=settings.beta_core_exit_min_momentum,
+        rotation_margin=settings.beta_core_rotation_margin,
+        min_hold_sec=settings.beta_core_min_hold_sec)
     print(f"\nwould-do this scan (mode={mode}): {len(orders)} order(s)")
     for o in orders:
         print(f"  {o.token_in:>6} -> {o.token_out:<10} ${o.amount_in_usd:.2f}  [{o.reason}]")

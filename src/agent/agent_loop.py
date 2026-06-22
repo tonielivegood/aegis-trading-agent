@@ -488,7 +488,9 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
             hard_stop_pct=settings.beta_core_hard_stop_pct,
             breakeven_trigger=settings.aegis_breakeven_trigger_pct,
             breakeven_buffer=settings.aegis_breakeven_buffer_pct,
-            exit_rank_mult=settings.beta_core_exit_rank_mult, cooldown_symbols=cooling,
+            exit_min_momentum=settings.beta_core_exit_min_momentum,
+            rotation_margin=settings.beta_core_rotation_margin,
+            min_hold_sec=settings.beta_core_min_hold_sec, cooldown_symbols=cooling,
             block_entries=block_entries)
         for o in beta_orders:
             if o.token_out == "USDT":              # an exit (sold back to stable) → cooldown
