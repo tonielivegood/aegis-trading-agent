@@ -250,6 +250,55 @@ def test_breakeven_not_armed_without_a_real_pop():
     assert orders == [] and book.is_open("FOO")
 
 
+# --- stale-meme recycle: free a scarce slot from a fizzled lottery ticket ---
+
+def _major_book(symbol="FOO", entry=1.0, usd=10.0, peak=None, entry_time=0.0):
+    book = PositionBook()
+    book.open(OpenPosition(symbol=symbol, contract="0x", entry_price=entry, usd_size=usd,
+                           entry_time=entry_time, peak_price=peak or entry, token_class="major"))
+    return book
+
+
+def test_stale_meme_recycle_fires():
+    # A meme that fizzled (peak +2%, never armed the +5% breakeven) and has aged past the
+    # recycle window is dead capital on a scarce slot -> recycle it (well before 24h max-hold).
+    book = _book_with(entry=1.0, peak=1.02, entry_time=0.0)        # default token_class = meme
+    orders = edam.decide_exits(book, {"FOO": 0.98}, {}, _state(holdings={"FOO": 9.8}),
+                               hard_stop_pct=0.08, breakeven_trigger=0.05, no_progress_min=0,
+                               meme_recycle_min=480, now=540 * 60)  # 9h old
+    assert orders and "stale meme recycle" in orders[0].reason and not book.is_open("FOO")
+
+
+def test_stale_meme_recycle_exempts_real_runner():
+    # A meme that DID pop past the breakeven trigger (peak +8%) and is still above entry is a
+    # real runner -> exempt from recycle; trail/TP/breakeven manage it, not the recycle timer.
+    book = _book_with(entry=1.0, peak=1.08, entry_time=0.0)
+    orders = edam.decide_exits(book, {"FOO": 1.06}, {}, _state(holdings={"FOO": 10.6}),
+                               hard_stop_pct=0.08, breakeven_trigger=0.05, trailing_pct=0.10,
+                               no_progress_min=0, meme_recycle_min=480, max_hold_min=2000,
+                               now=540 * 60)
+    assert orders == [] and book.is_open("FOO")                    # held, not recycled
+
+
+def test_stale_meme_recycle_suppressed_before_window():
+    # Same fizzled meme but younger than the recycle window -> not yet recycled.
+    book = _book_with(entry=1.0, peak=1.02, entry_time=0.0)
+    orders = edam.decide_exits(book, {"FOO": 0.98}, {}, _state(holdings={"FOO": 9.8}),
+                               hard_stop_pct=0.08, breakeven_trigger=0.05, no_progress_min=0,
+                               meme_recycle_min=480, now=120 * 60)  # 2h old
+    assert orders == [] and book.is_open("FOO")
+
+
+def test_stale_meme_recycle_only_touches_memes():
+    # A MAJOR aged past the window with a low peak is NOT recycled by this rule (majors are
+    # managed by beta-core, which has its own hysteresis rotation).
+    book = _major_book(entry=1.0, peak=1.02, entry_time=0.0)
+    orders = edam.decide_exits(book, {"FOO": 0.98}, {}, _state(holdings={"FOO": 9.8}),
+                               hard_stop_pct=0.08, breakeven_trigger=0.05, no_progress_min=0,
+                               meme_recycle_min=480, max_hold_min=2000, now=540 * 60)
+    assert orders == [] and book.is_open("FOO")
+
+
 def test_breakeven_does_not_preempt_a_still_running_winner():
     # Peaked +10% and still at +6% -> above entry+buffer, so breakeven does NOT fire;
     # the trailing stop governs the ride instead.

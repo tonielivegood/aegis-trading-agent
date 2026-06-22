@@ -107,6 +107,9 @@ class Settings(BaseModel):
     stablecoin_floor_usd: float = 6.0        # never let settlement cash drop below this (USD)
     # stablecoin_floor_pct (above, risk block) also applies; floor = max(usd, pct*equity)
     max_hold_minutes: int = 1440             # 24h backstop only (NOT a time exit); rides exit on trail/TP/stop
+    aegis_meme_recycle_minutes: int = 480    # recycle a FIZZLED meme (peak never reached the breakeven trigger)
+                                             # after 8h — frees a scarce slot for beta. Real runners (peak >= +5%)
+                                             # are exempt. 0 = off. Sits ABOVE the 24h max-hold for duds only.
     min_hold_minutes_for_volume_exit: int = 15   # don't volume-exit on noisy first candles
     volume_exit_multiple: float = 5.0        # exit when 5m volume hits Nx the entry baseline
     hard_take_profit_multiple: float = 2.0   # exit full when position value reaches Nx (10->20 USD)
@@ -289,6 +292,7 @@ def get_settings() -> Settings:
         oneinch_base_url=_get("ONEINCH_BASE_URL", ""),
         stablecoin_floor_usd=float(_get("STABLECOIN_FLOOR_USD", "6")),
         max_hold_minutes=int(_get("MAX_HOLD_MINUTES", "1440")),
+        aegis_meme_recycle_minutes=int(_get("AEGIS_MEME_RECYCLE_MINUTES", "480")),
         min_hold_minutes_for_volume_exit=int(_get("MIN_HOLD_MINUTES_FOR_VOLUME_EXIT", "15")),
         volume_exit_multiple=float(_get("VOLUME_EXIT_MULTIPLE", "5")),
         hard_take_profit_multiple=float(_get("HARD_TAKE_PROFIT_MULTIPLE", "3.0")),

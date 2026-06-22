@@ -176,6 +176,7 @@ def decide_exits(book: PositionBook, prices: dict[str, float],
                  min_hold_vol_min: int | None = None, vol_exit_mult: float | None = None,
                  trailing_pct: float | None = None, fomo_trailing_pct: float | None = None,
                  no_progress_min: int | None = None, no_progress_gain: float | None = None,
+                 meme_recycle_min: int | None = None,
                  volume_death_mult: float | None = None,
                  volume_death_in_profit: bool | None = None,
                  breakeven_trigger: float | None = None, breakeven_buffer: float | None = None,
@@ -190,6 +191,7 @@ def decide_exits(book: PositionBook, prices: dict[str, float],
     fomo_trailing_pct = settings.aegis_fomo_trailing_pct if fomo_trailing_pct is None else fomo_trailing_pct
     no_progress_min = settings.aegis_no_progress_minutes if no_progress_min is None else no_progress_min
     no_progress_gain = settings.aegis_no_progress_min_gain if no_progress_gain is None else no_progress_gain
+    meme_recycle_min = settings.aegis_meme_recycle_minutes if meme_recycle_min is None else meme_recycle_min
     volume_death_mult = settings.aegis_volume_death_mult if volume_death_mult is None else volume_death_mult
     if volume_death_in_profit is None:
         volume_death_in_profit = settings.aegis_volume_death_in_profit
@@ -253,6 +255,17 @@ def decide_exits(book: PositionBook, prices: dict[str, float],
                 and price <= p.entry_price * (1 + breakeven_buffer)):
             orders.append(_sell_full(symbol, held_usd,
                                      f"aegis exit: breakeven ({peak_gain*100:.1f}% peak gave back)"))
+            book.close(symbol)
+            continue
+        # 2c) Stale-meme recycle: a meme breakout that FIZZLED (peak never reached the
+        #     +breakeven_trigger that marks a real runner) and has aged past the recycle
+        #     window is dead capital squatting on a scarce position slot. Cut it well before
+        #     the 24h max-hold so the slot can recycle into where momentum actually is.
+        #     Real runners (peak >= trigger) are exempt — trail/TP/breakeven manage those.
+        if (meme_recycle_min > 0 and p.token_class == tc.MEME and age_min >= meme_recycle_min
+                and peak_gain < breakeven_trigger):
+            orders.append(_sell_full(symbol, held_usd,
+                                     f"aegis exit: stale meme recycle ({age_min/60:.1f}h, peak {peak_gain*100:.1f}%)"))
             book.close(symbol)
             continue
         # 3) Max hold time.
