@@ -1,8 +1,9 @@
 # HANDOFF — Aegis Track-1 Trading Agent (BNB Hack 2026)
 
 > **GOAL: win Track-1** (ranked by RAW total wallet return; ≥30% drawdown = DQ).
-> Updated **2026-06-21 ~13:30 UTC**. Read this once → full context. Code is at commit
-> `51cd50e` on branch `harden/breaker-and-pricing` (pushed to `main`, deployed to VPS).
+> Updated **2026-06-22 ~07:30 UTC — CONTEST LIVE (day 1)**. Read this once → full context.
+> Code on `harden/breaker-and-pricing` (pushed to `main`, deployed to VPS); **452 tests pass**.
+> The single most-current summary is the auto-loaded memory `handoff-status.md` (READ FIRST block).
 
 ---
 
@@ -19,25 +20,14 @@
 
 ---
 
-## 1. CURRENT STATE (very important)
+## 1. CURRENT STATE (very important) — CONTEST LIVE
 
-- **Bot is LIVE NOW** (`run --live`, flipped early **21/6** for strategy validation). **Trades 21/6 do NOT count** — the scored contest window is **22–28/6**. Equity ~$33.25, holds dust + a few small meme positions (RAVE/GUA/etc.). Regime currently **CAUTIOUS** (Claude tightened on Fear & Greed 22).
-- **Dashboard is LIVE + public:** **http://2.25.184.43:8080/dashboard.html** (served by `aegis-dash.service` from `web/`). Auto-refreshes from `web/status.json` (a MASKED snapshot the bot writes each tick — verified 0 secrets).
-- **⚠️ At 22/6 00:00 UTC (contest start) — run `panic --live` → `reset`, then KEEP it live.**
-  Sequence (NOT just `reset`):
-  1. `systemctl stop agent`
-  2. `sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent panic --live` — flatten ALL non-stable holdings to USDT.
-  3. `sudo -u agent env PYTHONPATH=. .venv/bin/python -m src.agent reset` — re-baseline drawdown/compliance + clear the books.
-  4. `systemctl start agent` — keep it `--live`.
-
-  **WHY panic first (this is the fix, 21/6):** the wallet holds ~24 leftover meme/dust
-  tokens (RAVE/NEX/GUA/SAHARA/…) but the position book tracks only RAVE → every other
-  holding is ORPHANED (no stop/trail manages it; `decide_exits` only iterates the book).
-  A bare `reset` clears the book → it would ORPHAN **RAVE too**, and `reset` does NOT sell
-  coins. `panic --live` consolidates everything to USDT first, so the contest starts 100%
-  in cash with a clean drawdown baseline and zero unmanaged positions. (Sub-$2 dust may
-  remain — harmless.) **Do NOT run `/root/go-live.sh`** — its guard aborts when the unit
-  is already `--live`. (To go back to DRY instead: `sed -i 's#run --live#run#' /etc/systemd/system/agent.service` + `daemon-reload` + restart.)
+- **Go-live fired clean 22/6 00:00 UTC** (the `contest-start.timer` automation ran panic→reset→live, baseline ~$33.26, Telegram sent). Contest window **22–28/6**; scored by RAW return; 30% DD = DQ.
+- **Now:** equity ~$32.8, regime **RISK_ON**, holding **HOME** (beta major) + **PIEVERSE** (meme lottery), DD ~1.5%, return ~−1.5%, no errors. 2/2 positions (at the global cap).
+- **Dashboard:** IP link `http://2.25.184.43:8080/dashboard.html` still works, but the **HTTPS link is `https://aegis.2-25-184-43.nip.io/dashboard.html`** (Let's Encrypt via nginx, use this everywhere now). Branded `aegis.tamduclibrary.com.vn` pending a DNSSEC fix at matbao (see §3).
+- **Architecture is the adaptive BARBELL** (beta-core majors + meme lottery, global 2-position cap, regime via BTC+F&G+Claude-with-danger-gate, multi-layer DD defenses). Full detail + all day-1 commits + the $2K-prize and HTTPS status live in the auto-loaded memory `handoff-status.md` (READ FIRST block) — that is the freshest single source of truth.
+- **⚠️ `status` CLI lies:** shows "DRY-RUN" + a low (on-chain-priced) equity. The bot IS live — trust the dashboard + tick logs (`dry_run=False`).
+- **Monitoring loop was session-only** (hourly cron, died with the prior session). To resume the co-pilot watch in a new session, re-run `/loop 60m <sweep>`; otherwise the bot's Telegram alerts cover it.
 
 ---
 
