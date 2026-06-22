@@ -87,6 +87,22 @@ def cmd_signals() -> None:
     print(f"    • a breakout that is ALSO community-trending gets a {TRENDING_BOOST:g}× rank boost "
           f"for the scarce slots")
 
+    # CMC Agent Hub — MCP Skill Hub (the marketplace of agent skills, called with our Pro key).
+    from .data import cmc_skill_hub
+    skills = cmc_skill_hub.list_skills()
+    print(f"\nCMC Agent Hub — MCP Skill Hub: {len(skills)} skills available")
+    if skills:
+        print(f"  catalog: {', '.join(skills[:12])}")
+    narr = cmc_skill_hub.trending_narratives(limit=5)
+    if narr:
+        print("  skill ▶ trending_crypto_narratives (live):")
+        for n in narr:
+            coins = ", ".join(str(c) for c in (n.get("top_coins") or [])[:4])
+            print(f"    #{n['rank']} {n['name']:<22} mc {n['market_cap']}  24h {n['change_24h']}  · {coins}")
+        print("    → the agent taps these Agent Hub skills for live market research (off the hot path).")
+    else:
+        print("  skill ▶ trending_crypto_narratives: <unavailable> (fails safe)")
+
 
 def main() -> None:
     configure()
