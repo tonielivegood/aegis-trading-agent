@@ -93,6 +93,8 @@
 - **Pricing = CMC-by-id** (on-chain V2 is garbage for the aggregator universe). Universe = 91 tradable (56 majors + 35 Alpha memes) in `data/tradable_alpha.json`.
 - **Claude = tightening-only, hourly, advisory, fail-safe.** Never let it loosen risk or enter the 60s hot path.
 - **Breaker:** alert −20% (latched after 3 consecutive breach ticks), cap −30% (instant). Valuation from on-chain balances (last-known-good fallback). Self-custody is absolute. PLUS a **daily soft breaker** (default 8% intraday DD → halt NEW entries till 00:00 UTC; exits/compliance still run) — bounds churn-bleed far below the −20% latch.
+- **GLOBAL concurrent-position cap (22/6, contest day-1):** `MAX_CONCURRENT_POSITIONS`=2 in RISK_ON, 1 in CAUTIOUS, 0 in RISK_OFF — shared across BOTH sleeves (beta fills first, memes get the remainder). Alts are BTC-correlated → TOTAL exposure is the DD-gate risk, not per-sleeve. Keeps the agent light (often 1-2, sometimes 0). Tune via env.
+- **Claude advisor = tightening-only + DANGER GATE (22/6):** Claude's step-down is APPLIED only when a hard signal corroborates (F&G ≤20, OR BTC 24h ≤ −3%, OR 1h ≤ −2%). A low fear reading with flat/positive momentum no longer sits the agent out of an alt rally. Still can never add risk.
 - **DON'T LỘ BÀI:** keep exact thresholds OUT of the public BUIDL and the public dashboard (the dashboard strategy panel is already genericized).
 
 ---
