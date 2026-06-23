@@ -33,11 +33,10 @@ def test_params_both_ride_no_time_exit():
     assert maj.hard_tp_mult == 1.30 and maj.trailing_pct == 0.07 and maj.hard_stop_pct == 0.07
     # MAJOR fires EASIER than meme now (lower bar): cheaper to trade, catch major days.
     assert maj.vol_mult < meme.vol_mult
-    # Both tiers confirm on a +3% move. The meme sleeve is a bounded-downside / huge-upside
-    # lottery, so it optimises for SHOTS ON GOAL (a lower +3% floor = more chances at the rare
-    # runner); the "popped then faded" false starts are handled by the BREAKEVEN stop, not by
-    # raising the entry floor. (Was meme +6% on 21/6; reverted with the breakeven safeguard.)
-    assert maj.breakout_min == 0.03 and meme.breakout_min == 0.03
+    # MAJOR confirms on +3%; MEME now demands a STRONGER +6% ignition (raised 23/6): a +3%
+    # meme floor fired on noise (PIEVERSE/UB mean-reverted), and with only 2 slots a marginal
+    # meme shouldn't squat on a slot beta could use. Fewer, higher-conviction meme tickets.
+    assert maj.breakout_min == 0.03 and meme.breakout_min == 0.06
     assert tc.params("unknown").hard_tp_mult == 1.80           # unknown → meme default
 
 
@@ -72,7 +71,18 @@ def test_major_stop_tighter_than_meme():
     assert meme == []
 
 
-# --- entry: BOTH require a CONFIRMED move (>=3%); MEME bar lower, MAJOR rarer ---
+# --- entry: MAJOR confirms on >=3%; MEME needs a stronger >=6% (anti-noise) ---
+
+
+def test_meme_rejects_marginal_move_major_accepts():
+    # A 5x-volume, +4% move: clears the MAJOR floor (+3%) but NOT the raised MEME floor (+6%).
+    # This is the anti-noise change — a +4% wiggle on volume no longer buys a meme lottery slot.
+    snaps = {"M": _snap("M", vol_5m=500, baseline=100, now_p=1.04, ago_p=1.0)}
+    mp, ep = tc.params("major"), tc.params("meme")
+    assert len(scan_breakouts(snaps, vol_mult=mp.vol_mult, breakout_min=mp.breakout_min,
+                              breakout_max=mp.breakout_max)) == 1
+    assert scan_breakouts(snaps, vol_mult=ep.vol_mult, breakout_min=ep.breakout_min,
+                          breakout_max=ep.breakout_max) == []
 
 def _snap(sym, vol_5m, baseline, now_p, ago_p):
     return MarketSnapshot(symbol=sym, contract="0x" + sym, vol_5m=vol_5m, baseline_vol=baseline,

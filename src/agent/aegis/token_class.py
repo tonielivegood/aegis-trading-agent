@@ -52,15 +52,15 @@ PARAMS: dict[str, ClassParams] = {
     MAJOR: ClassParams(vol_mult=2.5, breakout_min=0.03, breakout_max=0.15,
                        hard_tp_mult=1.30, trailing_pct=0.07, hard_stop_pct=0.07,
                        no_progress_min=0),
-    # MEME — the asymmetric tail (primary). Confirmed ignition: 4x sustained 5m volume
-    # AND price already **+3%** (up to +20%, so we still catch a fast starter). The meme
-    # sleeve is a bounded-downside / huge-upside LOTTERY ($5, −8% stop vs +80% cap), so we
-    # optimise for SHOTS ON GOAL, not per-trade win-rate: a lower +3% floor takes more
-    # entries → more chances to catch the rare runner. The +6% floor (21/6) reduced shots
-    # and entered higher, capturing LESS of a real run. The "popped then faded" false starts
-    # it was meant to avoid are now handled by the BREAKEVEN stop (exit ~flat once a trade has
-    # run +5%), not by skipping entries. Ride: 10% trail, cap +80%, −8% stop. No time exit.
-    MEME: ClassParams(vol_mult=4.0, breakout_min=0.03, breakout_max=0.20,
+    # MEME — the asymmetric tail. Confirmed ignition: 4x sustained 5m volume AND price
+    # already **+6%** (up to +20%, so we still catch a fast starter). Raised 3%→6% on 23/6
+    # after live evidence: a +3% floor fires on NOISE (memes wiggle ±3-5% all day) — both
+    # day-1 meme tickets (PIEVERSE, UB) cleared a +3% bar then mean-reverted, and with the 6%
+    # slippage gate even a flat meme exits at a net loss. With only 2 global slots, a marginal
+    # meme squats on a slot the proven beta sleeve could use, so we demand a STRONGER ignition
+    # (+6%) to earn the scarce slot — fewer, higher-conviction lottery tickets. Breakeven still
+    # banks pop-then-fade. Ride: 10% trail, cap +80%, −8% stop. No time exit.
+    MEME: ClassParams(vol_mult=4.0, breakout_min=0.06, breakout_max=0.20,
                       hard_tp_mult=1.80, trailing_pct=0.10, hard_stop_pct=0.08,
                       no_progress_min=0),
 }

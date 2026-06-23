@@ -130,17 +130,18 @@ def test_manage_classes_leaves_other_sleeves_positions_alone():
 
 
 def test_max_meme_positions_caps_global_exposure():
-    # Two clean meme breakouts, but the GLOBAL cap (max_meme_positions) allows only 1.
-    snaps = {"AAA": _snap("AAA", vol_5m=600, baseline_vol=100, price_now=1.05, price_5m_ago=1.0),
-             "BBB": _snap("BBB", vol_5m=600, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
+    # Two clean meme breakouts (+8% clears the +6% meme floor), but the GLOBAL cap
+    # (max_meme_positions) allows only 1.
+    snaps = {"AAA": _snap("AAA", vol_5m=600, baseline_vol=100, price_now=1.08, price_5m_ago=1.0),
+             "BBB": _snap("BBB", vol_5m=600, baseline_vol=100, price_now=1.08, price_5m_ago=1.0)}
     book = PositionBook()
-    orders, _ = sniper.run(_state(stable=50), {"AAA": 1.05, "BBB": 1.05}, book=book,
+    orders, _ = sniper.run(_state(stable=50), {"AAA": 1.08, "BBB": 1.08}, book=book,
                            feed=FakeFeed(snaps), cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
                            universe=["AAA", "BBB"], now=1000.0, floor_usd=6.0, allow=_allow,
                            max_meme_positions=1)
     assert len([o for o in orders if o.token_in == "USDT"]) == 1   # capped at 1, not 2
     # cap 0 → no entries at all (beta already took the global budget)
-    orders0, _ = sniper.run(_state(stable=50), {"AAA": 1.05, "BBB": 1.05}, book=PositionBook(),
+    orders0, _ = sniper.run(_state(stable=50), {"AAA": 1.08, "BBB": 1.08}, book=PositionBook(),
                             feed=FakeFeed(snaps), cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON,
                             universe=["AAA", "BBB"], now=1000.0, floor_usd=6.0, allow=_allow,
                             max_meme_positions=0)
