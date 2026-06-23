@@ -158,6 +158,11 @@ class Settings(BaseModel):
     aegis_cooldown_seconds: int = 5400       # no re-entry into a token for 90 min after an exit
     regime_update_seconds: int = 3600        # hourly regime updater cadence
     regime_max_age_seconds: int = 7200       # a regime flag older than this => CAUTIOUS fallback
+    # CMC Agent Hub macro guard: the agent reads CMC's macro/catalyst calendar (the
+    # get_upcoming_macro_events skill) hourly and stands DOWN (halts NEW entries) when a
+    # catalyst lands within macro_guard_days. Tightening-only + fail-safe.
+    macro_events_enabled: bool = True        # master switch for the macro-calendar guard + panel
+    macro_guard_days: int = 1                # halt new entries if a catalyst is within this many days
     min_gas_bnb: float = 0.003               # block NEW buys if native BNB gas drops below this
 
     # --- Real 5-minute volume source (Binance Alpha klines) + event timing ---
@@ -322,6 +327,8 @@ def get_settings() -> Settings:
         aegis_cooldown_seconds=int(_get("AEGIS_COOLDOWN_SECONDS", "5400")),
         regime_update_seconds=int(_get("REGIME_UPDATE_SECONDS", "3600")),
         regime_max_age_seconds=int(_get("REGIME_MAX_AGE_SECONDS", "7200")),
+        macro_events_enabled=_get_bool("MACRO_EVENTS_ENABLED", "true"),
+        macro_guard_days=int(_get("MACRO_GUARD_DAYS", "1")),
         min_gas_bnb=float(_get("MIN_GAS_BNB", "0.003")),
         aegis_require_volume_confirmation=_get("AEGIS_REQUIRE_VOLUME_CONFIRMATION", "true").lower() in ("1", "true", "yes"),
         aegis_fast_confirm_tier1=_get("AEGIS_FAST_CONFIRM_TIER1", "true").lower() in ("1", "true", "yes"),

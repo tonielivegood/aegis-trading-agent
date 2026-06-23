@@ -43,6 +43,7 @@ REGIME_FILE = RUNTIME / "regime.json"
 DAYSTATE_FILE = RUNTIME / "daily_breaker.json"
 PRICECACHE_FILE = RUNTIME / "last_prices.json"
 CMC_SIGNAL_FILE = RUNTIME / "cmc_signal.json"   # cached CMC Agent Hub trending set (hourly)
+MACRO_FILE = RUNTIME / "cmc_macro.json"         # cached CMC Agent Hub macro calendar (hourly)
 CLAUDE_FILE = RUNTIME / "claude_regime.json"    # cached Claude regime advisory (hourly, for dashboard)
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 STATUS_FILE = WEB_DIR / "status.json"           # public, MASKED snapshot for the live dashboard (no secrets)
@@ -297,6 +298,7 @@ def _maybe_update_regime(now_ts: float):
                  fear_greed=(fear_greed or {}).get("value"), claude=claude_rec or None)
         # CMC Agent Hub: refresh the community-trending set for the token-selection bias.
         _refresh_trending(now_ts)
+        _refresh_macro(now_ts)          # CMC Agent Hub macro calendar (for the event guard)
         _write_claude_advice(now_ts, claude_rec, claude_reason, flag.value)
     except Exception as e:  # noqa: BLE001 — never let a data hiccup break the tick
         log.info("regime_update_failed", error=type(e).__name__)
@@ -313,6 +315,52 @@ def _refresh_trending(now_ts: float) -> None:
             json.dumps({"trending": sorted(syms), "updated_at": now_ts}), encoding="utf-8")
     except Exception as e:  # noqa: BLE001
         log.info("cmc_trending_refresh_failed", error=type(e).__name__)
+
+
+def _refresh_macro(now_ts: float) -> None:
+    """Cache the CMC Agent Hub macro/catalyst calendar to disk so the 60s rails can read
+    it without a network call (fully fail-safe — empty list on any error)."""
+    if not settings.macro_events_enabled:
+        return
+    try:
+        from .data import cmc_skill_hub
+        events = cmc_skill_hub.upcoming_macro_events(limit=8)
+        MACRO_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MACRO_FILE.write_text(
+            json.dumps({"events": events, "updated_at": now_ts}), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        log.info("cmc_macro_refresh_failed", error=type(e).__name__)
+
+
+def _load_macro(now_ts: float) -> list[dict]:
+    """Read the cached CMC macro events (raw {title,date_str,url}); [] if absent or stale,
+    so a dead updater silently disables the guard rather than blocking forever."""
+    try:
+        if not settings.macro_events_enabled or not MACRO_FILE.exists():
+            return []
+        d = json.loads(MACRO_FILE.read_text(encoding="utf-8"))
+        if now_ts - float(d.get("updated_at", 0.0)) > settings.regime_max_age_seconds:
+            return []
+        return list(d.get("events", []))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _macro_panel(now_ts: float) -> dict:
+    """Dashboard panel for the CMC Agent Hub macro calendar: the next few upcoming
+    catalysts (nearest-first) + whether the event guard is currently standing the agent
+    down. Fail-safe — empty calendar on any error."""
+    try:
+        from datetime import datetime, timezone
+
+        from .aegis import macro_calendar
+        events = _load_macro(now_ts)
+        now = datetime.now(timezone.utc)
+        block, reason = macro_calendar.guard(events, now, within_days=settings.macro_guard_days)
+        return {"events": macro_calendar.annotate(events, now)[:5],
+                "guard": {"block": block, "reason": reason}}
+    except Exception:  # noqa: BLE001
+        return {"events": [], "guard": {"block": False, "reason": None}}
 
 
 def _write_claude_advice(now_ts: float, rec: str, reason: str, applied: str) -> None:
@@ -410,6 +458,7 @@ def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
             "regime": {"flag": rstate.flag, "reason": rstate.reason},
             "claude": _load_claude_advice(time.time()),
             "agent_hub": {"fear_greed": fng, "trending": trending},
+            "macro": _macro_panel(time.time()),
             "positions": positions,
             "recent_trades": recent,
             "equity_history": equity_hist,
@@ -623,6 +672,15 @@ def tick(dry_run: bool | None = None) -> dict:
     day.roll(equity, now.strftime("%Y-%m-%d"))
     day.save(DAYSTATE_FILE)
     daily_halt = day.should_halt_new(equity, settings.daily_soft_breaker_pct)
+    # CMC Agent Hub macro guard: stand DOWN (halt new entries) into an imminent high-volatility
+    # catalyst from CMC's macro calendar. Tightening-only + fail-safe (no/distant events ⇒ no
+    # halt; exits always run). One more Agent Hub skill driving a real decision.
+    from .aegis import macro_calendar
+    macro_halt, macro_reason = macro_calendar.guard(
+        _load_macro(now.timestamp()), now, within_days=settings.macro_guard_days)
+    if macro_halt:
+        log.info("macro_guard_halt", reason=macro_reason)
+    daily_halt = daily_halt or macro_halt
     trade_counter = TradeCounter.load(TRADES_FILE)
 
     state = PortfolioState(

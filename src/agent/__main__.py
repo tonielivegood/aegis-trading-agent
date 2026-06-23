@@ -103,6 +103,25 @@ def cmd_signals() -> None:
     else:
         print("  skill ▶ trending_crypto_narratives: <unavailable> (fails safe)")
 
+    # CMC Agent Hub — macro calendar: a SECOND skill driving a real decision. The agent
+    # stands down (halts new entries) into an imminent high-volatility catalyst.
+    from datetime import datetime, timezone
+
+    from .aegis import macro_calendar
+    events = cmc_skill_hub.upcoming_macro_events(limit=8)
+    now = datetime.now(timezone.utc)
+    upcoming = macro_calendar.annotate(events, now)
+    block, reason = macro_calendar.guard(events, now, within_days=settings.macro_guard_days)
+    print("\n  skill ▶ get_upcoming_macro_events (live) — the agent's macro-event guard:")
+    if upcoming:
+        for e in upcoming[:5]:
+            when = "today" if e["days_until"] == 0 else f"in {e['days_until']}d"
+            print(f"    • {e['date']} ({when:>6}) — {e['title'][:64]}")
+        print(f"    → guard within {settings.macro_guard_days}d: "
+              f"{'STAND DOWN — ' + reason if block else 'clear (no imminent catalyst → trade as normal)'}")
+    else:
+        print("    <unavailable> (fails safe → no macro guard)")
+
 
 def main() -> None:
     configure()

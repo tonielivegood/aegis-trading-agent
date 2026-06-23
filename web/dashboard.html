@@ -174,6 +174,13 @@
         <span class="tag">trending_crypto_narratives</span><span class="tag">get_crypto_technical_analysis</span><span class="tag">get_crypto_latest_news</span><span class="tag">get_global_metrics_latest</span><span class="tag">get_upcoming_macro_events</span><span class="tag">get_crypto_metrics</span><span class="tag">get_crypto_quotes_latest</span><span class="tag">search_cryptos</span><span class="tag">+4 more</span>
       </div>
     </div>
+    <div id="macroRow" style="display:none;border-top:1px solid var(--line);margin-top:13px;padding-top:12px;">
+      <div class="row between" style="margin-bottom:6px;">
+        <span class="sub"><span style="color:var(--green);font-weight:600;">Macro event guard</span> — skill <span class="mono">get_upcoming_macro_events</span>: stands down into a catalyst</span>
+        <span id="macroGuard" class="tag"></span>
+      </div>
+      <div id="macroList" class="sub" style="line-height:1.7;"></div>
+    </div>
   </div>
 
   <div class="card" style="margin-bottom:13px;">
@@ -277,6 +284,15 @@ function render(d){
     el('claudeRec').textContent='reads: '+String(cl.recommendation).replace('_','-');
     el('claudeReason').textContent=cl.reason||'';}
   else{el('claudeRow').style.display='none';}
+
+  const mac=d.macro, mev=(mac&&mac.events)||[];
+  if(mev.length){el('macroRow').style.display='block';
+    const g=mac.guard||{};
+    el('macroGuard').innerHTML=g.block?'<span class="amber">STAND DOWN</span>':'<span class="green">clear</span>';
+    el('macroList').innerHTML=mev.slice(0,4).map(e=>{
+      const when=e.days_until===0?'today':('in '+e.days_until+'d');
+      return '<div>· <span class="mono">'+e.date+'</span> <span class="muted">('+when+')</span> — '+(e.title||'')+'</div>';}).join('');}
+  else{el('macroRow').style.display='none';}
 
   const scan=d.scan||[], maxv=Math.max(8,...scan.map(s=>s.vol_x));
   el('scanSummary').textContent='watching '+(d.universe?d.universe.total:'—')+' · '+(d.scan_firing||0)+' firing';

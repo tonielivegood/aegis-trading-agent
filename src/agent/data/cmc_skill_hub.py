@@ -105,6 +105,30 @@ def trending_narratives(limit: int = 5) -> list[dict]:
     return out
 
 
+def upcoming_macro_events(limit: int = 6) -> list[dict]:
+    """Upcoming macro/catalyst events via the Agent Hub `get_upcoming_macro_events` skill,
+    as tidy dicts: {title, date_str, url}. The agent uses these to stand down into an
+    imminent high-volatility catalyst (see aegis.macro_calendar). [] on any error."""
+    data = call_skill("get_upcoming_macro_events")
+    block = (data or {}).get("upcomingEventNews") if isinstance(data, dict) else None
+    if not block or "headers" not in block or "rows" not in block:
+        return []
+    idx = {h: i for i, h in enumerate(block["headers"])}
+
+    def _get(row, key):
+        i = idx.get(key)
+        return row[i] if i is not None and i < len(row) else None
+
+    out = []
+    for row in block["rows"][:limit]:
+        title = _get(row, "title")
+        if not title:
+            continue
+        out.append({"title": str(title), "date_str": _get(row, "eventDate") or "",
+                    "url": _get(row, "url") or ""})
+    return out
+
+
 def _coin_symbols(v) -> list[str]:
     """topCoinList is a nested table {headers:[coinSymbol,...], rows:[[SYM,...]]}; pull the
     symbol column. Also tolerate a flat list of strings/dicts (shape can vary). [] on anything else."""

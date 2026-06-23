@@ -51,11 +51,25 @@ def test_trending_narratives_maps_rows(mocker):
     assert out[1]["rank"] == 2
 
 
+def test_upcoming_macro_events_maps_rows(mocker):
+    inner = {"upcomingEventNews": {
+        "headers": ["title", "content", "url", "eventDate", "originalNewsContent"],
+        "rows": [["MiCA Fully Enforced", "summary", "http://x", "1 July 2026", "long..."],
+                 ["Fed Rate Meeting", "summary", "http://y", "28 July 2026", "long..."],
+                 ["", "no title row", "http://z", "5 Aug 2026", "long..."]]}}   # blank title dropped
+    _mock_post(mocker, {"result": {"content": [{"type": "text", "text": json.dumps(inner)}]}})
+    out = sh.upcoming_macro_events(limit=8)
+    assert len(out) == 2
+    assert out[0] == {"title": "MiCA Fully Enforced", "date_str": "1 July 2026", "url": "http://x"}
+    assert out[1]["date_str"] == "28 July 2026"
+
+
 def test_fail_safe_on_http_error(mocker):
     _mock_post(mocker, {}, raise_exc=RuntimeError("boom"))
     assert sh.list_skills() == []
     assert sh.call_skill("x") is None
     assert sh.trending_narratives() == []
+    assert sh.upcoming_macro_events() == []
 
 
 def test_sse_framed_response(mocker):
