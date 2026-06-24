@@ -65,9 +65,11 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
         trending: frozenset[str] | set[str] = frozenset(),
         manage_classes: set[str] | frozenset[str] | None = None,
         max_meme_positions: int | None = None,
+        meme_usd: float | None = None,
         ) -> tuple[list[TradeOrder], str]:
     overpump_pct = settings.aegis_overpump_pct if overpump_pct is None else overpump_pct
     cooldown_s = settings.aegis_cooldown_seconds if cooldown_s is None else cooldown_s
+    meme_usd = settings.meme_order_usd if meme_usd is None else meme_usd
     if floor_usd is None:
         floor_usd = max(settings.stablecoin_floor_usd,
                         state.equity_usd * settings.stablecoin_floor_pct)
@@ -97,13 +99,14 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
                               trending=trending, manage_classes=manage_classes)
         cooling = cooldowns.cooling_down(now=now, cooldown_s=cooldown_s)
         pos_usd = rg.position_usd(state.equity_usd, regime_flag)
-        # A caller (the barbell) may cap entries below the regime's own slots — e.g. a GLOBAL
-        # concurrent-position cap shared with the beta sleeve. Use the tighter of the two.
-        max_pos = params.max_slots if max_meme_positions is None else min(params.max_slots, max_meme_positions)
+        # The caller's cap is AUTHORITATIVE when given: the barbell caps entries BELOW the
+        # regime's own slots (shared global cap), while the tournament-clock may raise the
+        # lottery sleeve ABOVE the regime cap (the convex late-game push). None => regime default.
+        max_pos = params.max_slots if max_meme_positions is None else max_meme_positions
         entries = decide_breakout_entries(
             sigs, state, book, position_usd=pos_usd, max_positions=max_pos,
             floor_usd=floor_usd, cooldown_symbols=cooling, settlement=settlement, allow=allow,
-            meme_usd=settings.meme_order_usd, manage_classes=manage_classes)
+            meme_usd=meme_usd, manage_classes=manage_classes)
         for o in entries:
             sym = o.token_out
             if o.token_in == settlement and sym in prices:

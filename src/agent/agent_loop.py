@@ -477,8 +477,32 @@ def _write_status_snapshot(equity, drawdown, cum_return, strategy_mode, prices,
         log.info("status_snapshot_failed", error=type(e).__name__)
 
 
+def _contest_end_epoch() -> float:
+    """Configured contest-end ISO → epoch seconds. Fail-safe: an unparseable value
+    yields a far-future time → the clock reads 'too early' → inactive (never escalates)."""
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(settings.tournament_clock_end.replace("Z", "+00:00")).timestamp()
+    except Exception:  # noqa: BLE001
+        return time.time() + 365 * 86400
+
+
+def _apply_clock(clock, *, meme_cap, base_max_slots, entry_flag, flag, meme_order_usd):
+    """Apply a tournament-clock directive to the MEME sleeve only. Inactive => everything
+    unchanged (a disabled/off-window clock is byte-identical to no clock). Returns
+    (meme_cap, meme_usd, meme_flag, label). Escalation may raise the lottery cap ABOVE the
+    regime cap and, in a daily-halt, hand the memes the true regime flag (beta stays halted)."""
+    if not clock.active:
+        return meme_cap, meme_order_usd, entry_flag, ""
+    base = base_max_slots if meme_cap is None else meme_cap
+    meme_flag = flag if clock.relax_meme_breaker else entry_flag
+    return (base + clock.extra_meme_slots, meme_order_usd * clock.meme_ticket_mult,
+            meme_flag, f"+clock:{clock.reason}")
+
+
 def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
-                    block_entries: bool = False):
+                    block_entries: bool = False, our_return: float = 0.0,
+                    current_dd: float = 0.0):
     """Run the v2 sniper decision (volume breakout + regime valve + cooldown),
     persisting the position book + cooldown. DRY_RUN-safe; never broadcasts here.
 
@@ -487,6 +511,7 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
     buy we won't execute (no phantom positions). Exits/stops still run unconditionally."""
     from .aegis import regime as rg
     from .aegis import sniper
+    from .aegis import tournament_clock as tclock
     from .aegis.cooldown import CooldownBook
     from .aegis.market_feed import MarketFeed
     from .aegis.positions import PositionBook
@@ -553,14 +578,32 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
         meme_cap = max(0, cap - majors_held)
         beta_label = f"+beta:{beta_mode}"
 
+    # Tournament clock (#3): in the final window AND only while NOT yet likely in a paying
+    # spot, ESCALATE the meme lottery sleeve (extra slots + bigger ticket + ignore the daily
+    # breaker) — never beta. Gated by tournament_clock_enabled; inactive => byte-identical.
+    clock = tclock.decide_clock(
+        now=now_ts, contest_end=_contest_end_epoch(), our_return=our_return,
+        current_dd=current_dd, regime_flag=flag, enabled=settings.tournament_clock_enabled,
+        arm_days=settings.tournament_clock_arm_days,
+        full_send_days=settings.tournament_clock_full_send_days,
+        safe_return=settings.tournament_clock_safe_return,
+        max_push_dd=settings.tournament_clock_max_push_dd,
+        extra_slots_arm=settings.tournament_clock_extra_slots_arm,
+        extra_slots_full=settings.tournament_clock_extra_slots_full,
+        ticket_mult_arm=settings.tournament_clock_ticket_mult_arm,
+        ticket_mult_full=settings.tournament_clock_ticket_mult_full)
+    meme_cap, meme_usd, meme_flag, clock_label = _apply_clock(
+        clock, meme_cap=meme_cap, base_max_slots=rg.params(entry_flag).max_slots,
+        entry_flag=entry_flag, flag=flag, meme_order_usd=settings.meme_order_usd)
+
     orders, mode = sniper.run(sniper_state, prices, book=book, feed=feed, cooldowns=cooldowns,
-                              regime_flag=entry_flag, universe=symbols, now=now_ts, trending=trending,
-                              max_meme_positions=meme_cap,
+                              regime_flag=meme_flag, universe=symbols, now=now_ts, trending=trending,
+                              max_meme_positions=meme_cap, meme_usd=meme_usd,
                               manage_classes=sniper_classes)
     book.save(POSITIONS_FILE)
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
     cooldowns.save(COOLDOWN_FILE)
-    label = f"{mode}:{flag.value}" + beta_label + (":dayhalt" if block_entries else "")
+    label = f"{mode}:{flag.value}" + beta_label + clock_label + (":dayhalt" if block_entries else "")
     return beta_orders + orders, label, _scan_rows(feed.last_snapshots)
 
 
@@ -702,7 +745,10 @@ def tick(dry_run: bool | None = None) -> dict:
     elif event_mode:
         # Layer B primary (event radar) with Layer A (eligible basket) fallback.
         # daily_halt blocks new entries at the SOURCE (no phantom book positions).
-        orders, mode, scan_rows = _event_decision(state, prices, symbols, block_entries=daily_halt)
+        orders, mode, scan_rows = _event_decision(
+            state, prices, symbols, block_entries=daily_halt,
+            our_return=pnl.cumulative_return(_baseline_equity(equity), equity),
+            current_dd=drawdown.current_drawdown())
         if action.halt_buys:
             orders = [o for o in orders if o.token_in not in STABLECOINS]
     else:

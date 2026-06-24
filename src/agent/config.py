@@ -153,6 +153,20 @@ class Settings(BaseModel):
     beta_core_min_hold_sec: float = 1800.0    # min hold (30 min) before a momentum rotation; price stops
                                               # (hard/breakeven/trail) ALWAYS fire regardless. Blocks sub-tick flips.
     # (the meme cash reserve is computed dynamically = meme_order_usd × the regime's meme slots)
+    # --- Tournament clock (#3): convex-when-behind. In the final window AND only while NOT
+    # yet likely in a paying spot, ESCALATE the meme lottery sleeve (extra slots + bigger
+    # ticket + ignore the daily soft breaker) — never beta. OFF by default; flip on for the
+    # final 48h after calibrating safe_return off the leaderboard recon. ---
+    tournament_clock_enabled: bool = False       # master switch (live wiring gated on this)
+    tournament_clock_end: str = "2026-06-28T00:00:00Z"  # contest-end UTC (confirm exact end)
+    tournament_clock_arm_days: float = 2.0       # escalation arms in the final N days
+    tournament_clock_full_send_days: float = 1.0 # heavier tier in the final N days
+    tournament_clock_safe_return: float = 0.15   # >= this return => PROTECT, don't push (PROVISIONAL — calibrate post-25/6)
+    tournament_clock_max_push_dd: float = 0.15   # kill-switch: stop escalating once DD hits this
+    tournament_clock_extra_slots_arm: int = 1    # extra lottery slots in the arm tier
+    tournament_clock_extra_slots_full: int = 2   # extra lottery slots in the full-send tier
+    tournament_clock_ticket_mult_arm: float = 1.4   # meme ticket size multiplier (arm)
+    tournament_clock_ticket_mult_full: float = 2.0  # meme ticket size multiplier (full-send)
     # v2 sniper: breakout entry cap + cooldown + hourly regime cadence/staleness
     aegis_breakout_max_pct: float = 0.10     # entry: price rising but <= this (don't chase a blow-off)
     aegis_cooldown_seconds: int = 5400       # no re-entry into a token for 90 min after an exit
@@ -323,6 +337,16 @@ def get_settings() -> Settings:
         beta_core_exit_min_momentum=float(_get("BETA_CORE_EXIT_MIN_MOMENTUM", "2.0")),
         beta_core_rotation_margin=float(_get("BETA_CORE_ROTATION_MARGIN", "3.0")),
         beta_core_min_hold_sec=float(_get("BETA_CORE_MIN_HOLD_SEC", "1800.0")),
+        tournament_clock_enabled=_get_bool("TOURNAMENT_CLOCK_ENABLED", "false"),
+        tournament_clock_end=_get("TOURNAMENT_CLOCK_END", "2026-06-28T00:00:00Z"),
+        tournament_clock_arm_days=float(_get("TOURNAMENT_CLOCK_ARM_DAYS", "2.0")),
+        tournament_clock_full_send_days=float(_get("TOURNAMENT_CLOCK_FULL_SEND_DAYS", "1.0")),
+        tournament_clock_safe_return=float(_get("TOURNAMENT_CLOCK_SAFE_RETURN", "0.15")),
+        tournament_clock_max_push_dd=float(_get("TOURNAMENT_CLOCK_MAX_PUSH_DD", "0.15")),
+        tournament_clock_extra_slots_arm=int(_get("TOURNAMENT_CLOCK_EXTRA_SLOTS_ARM", "1")),
+        tournament_clock_extra_slots_full=int(_get("TOURNAMENT_CLOCK_EXTRA_SLOTS_FULL", "2")),
+        tournament_clock_ticket_mult_arm=float(_get("TOURNAMENT_CLOCK_TICKET_MULT_ARM", "1.4")),
+        tournament_clock_ticket_mult_full=float(_get("TOURNAMENT_CLOCK_TICKET_MULT_FULL", "2.0")),
         aegis_breakout_max_pct=float(_get("AEGIS_BREAKOUT_MAX_PCT", "0.10")),
         aegis_cooldown_seconds=int(_get("AEGIS_COOLDOWN_SECONDS", "5400")),
         regime_update_seconds=int(_get("REGIME_UPDATE_SECONDS", "3600")),
