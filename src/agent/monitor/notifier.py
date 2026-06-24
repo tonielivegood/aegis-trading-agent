@@ -61,3 +61,8 @@ def format_trades(n: int, equity: float) -> str:
 
 def format_error(detail: str) -> str:
     return f"🔴 Agent error: {detail[:300]}"
+
+
+def format_exit_failure(symbol: str, reason: str, detail: str) -> str:
+    return (f"🚨 EXIT FAILED on all backends · {symbol} ({reason}) · position NOT closed "
+            f"— check the agent now · {detail[:160]}")

@@ -130,6 +130,86 @@ def test_compliance_trade_none_when_wallet_too_small():
     assert al._compliance_orders(_state(1.0, 0, 1.0, {})) == []
 
 
+# --- execution failover + failed-exit alert (#2 hardening) ---
+
+class _FakeDex:
+    """Stub backend: optionally raises, else returns a SwapResult."""
+    def __init__(self, fail=False, simulated=False, tx="0xdead"):
+        self.fail, self.simulated, self.tx, self.calls = fail, simulated, tx, []
+
+    def swap(self, token_in, token_out, amount_in):
+        self.calls.append((token_in, token_out, amount_in))
+        if self.fail:
+            raise RuntimeError("backend down")
+        from src.agent.execution.pancakeswap import SwapResult
+        return SwapResult(token_in, token_out, 0, 0, 0, simulated=self.simulated, tx_hash=self.tx)
+
+
+def _patch_backends(mocker, mapping):
+    """Route _make_executor_for(backend, dry_run) to a per-name stub."""
+    mocker.patch.object(al, "_make_executor_for",
+                        side_effect=lambda backend, dry_run: mapping[backend])
+
+
+def _exit_order(sym="BAS"):
+    return TradeOrder(sym, "USDT", 5.0, "stop")           # sells token -> stable = EXIT
+
+
+def _entry_order(sym="BAS"):
+    return TradeOrder("USDT", sym, 5.0, "breakout")       # buys token = ENTRY
+
+
+_PRICES = {"BAS": 0.03, "USDT": 1.0}
+
+
+def test_exit_fails_over_to_backup_backend(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    primary, oo = _FakeDex(fail=True), _FakeDex(tx="0xfeed")
+    _patch_backends(mocker, {"1inch": primary, "openocean": oo, "pancake": _FakeDex()})
+    tc = mocker.Mock()
+    out = al._execute([_exit_order()], _PRICES, dry_run=False, trade_counter=tc, now=0)
+    assert out[0].get("error") is None and out[0]["tx"] == "0xfeed"
+    assert out[0]["failover_backend"] == "openocean"
+    assert len(oo.calls) == 1 and tc.record_trade.called
+
+
+def test_entry_does_not_failover(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    primary, oo = _FakeDex(fail=True), _FakeDex()
+    _patch_backends(mocker, {"1inch": primary, "openocean": oo, "pancake": _FakeDex()})
+    out = al._execute([_entry_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=0)
+    assert "error" in out[0]            # failed, dropped this tick
+    assert oo.calls == []               # no failover attempted for an entry
+
+
+def test_exit_all_backends_fail_alerts(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    _patch_backends(mocker, {"1inch": _FakeDex(fail=True),
+                             "openocean": _FakeDex(fail=True), "pancake": _FakeDex(fail=True)})
+    send = mocker.patch.object(al.notifier, "send")
+    out = al._execute([_exit_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=0)
+    assert "error" in out[0]
+    assert send.called                  # operator paged that the exit is stuck
+
+
+def test_exit_primary_success_no_alert_no_failover(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    primary, oo = _FakeDex(tx="0xok"), _FakeDex()
+    _patch_backends(mocker, {"1inch": primary, "openocean": oo, "pancake": _FakeDex()})
+    send = mocker.patch.object(al.notifier, "send")
+    out = al._execute([_exit_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=0)
+    assert out[0]["tx"] == "0xok" and "failover_backend" not in out[0]
+    assert oo.calls == [] and not send.called
+
+
+def test_twak_primary_does_not_failover(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "twak")
+    twak, oo = _FakeDex(fail=True), _FakeDex()
+    _patch_backends(mocker, {"twak": twak, "openocean": oo, "pancake": _FakeDex()})
+    out = al._execute([_exit_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=0)
+    assert "error" in out[0] and oo.calls == []   # separate wallet → never cross over
+
+
 # --- kill-switch (flatten_to_cash) ---
 
 def test_flatten_to_cash_sells_all_nonstable_and_clears_books(mocker):

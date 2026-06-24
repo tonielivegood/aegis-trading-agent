@@ -816,13 +816,19 @@ def _compliance_orders(state: PortfolioState) -> list[TradeOrder]:
     return []
 
 
-def _make_executor(dry_run: bool):
-    """Select the execution backend. Default PancakeSwap on the registered wallet
-    (battle-tested). 'openocean'/'1inch' route through a DEX AGGREGATOR (best price
-    across all BSC DEXs → far lower slippage, much larger tradable universe); they
-    return ready-to-sign calldata that we sign LOCALLY (self-custody preserved).
+# EXIT-only failover chain, tried in order after the configured primary fails:
+# OpenOcean (keyless aggregator — broad universe, an API independent of 1inch) then
+# PancakeSwap (on-chain, no aggregator API at all — the API-independent last resort).
+# Getting OUT of a position is non-negotiable; entries keep price discipline (no failover).
+_FAILOVER_BACKENDS = ("openocean", "pancake")
+
+
+def _make_executor_for(backend: str, dry_run: bool):
+    """Build a named execution backend. PancakeSwap (default) trades on-chain on the
+    registered wallet (battle-tested). 'openocean'/'1inch' route through a DEX AGGREGATOR
+    (best price across all BSC DEXs → far lower slippage, much larger tradable universe);
+    they return ready-to-sign calldata that we sign LOCALLY (self-custody preserved).
     'twak' routes through the Trust Wallet Agent Kit CLI (its own local wallet)."""
-    backend = settings.execution_backend
     if backend == "twak":
         from .execution.twak_executor import TwakExecutor
         return TwakExecutor(dry_run=dry_run)
@@ -839,25 +845,61 @@ def _make_executor(dry_run: bool):
     return PancakeSwap(account=account, dry_run=dry_run)
 
 
+def _make_executor(dry_run: bool):
+    """The configured primary execution backend."""
+    return _make_executor_for(settings.execution_backend, dry_run)
+
+
 def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
     if not orders:
         return []
-    dex = _make_executor(dry_run)
+    primary = settings.execution_backend
+    # EXIT orders may fail over to backup backends; twak (separate wallet) never does.
+    failover = [] if primary == "twak" else [b for b in _FAILOVER_BACKENDS if b != primary]
+    executors: dict[str, object] = {}                       # built lazily, reused this tick
+
+    def _dex(backend):
+        if backend not in executors:
+            executors[backend] = _make_executor_for(backend, dry_run)
+        return executors[backend]
 
     results = []
     for o in orders:
         amount_in = _amount_in_tokens(o, prices)
         if amount_in <= 0:
             continue
-        try:
-            r = dex.swap(o.token_in, o.token_out, amount_in)
-            if not r.simulated:
-                trade_counter.record_trade(now)
-            results.append({"order": o.reason, "simulated": r.simulated, "tx": r.tx_hash,
-                            "token_in": o.token_in, "token_out": o.token_out,
-                            "amount_usd": o.amount_in_usd})
-        except Exception as e:  # noqa: BLE001 — one failed swap must not abort the tick
-            log.warning("swap_failed", reason=o.reason, error=str(e))
-            results.append({"order": o.reason, "error": str(e),
+        is_exit = o.token_out in STABLECOINS              # selling to stable = closing a position
+        backends = [primary] + (failover if is_exit else [])
+        last_err = None
+        for attempt, backend in enumerate(backends):
+            try:
+                r = _dex(backend).swap(o.token_in, o.token_out, amount_in)
+                if not r.simulated:
+                    trade_counter.record_trade(now)
+                row = {"order": o.reason, "simulated": r.simulated, "tx": r.tx_hash,
+                       "token_in": o.token_in, "token_out": o.token_out,
+                       "amount_usd": o.amount_in_usd}
+                if attempt > 0:                            # the primary had failed → record the save
+                    row["failover_backend"] = backend
+                    log.warning("swap_failover_ok", reason=o.reason, backend=backend, primary=primary)
+                results.append(row)
+                break
+            except Exception as e:  # noqa: BLE001 — one failed swap must not abort the tick
+                last_err = e
+                log.warning("swap_failed", reason=o.reason, backend=backend, error=str(e))
+        else:                                               # every backend (incl. failover) failed
+            results.append({"order": o.reason, "error": str(last_err),
                             "token_in": o.token_in, "token_out": o.token_out})
+            if is_exit:                                     # a stuck EXIT is a real DD risk → page now
+                _alert_exit_failure(o, str(last_err))
     return results
+
+
+def _alert_exit_failure(order, error: str) -> None:
+    """Page Telegram when an EXIT (stop / trailing / derisk) could not execute on ANY
+    backend — the position is still open and unprotected, so the operator must know
+    immediately. Best-effort: never raises into the tick."""
+    try:
+        notifier.send(notifier.format_exit_failure(order.token_in, order.reason, error))
+    except Exception:  # noqa: BLE001
+        pass
