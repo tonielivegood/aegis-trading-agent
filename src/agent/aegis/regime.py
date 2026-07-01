@@ -88,6 +88,21 @@ def apply_sentiment_floor(flag: Regime | str, fg_value: int | None) -> tuple[Reg
     return flag, ""
 
 
+def beta_regime(flag: Regime | str, fg_value: int | None,
+                floor: int = SENTIMENT_FEAR_FLOOR) -> Regime:
+    """Beta-specific regime: force RISK_OFF on extreme fear, even from CAUTIOUS.
+
+    Fixes the 24/6 whipsaw (beta rotated majors 4x in 9h during CAUTIOUS + extreme
+    fear + choppy BTC): `apply_sentiment_floor` only caps RISK_ON -> CAUTIOUS, so
+    beta kept trend-following through fear-driven chop. This goes one step further
+    for beta only — the meme sniper's own regime handling is unaffected.
+    Tightening-only: a missing fg_value or an already-RISK_OFF flag is a no-op."""
+    flag = Regime(flag)
+    if fg_value is not None and fg_value <= floor and flag != Regime.RISK_OFF:
+        return Regime.RISK_OFF
+    return flag
+
+
 def classify_btc(*, change_1h: float, change_24h: float,
                  off_24h: float = -0.08, off_1h: float = -0.04,
                  caution_24h: float = -0.03, caution_1h: float = 0.025) -> Regime:
@@ -108,9 +123,11 @@ class RegimeState:
     flag: str = Regime.CAUTIOUS.value     # cold-start default: cautious, not aggressive
     updated_at: float = 0.0
     reason: str = ""
+    fg_value: int | None = None           # last-read Fear & Greed value (for beta_regime)
 
     def to_dict(self) -> dict:
-        return {"flag": self.flag, "updated_at": self.updated_at, "reason": self.reason}
+        return {"flag": self.flag, "updated_at": self.updated_at, "reason": self.reason,
+                "fg_value": self.fg_value}
 
     @classmethod
     def load(cls, path: Path) -> RegimeState:
@@ -118,7 +135,8 @@ class RegimeState:
             return cls()
         d = json.loads(path.read_text(encoding="utf-8"))
         return cls(flag=d.get("flag", Regime.CAUTIOUS.value),
-                   updated_at=float(d.get("updated_at", 0.0)), reason=d.get("reason", ""))
+                   updated_at=float(d.get("updated_at", 0.0)), reason=d.get("reason", ""),
+                   fg_value=d.get("fg_value"))
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

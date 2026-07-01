@@ -27,8 +27,9 @@ def test_params_both_ride_no_time_exit():
     maj, meme = tc.params("major"), tc.params("meme")
     # No time-based exit on either tier — rides exit on TP/stop/trail only.
     assert maj.no_progress_min == 0 and meme.no_progress_min == 0
-    # MEME = tight asymmetric ride: +80% cap, 10% trail (lock fast), −8% stop.
-    assert meme.hard_tp_mult == 1.80 and meme.trailing_pct == 0.10 and meme.hard_stop_pct == 0.08
+    # MEME post-contest re-tune (1/7): +40% cap, 6% trail, −6% stop — bank consistent
+    # hits instead of chasing a rare +80% moonshot (see token_class.py comment).
+    assert meme.hard_tp_mult == 1.40 and meme.trailing_pct == 0.06 and meme.hard_stop_pct == 0.06
     # MAJOR = active on confirmed +10-30% days: tight 7% trail, +30% cap lock, −7% stop.
     assert maj.hard_tp_mult == 1.30 and maj.trailing_pct == 0.07 and maj.hard_stop_pct == 0.07
     # MAJOR fires EASIER than meme now (lower bar): cheaper to trade, catch major days.
@@ -37,7 +38,7 @@ def test_params_both_ride_no_time_exit():
     # meme floor fired on noise (PIEVERSE/UB mean-reverted), and with only 2 slots a marginal
     # meme shouldn't squat on a slot beta could use. Fewer, higher-conviction meme tickets.
     assert maj.breakout_min == 0.03 and meme.breakout_min == 0.06
-    assert tc.params("unknown").hard_tp_mult == 1.80           # unknown → meme default
+    assert tc.params("unknown").hard_tp_mult == 1.40           # unknown → meme default
 
 
 # --- exits: both RIDE; cap is far, stop diverges, NO time exit ---
@@ -52,23 +53,25 @@ def test_both_ride_through_a_small_gain():
 
 
 def test_take_profit_caps_diverge():
-    # +50%: MAJOR hits its +30% cap; MEME still rides toward its +80% cap.
-    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 1.5}, {},
-                            _state({"FOO": 13.2}), class_aware=True, now=60)
+    # +35%: MAJOR already past its +30% cap; MEME's new +40% cap not reached yet.
+    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 1.35}, {},
+                            _state({"FOO": 8.1}), class_aware=True, now=60)
     assert maj and "hard TP" in maj[0].reason
-    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 1.5}, {},
-                             _state({"FOO": 13.2}), class_aware=True, now=60)
+    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 1.35}, {},
+                             _state({"FOO": 8.1}), class_aware=True, now=60)
     assert meme == []
 
 
-def test_major_stop_tighter_than_meme():
-    # −8%: MAJOR cut (−7% stop); MEME holds (−12% stop) to give the ride room.
-    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 0.92}, {},
-                            _state({"FOO": 5.52}), class_aware=True, now=60)
-    assert maj and "hard stop" in maj[0].reason
-    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 0.92}, {},
-                             _state({"FOO": 5.52}), class_aware=True, now=60)
-    assert meme == []
+def test_meme_stop_tighter_than_major_post_retune():
+    # Post-contest re-tune (1/7): MEME's −6% stop is now TIGHTER than MAJOR's −7% —
+    # deliberately accepts more noise-driven stopouts for smaller losses per miss.
+    # −6.5%: MAJOR holds (within its −7% stop); MEME cuts (past its −6% stop).
+    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 0.935}, {},
+                            _state({"FOO": 5.61}), class_aware=True, now=60)
+    assert maj == []
+    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 0.935}, {},
+                             _state({"FOO": 5.61}), class_aware=True, now=60)
+    assert meme and "hard stop" in meme[0].reason
 
 
 # --- entry: MAJOR confirms on >=3%; MEME needs a stronger >=6% (anti-noise) ---

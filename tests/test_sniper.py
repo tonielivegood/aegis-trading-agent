@@ -33,6 +33,63 @@ def _allow(_c):
     return True
 
 
+# ----------------------------- meme ticket sizing (% of equity, capped) -----------------------------
+
+def test_meme_ticket_usd_is_pct_of_equity():
+    # 15% of a $40 wallet = $6, well under the $20 cap.
+    assert sniper.meme_ticket_usd(40.0) == 6.0
+
+
+def test_meme_ticket_usd_capped_for_large_equity():
+    # 15% of $200 = $30, capped to $20 (thin meme pools can't absorb more).
+    assert sniper.meme_ticket_usd(200.0) == 20.0
+
+
+def test_meme_ticket_usd_zero_equity_is_zero():
+    assert sniper.meme_ticket_usd(0.0) == 0.0
+
+
+# ----------------------------- hot_token_items wiring (Option B discovery) -----------------------------
+
+def _hot_item(symbol, *, change, volume, contract):
+    return {"tokenSymbol": symbol, "tokenContractAddress": contract,
+            "change": str(change), "volume": str(volume), "liquidity": "50000", "price": "1.0"}
+
+
+def test_hot_token_items_drive_meme_entries_instead_of_snapshot_scan():
+    # No snapshot data at all for MEOW — hot_token_items alone must be enough to enter.
+    book = PositionBook()
+    items = [_hot_item("MEOW", change=8.0, volume=9000.0, contract="0xmeow")]
+    orders, mode = sniper.run(
+        _state(), {"MEOW": 1.0}, book=book, feed=FakeFeed({}), cooldowns=CooldownBook(),
+        regime_flag=Regime.RISK_ON, universe=[], now=1000.0, floor_usd=6.0, allow=_allow,
+        hot_token_items=items)
+    assert mode == "sniper"
+    assert len(orders) == 1 and orders[0].token_out == "MEOW"
+    assert book.is_open("MEOW")
+
+
+def test_hot_token_items_respects_manage_classes_meme_only():
+    # manage_classes={"meme"}: majors must NOT come from the snapshot scan either
+    # (beta_core owns majors when this filter is active).
+    snaps = {"ETH": _snap("ETH", vol_5m=600, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}
+    items = [_hot_item("MEOW", change=8.0, volume=9000.0, contract="0xmeow")]
+    orders, _ = sniper.run(
+        _state(), {"ETH": 1.05, "MEOW": 1.0}, book=PositionBook(), feed=FakeFeed(snaps),
+        cooldowns=CooldownBook(), regime_flag=Regime.RISK_ON, universe=["ETH"], now=1000.0,
+        floor_usd=6.0, allow=_allow, hot_token_items=items, manage_classes={"meme"})
+    assert {o.token_out for o in orders} == {"MEOW"}
+
+
+def test_safety_check_blocks_a_hot_token_candidate():
+    items = [_hot_item("SCAM", change=8.0, volume=9000.0, contract="0xscam")]
+    orders, _ = sniper.run(
+        _state(), {"SCAM": 1.0}, book=PositionBook(), feed=FakeFeed({}), cooldowns=CooldownBook(),
+        regime_flag=Regime.RISK_ON, universe=[], now=1000.0, floor_usd=6.0, allow=_allow,
+        hot_token_items=items, safety_check=lambda sig: False)
+    assert orders == []
+
+
 def test_breakout_opens_regime_sized_entry():
     # ETH = MAJOR → needs the rare 5x vol + a confirmed +3% move; sized at regime % of NAV.
     snaps = {"ETH": _snap("ETH", vol_5m=600, baseline_vol=100, price_now=1.05, price_5m_ago=1.0)}

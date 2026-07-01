@@ -1,8 +1,8 @@
 """CoinMarketCap Data API client — quotes for the tradable universe.
 
-Thin, cached, rate-aware wrapper. Plan = Professional (5M credits/month, 1200
-req/min), so credits are not a constraint; we still cache for a short TTL and
-batch all symbols into one request to avoid redundant calls within a tick.
+Thin, cached, rate-aware wrapper. Plan = free tier (10,000 credits/month,
+30 req/min) as of contest end — credits ARE a constraint again. Batches all
+symbols into one request to avoid redundant calls within a tick.
 """
 from __future__ import annotations
 

@@ -73,8 +73,9 @@ class Settings(BaseModel):
     max_drawdown_cap: float = 0.30
     drawdown_latch_ticks: int = 3      # breaker latches only after N consecutive breach ticks (anti-glitch debounce)
     daily_soft_breaker_pct: float = 0.08  # halt NEW entries for the rest of the UTC day if intraday DD >= this (0 disables)
-    max_concurrent_positions: int = 2     # GLOBAL cap on simultaneous positions in RISK_ON (CAUTIOUS=1, RISK_OFF=0).
+    max_concurrent_positions: int = 3     # GLOBAL cap on simultaneous positions in RISK_ON (CAUTIOUS=1, RISK_OFF=0).
                                           # Alts are BTC-correlated → total exposure is the DD-gate risk; keep it small.
+                                          # 2->3 post-contest (1/7): beta (2 names) was starving meme of every slot.
     max_position_pct: float = 0.10
     stablecoin_floor_pct: float = 0.15
     deploy_frac: float = 0.65          # fraction of equity deployed to the basket (walk-forward sweet spot: more upside, 0% DQ over 5.7yr)
@@ -100,7 +101,11 @@ class Settings(BaseModel):
     max_open_positions: int = 3              # max concurrent event positions
     default_order_usd: float = 10.0          # USD per entry
     max_position_usd: float = 10.0           # hard per-token notional cap
-    meme_order_usd: float = 5.0              # thin memes: SMALL fixed "lottery" position (pool can't take full size)
+    meme_order_pct: float = 0.15               # post-contest (1/7): meme ticket = % of equity, not a fixed $
+                                               # amount — bigger bets on the same small capital, per the
+                                               # tighter exit re-tune (fewer, higher-conviction tickets).
+    meme_order_cap_usd: float = 20.0           # absolute ceiling regardless of %: thin meme pools can't
+                                               # absorb an arbitrarily large order as equity grows.
     meme_slippage_bps: int = 600             # ...and a looser 6% gate — a meme ride targets +100%, not +5%
     oneinch_api_key: str = Field(default="", repr=False)   # 1inch aggregator (portal.1inch.dev); dormant if empty
     oneinch_base_url: str = ""
@@ -129,20 +134,23 @@ class Settings(BaseModel):
     # faded" trades — the gap the trailing stop (gated on price>entry) can't cover.
     aegis_breakeven_trigger_pct: float = 0.05  # arm once peak gain reaches +5%
     aegis_breakeven_buffer_pct: float = 0.005  # exit at entry +0.5% (covers the round-trip fee)
-    # --- Beta core (barbell Phase-2): regime-gated momentum-major basket. OFF by default;
-    # flip on mid-week after the DRY soak (scripts/beta_diag.py) validates selection. ---
-    beta_core_enabled: bool = False          # master switch (live tick wiring is gated on this)
+    # --- Beta core (barbell Phase-2): regime-gated momentum-major basket. ---
+    # Post-contest (1/7): ENABLED as a real profit sleeve, retuned tighter (see
+    # docs/superpowers/specs/2026-07-01-beta-core-fear-gate-design.md) — a real whipsaw
+    # (24/6, CAUTIOUS + extreme fear + chop) is now fixed via regime.beta_regime().
+    beta_core_enabled: bool = True            # master switch (live tick wiring is gated on this)
     beta_core_max_names: int = 2             # RISK_ON basket size. 2 (not 3): at ~$33 NAV a 3rd name
-                                             # can't clear floor+reserve (3×20% + $6 + $5 > stable). 2×20%
-                                             # = 40% deploy fits + leaves room for a meme. Bump to 3 once equity > ~$45.
-    beta_core_position_pct: float = 0.20     # per-name size as a fraction of NAV
+                                             # can't clear floor+reserve (3×25% + $6 + $5 > stable). 2×25%
+                                             # = 50% deploy fits + leaves room for a meme. Bump once equity grows.
+    beta_core_position_pct: float = 0.25     # per-name size as a fraction of NAV (0.20->0.25, 1/7)
     beta_core_min_momentum: float = 4.0      # min blended (1h+24h) momentum %. 4 (not 2): +2% is noise —
                                              # buying it then trailing at 6% = whipsaw. 4% = only real leaders.
     beta_core_mom_w1h: float = 0.5           # weight on 1h vs 1.0 on 24h in the momentum blend
-    beta_core_trail_pct: float = 0.06        # trailing stop — tight, banks major moves (+10-30%) hard;
-                                             # majors are less explosive than memes so trail < meme's 10%.
-                                             # Watch for whipsaw (majors swing 5-10%/day) → widen if it churns.
-    beta_core_hard_stop_pct: float = 0.08    # hard per-name stop — paired with the 6% trail (symmetric, DQ-safe)
+    beta_core_hard_tp_pct: float = 0.15      # NEW (1/7): bank a clean win at +15% instead of only riding —
+                                             # post-contest goal is consistent hits, not an unbounded ride.
+    beta_core_trail_pct: float = 0.05        # trailing stop, tightened 0.06->0.05 (1/7) — bank major moves harder.
+    beta_core_hard_stop_pct: float = 0.05    # hard per-name stop, tightened 0.08->0.05 (1/7) — paired with the
+                                             # tighter trail and the new hard TP; faster loss-cut, disciplined sizing.
     # Rotation hysteresis (anti-whipsaw). Day-1 live churned majors FORM→HOME→BAT→DEXE (a name held
     # 24 min) because the entry & exit momentum thresholds were the same — a major hovering near 4%
     # got bought-and-sold each tick. The hold band + margin + min-hold stop that churn.
@@ -152,7 +160,7 @@ class Settings(BaseModel):
                                               # points to displace it (incumbency advantage) → no marginal rotations.
     beta_core_min_hold_sec: float = 1800.0    # min hold (30 min) before a momentum rotation; price stops
                                               # (hard/breakeven/trail) ALWAYS fire regardless. Blocks sub-tick flips.
-    # (the meme cash reserve is computed dynamically = meme_order_usd × the regime's meme slots)
+    # (the meme cash reserve is computed dynamically = meme ticket size × the regime's meme slots)
     # --- Tournament clock (#3): convex-when-behind. In the final window AND only while NOT
     # yet likely in a paying spot, ESCALATE the meme lottery sleeve (extra slots + bigger
     # ticket + ignore the daily soft breaker) — never beta. OFF by default; flip on for the
@@ -177,7 +185,7 @@ class Settings(BaseModel):
     # catalyst lands within macro_guard_days. Tightening-only + fail-safe.
     macro_events_enabled: bool = True        # master switch for the macro-calendar guard + panel
     macro_guard_days: int = 1                # halt new entries if a catalyst is within this many days
-    min_gas_bnb: float = 0.003               # block NEW buys if native BNB gas drops below this
+    min_gas_bnb: float = 0.001               # block NEW buys if native BNB gas drops below this (BSC gas is cheap now)
 
     # --- Real 5-minute volume source (Binance Alpha klines) + event timing ---
     # Entry gating for catalyst-driven trades.
@@ -190,10 +198,16 @@ class Settings(BaseModel):
     alpha_kline_interval: str = "5m"
     alpha_baseline_candles: int = 24          # recent 5m candles for the baseline
     alpha_freshness_seconds: int = 600        # reject candles older than this (2x 5m)
-    event_tick_seconds: int = 60              # event-mode loop cadence (hybrid 60s timing)
+    event_tick_seconds: int = 60              # event-mode loop cadence while FLAT (no urgency scanning)
+    event_tick_seconds_holding: int = 30      # faster cadence while a position is OPEN — protects/harvests
+                                              # it more closely (the MYX lesson: a slow tick missed the real
+                                              # peak). Conservative first step (60->30); watch logs before
+                                              # tuning lower toward 15-10s via env, don't jump straight there.
 
     # --- Track 1 contest compliance (min-trade qualification; does NOT alter the strategy) ---
-    track1_compliance_enabled: bool = True
+    # Contest ended — OFF by default. Forcing a daily trade has no purpose once there's no
+    # organizer activity requirement; a permanent bot should only trade real setups.
+    track1_compliance_enabled: bool = False
     track1_min_trades_per_day: int = 1
     track1_min_trades_total: int = 7
     track1_compliance_mode: str = "dry_run_safe"
@@ -221,6 +235,14 @@ class Settings(BaseModel):
     # Binance Alpha live market data (5m volume) — INDEPENDENT of the Web3 execution flags.
     binance_alpha_market_data_enabled: bool = True
     catalyst_x_enabled: bool = False              # X/Twitter catalyst adapter (needs X_BEARER_TOKEN)
+
+    # --- Binance W3W universe (post-contest, 1/7): server-side-filtered meme discovery
+    # (hot-token) + batch pricing/volume (price-info) + just-in-time honeypot/tax check
+    # (aggregator/quote), replacing the 149-token static list + CMC full-universe pricing.
+    # Feature-flagged so a bad soak reverts with one env change, no redeploy. ---
+    binance_w3w_universe_enabled: bool = True
+    binance_w3w_max_tax_rate: float = 0.10        # reject a candidate taxed above this (matches
+                                                  # Binance's own query-token-audit "critical" bar)
 
     # --- Mode ---
     dry_run: bool = True
@@ -288,7 +310,7 @@ def get_settings() -> Settings:
         max_drawdown_cap=float(_get("MAX_DRAWDOWN_CAP", "0.30")),
         drawdown_latch_ticks=int(_get("DRAWDOWN_LATCH_TICKS", "3")),
         daily_soft_breaker_pct=float(_get("DAILY_SOFT_BREAKER_PCT", "0.08")),
-        max_concurrent_positions=int(_get("MAX_CONCURRENT_POSITIONS", "2")),
+        max_concurrent_positions=int(_get("MAX_CONCURRENT_POSITIONS", "3")),
         max_position_pct=float(_get("MAX_POSITION_PCT", "0.10")),
         stablecoin_floor_pct=float(_get("STABLECOIN_FLOOR_PCT", "0.15")),
         deploy_frac=float(_get("DEPLOY_FRAC", "0.50")),
@@ -305,7 +327,8 @@ def get_settings() -> Settings:
         max_open_positions=int(_get("MAX_OPEN_POSITIONS", "3")),
         default_order_usd=float(_get("DEFAULT_ORDER_USD", "10")),
         max_position_usd=float(_get("MAX_POSITION_USD", "10")),
-        meme_order_usd=float(_get("MEME_ORDER_USD", "5")),
+        meme_order_pct=float(_get("MEME_ORDER_PCT", "0.15")),
+        meme_order_cap_usd=float(_get("MEME_ORDER_CAP_USD", "20")),
         meme_slippage_bps=int(_get("MEME_SLIPPAGE_BPS", "600")),
         oneinch_api_key=_get("ONEINCH_API_KEY", ""),
         oneinch_base_url=_get("ONEINCH_BASE_URL", ""),
@@ -327,13 +350,14 @@ def get_settings() -> Settings:
         aegis_volume_death_in_profit=_get("AEGIS_VOLUME_DEATH_IN_PROFIT", "false").lower() in ("1", "true", "yes"),
         aegis_breakeven_trigger_pct=float(_get("AEGIS_BREAKEVEN_TRIGGER_PCT", "0.05")),
         aegis_breakeven_buffer_pct=float(_get("AEGIS_BREAKEVEN_BUFFER_PCT", "0.005")),
-        beta_core_enabled=_get_bool("BETA_CORE_ENABLED", "false"),
+        beta_core_enabled=_get_bool("BETA_CORE_ENABLED", "true"),
         beta_core_max_names=int(_get("BETA_CORE_MAX_NAMES", "2")),
-        beta_core_position_pct=float(_get("BETA_CORE_POSITION_PCT", "0.20")),
+        beta_core_position_pct=float(_get("BETA_CORE_POSITION_PCT", "0.25")),
         beta_core_min_momentum=float(_get("BETA_CORE_MIN_MOMENTUM", "4.0")),
         beta_core_mom_w1h=float(_get("BETA_CORE_MOM_W1H", "0.5")),
-        beta_core_trail_pct=float(_get("BETA_CORE_TRAIL_PCT", "0.12")),
-        beta_core_hard_stop_pct=float(_get("BETA_CORE_HARD_STOP_PCT", "0.08")),
+        beta_core_hard_tp_pct=float(_get("BETA_CORE_HARD_TP_PCT", "0.15")),
+        beta_core_trail_pct=float(_get("BETA_CORE_TRAIL_PCT", "0.05")),
+        beta_core_hard_stop_pct=float(_get("BETA_CORE_HARD_STOP_PCT", "0.05")),
         beta_core_exit_min_momentum=float(_get("BETA_CORE_EXIT_MIN_MOMENTUM", "2.0")),
         beta_core_rotation_margin=float(_get("BETA_CORE_ROTATION_MARGIN", "3.0")),
         beta_core_min_hold_sec=float(_get("BETA_CORE_MIN_HOLD_SEC", "1800.0")),
@@ -353,7 +377,7 @@ def get_settings() -> Settings:
         regime_max_age_seconds=int(_get("REGIME_MAX_AGE_SECONDS", "7200")),
         macro_events_enabled=_get_bool("MACRO_EVENTS_ENABLED", "true"),
         macro_guard_days=int(_get("MACRO_GUARD_DAYS", "1")),
-        min_gas_bnb=float(_get("MIN_GAS_BNB", "0.003")),
+        min_gas_bnb=float(_get("MIN_GAS_BNB", "0.001")),
         aegis_require_volume_confirmation=_get("AEGIS_REQUIRE_VOLUME_CONFIRMATION", "true").lower() in ("1", "true", "yes"),
         aegis_fast_confirm_tier1=_get("AEGIS_FAST_CONFIRM_TIER1", "true").lower() in ("1", "true", "yes"),
         volume_source=_get("VOLUME_SOURCE", "binance_alpha_klines"),
@@ -363,7 +387,8 @@ def get_settings() -> Settings:
         alpha_baseline_candles=int(_get("ALPHA_BASELINE_CANDLES", "24")),
         alpha_freshness_seconds=int(_get("ALPHA_FRESHNESS_SECONDS", "600")),
         event_tick_seconds=int(_get("EVENT_TICK_SECONDS", "60")),
-        track1_compliance_enabled=_get_bool("TRACK1_COMPLIANCE_ENABLED", "true"),
+        event_tick_seconds_holding=int(_get("EVENT_TICK_SECONDS_HOLDING", "30")),
+        track1_compliance_enabled=_get_bool("TRACK1_COMPLIANCE_ENABLED", "false"),
         track1_min_trades_per_day=int(_get("TRACK1_MIN_TRADES_PER_DAY", "1")),
         track1_min_trades_total=int(_get("TRACK1_MIN_TRADES_TOTAL", "7")),
         track1_compliance_mode=_get("TRACK1_COMPLIANCE_MODE", "dry_run_safe"),
@@ -384,6 +409,8 @@ def get_settings() -> Settings:
         binance_web3_broadcast_enabled=_get_bool("BINANCE_WEB3_BROADCAST_ENABLED"),
         binance_web3_mev_protection_enabled=_get_bool("BINANCE_WEB3_MEV_PROTECTION_ENABLED", "true"),
         binance_alpha_market_data_enabled=_get_bool("BINANCE_ALPHA_MARKET_DATA_ENABLED", "true"),
+        binance_w3w_universe_enabled=_get_bool("BINANCE_W3W_UNIVERSE_ENABLED", "true"),
+        binance_w3w_max_tax_rate=float(_get("BINANCE_W3W_MAX_TAX_RATE", "0.10")),
         catalyst_x_enabled=_get_bool("CATALYST_X_ENABLED"),
         dry_run=_get("DRY_RUN", "true").lower() in ("1", "true", "yes"),
     )

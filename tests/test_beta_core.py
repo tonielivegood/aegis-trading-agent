@@ -105,6 +105,25 @@ def test_breaker_flattens_basket():
     assert mode == "beta-flat" and "breaker" in orders[0].reason and not book.positions
 
 
+def test_hard_tp_exit():
+    # Post-contest re-tune (1/7): beta now takes a hard TP at +15% instead of only
+    # riding via trailing — banks a clean win instead of waiting for momentum to fade.
+    book = _book(_major("AAA", 1.0, peak=1.16))
+    orders, _ = bc.decide_beta(_state(holdings={"AAA": 23.0}), {"AAA": 1.16}, {"AAA": 12.0},
+                               book=book, regime_flag=Regime.RISK_ON, now=0.0, max_names=3,
+                               position_usd=20.0, floor_usd=6.0, hard_tp_pct=0.15, allow=ALLOW)
+    assert any("hard TP" in o.reason for o in orders) and not book.is_open("AAA")
+
+
+def test_hard_tp_disabled_by_default_rides_past_old_threshold():
+    # hard_tp_pct defaults to 0 (disabled) — back-compat for callers that don't set it.
+    book = _book(_major("AAA", 1.0, peak=1.16))
+    orders, _ = bc.decide_beta(_state(holdings={"AAA": 23.0}), {"AAA": 1.16}, {"AAA": 12.0},
+                               book=book, regime_flag=Regime.RISK_ON, now=0.0, max_names=3,
+                               position_usd=20.0, floor_usd=6.0, allow=ALLOW)
+    assert orders == [] and book.is_open("AAA")
+
+
 def test_hard_stop_exit():
     book = _book(_major("AAA", 1.0))
     orders, _ = bc.decide_beta(_state(holdings={"AAA": 18.0}), {"AAA": 0.88}, {"AAA": 5.0},

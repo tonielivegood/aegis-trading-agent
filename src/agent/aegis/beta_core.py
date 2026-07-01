@@ -128,7 +128,7 @@ def decide_beta(
     book: PositionBook, regime_flag: rg.Regime | str, now: float,
     max_names: int, position_usd: float, floor_usd: float,
     min_momentum: float = 2.0, trail_pct: float = 0.12, hard_stop_pct: float = 0.10,
-    breakeven_trigger: float = 0.05, breakeven_buffer: float = 0.005,
+    hard_tp_pct: float = 0.0, breakeven_trigger: float = 0.05, breakeven_buffer: float = 0.005,
     exit_min_momentum: float = 2.0, rotation_margin: float = 3.0, min_hold_sec: float = 0.0,
     settlement: str = STABLE,
     cooldown_symbols: frozenset[str] | set[str] = frozenset(),
@@ -173,7 +173,10 @@ def decide_beta(
         gain = p.gain(price)
         peak_gain = (p.peak_price - p.entry_price) / p.entry_price if p.entry_price > 0 else 0.0
 
-        if gain <= -hard_stop_pct:
+        if hard_tp_pct > 0 and gain >= hard_tp_pct:
+            orders.append(_sell_full(sym, held_usd, f"beta exit: hard TP {gain*100:.1f}%"))
+            book.close(sym)
+        elif gain <= -hard_stop_pct:
             orders.append(_sell_full(sym, held_usd, f"beta exit: hard stop {gain*100:.1f}%"))
             book.close(sym)
         elif (breakeven_trigger > 0 and peak_gain >= breakeven_trigger

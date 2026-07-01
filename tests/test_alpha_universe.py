@@ -69,6 +69,59 @@ def test_unknown_token_still_raises():
         token_list.get_token("NOTAREALTOKENXYZ")
 
 
+# ----------------------------- runtime-discovered tokens (hot-token universe) -----------------------------
+
+@pytest.fixture(autouse=True)
+def _clear_discovered():
+    """Discovered-token registration is process-lifetime state — isolate tests."""
+    token_list._discovered.clear()
+    token_list._discovered_classes.clear()
+    yield
+    token_list._discovered.clear()
+    token_list._discovered_classes.clear()
+
+
+def test_register_discovered_makes_token_resolvable():
+    with pytest.raises(KeyError):
+        token_list.get_token("BRANDNEWMEME")
+    token_list.register_discovered("BRANDNEWMEME", "0x1234567890123456789012345678901234567890", decimals=9)
+    tok = token_list.get_token("BRANDNEWMEME")
+    assert tok.contract.lower() == "0x1234567890123456789012345678901234567890"
+    assert tok.decimals == 9
+
+
+def test_register_discovered_is_classed_meme():
+    token_list.register_discovered("BRANDNEWMEME", "0x1234567890123456789012345678901234567890")
+    assert token_list.token_class("BRANDNEWMEME") == "meme"
+
+
+def test_register_discovered_resolvable_by_address():
+    addr = "0xabcabcabcabcabcabcabcabcabcabcabcabcabc"
+    token_list.register_discovered("DISCO", addr)
+    found = token_list.get_token_by_address(addr)
+    assert found is not None and found.symbol == "DISCO"
+
+
+def test_register_discovered_counts_as_tradable_alpha():
+    addr = "0xabcabcabcabcabcabcabcabcabcabcabcabcabc"
+    assert not token_list.is_tradable_alpha(addr)
+    token_list.register_discovered("DISCO", addr)
+    assert token_list.is_tradable_alpha(addr)
+
+
+def test_register_discovered_defaults_to_18_decimals():
+    token_list.register_discovered("DISCO2", "0x2222222222222222222222222222222222222222")
+    assert token_list.get_token("DISCO2").decimals == 18
+
+
+def test_static_registry_takes_priority_over_discovered():
+    # A discovered entry must never shadow a real static-file token.
+    sym = _first_alpha_symbol()
+    real = token_list.get_token(sym)
+    token_list.register_discovered(sym, "0x0000000000000000000000000000000000dead")
+    assert token_list.get_token(sym).contract == real.contract
+
+
 def test_every_tradable_alpha_token_is_eligible_by_contract():
     # Anti-DQ guard: the agent's trade universe must be a subset of the official
     # allowlist (matched by contract address). A token outside it would score 0.

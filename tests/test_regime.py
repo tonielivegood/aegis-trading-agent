@@ -8,6 +8,7 @@ from src.agent.aegis.regime import (
     Regime,
     RegimeState,
     apply_sentiment_floor,
+    beta_regime,
     classify_btc,
     current_regime,
     decide_regime,
@@ -115,3 +116,52 @@ def test_stale_regime_falls_back_to_cautious():
 
 def test_cold_start_defaults_cautious():
     assert RegimeState().flag == Regime.CAUTIOUS.value
+
+
+# ----------------------------- beta_regime (extreme-fear gate) -----------------------------
+
+def test_beta_regime_noop_without_fear_greed_data():
+    assert beta_regime(Regime.RISK_ON, None) == Regime.RISK_ON
+    assert beta_regime(Regime.CAUTIOUS, None) == Regime.CAUTIOUS
+
+
+def test_beta_regime_noop_above_floor():
+    assert beta_regime(Regime.RISK_ON, SENTIMENT_FEAR_FLOOR + 1) == Regime.RISK_ON
+    assert beta_regime(Regime.CAUTIOUS, SENTIMENT_FEAR_FLOOR + 1) == Regime.CAUTIOUS
+
+
+def test_beta_regime_forces_risk_off_on_extreme_fear_from_cautious():
+    # This is the 24/6 whipsaw fix: CAUTIOUS + extreme fear must NOT still trade beta.
+    assert beta_regime(Regime.CAUTIOUS, SENTIMENT_FEAR_FLOOR) == Regime.RISK_OFF
+    assert beta_regime(Regime.CAUTIOUS, SENTIMENT_FEAR_FLOOR - 5) == Regime.RISK_OFF
+
+
+def test_beta_regime_forces_risk_off_on_extreme_fear_from_risk_on():
+    assert beta_regime(Regime.RISK_ON, SENTIMENT_FEAR_FLOOR) == Regime.RISK_OFF
+
+
+def test_beta_regime_already_risk_off_stays_risk_off():
+    # idempotent — never "un-tightens".
+    assert beta_regime(Regime.RISK_OFF, SENTIMENT_FEAR_FLOOR - 10) == Regime.RISK_OFF
+    assert beta_regime(Regime.RISK_OFF, 95) == Regime.RISK_OFF
+
+
+# ----------------------------- RegimeState.fg_value persistence -----------------------------
+
+def test_regime_state_round_trip_with_fg_value(tmp_path):
+    p = tmp_path / "regime.json"
+    RegimeState(flag=Regime.RISK_ON.value, updated_at=123.0, reason="calm", fg_value=55).save(p)
+    loaded = RegimeState.load(p)
+    assert loaded.fg_value == 55
+
+
+def test_regime_state_load_missing_fg_value_defaults_none(tmp_path):
+    # Backward compatibility: an existing regime.json written before this field existed.
+    p = tmp_path / "regime.json"
+    p.write_text(json.dumps({"flag": "risk_on", "updated_at": 1.0, "reason": ""}), encoding="utf-8")
+    loaded = RegimeState.load(p)
+    assert loaded.fg_value is None
+
+
+def test_regime_state_default_fg_value_is_none():
+    assert RegimeState().fg_value is None

@@ -22,9 +22,14 @@ from . import regime as rg
 from . import token_class as tc
 from .cooldown import CooldownBook
 from .positions import OpenPosition, PositionBook
-from .volume_breakout import BreakoutSignal, decide_breakout_entries, scan_breakouts
+from .volume_breakout import BreakoutSignal, decide_breakout_entries, hot_token_signals, scan_breakouts
 
 STABLE = "USDT"
+
+
+def meme_ticket_usd(equity_usd: float) -> float:
+    """Meme ticket size: a % of equity, capped so a thin Alpha pool can still absorb it."""
+    return min(equity_usd * settings.meme_order_pct, settings.meme_order_cap_usd)
 
 
 def _scan_by_class(snapshots, overpump_pct: float, vol_factor: float = 1.0,
@@ -66,10 +71,12 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
         manage_classes: set[str] | frozenset[str] | None = None,
         max_meme_positions: int | None = None,
         meme_usd: float | None = None,
+        hot_token_items: list[dict] | None = None,
+        safety_check: Callable[[BreakoutSignal], bool] | None = None,
         ) -> tuple[list[TradeOrder], str]:
     overpump_pct = settings.aegis_overpump_pct if overpump_pct is None else overpump_pct
     cooldown_s = settings.aegis_cooldown_seconds if cooldown_s is None else cooldown_s
-    meme_usd = settings.meme_order_usd if meme_usd is None else meme_usd
+    meme_usd = meme_ticket_usd(state.equity_usd) if meme_usd is None else meme_usd
     if floor_usd is None:
         floor_usd = max(settings.stablecoin_floor_usd,
                         state.equity_usd * settings.stablecoin_floor_pct)
@@ -95,8 +102,22 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
     params = rg.params(regime_flag)
     entries: list[TradeOrder] = []
     if params.allow_new:
-        sigs = _scan_by_class(snapshots, overpump_pct, vol_factor=params.entry_vol_factor,
-                              trending=trending, manage_classes=manage_classes)
+        sigs: list[BreakoutSignal] = []
+        if hot_token_items is not None:
+            # Option B discovery: memes come from Binance's server-side-filtered
+            # hot-token feed, not the client-side scan of a self-maintained universe
+            # file. Whatever class(es) hot_token_items doesn't cover (majors, when
+            # this sleeve still owns them) still scan snapshots as before.
+            if manage_classes is None or tc.MEME in manage_classes:
+                mp = tc.params(tc.MEME)
+                sigs += hot_token_signals(hot_token_items, breakout_min=mp.breakout_min,
+                                          breakout_max=mp.breakout_max)
+            scan_classes = {tc.MAJOR} if manage_classes is None else (manage_classes - {tc.MEME})
+        else:
+            scan_classes = manage_classes
+        sigs += _scan_by_class(snapshots, overpump_pct, vol_factor=params.entry_vol_factor,
+                               trending=trending, manage_classes=scan_classes)
+        sigs.sort(key=lambda s: s.strength, reverse=True)
         cooling = cooldowns.cooling_down(now=now, cooldown_s=cooldown_s)
         pos_usd = rg.position_usd(state.equity_usd, regime_flag)
         # The caller's cap is AUTHORITATIVE when given: the barbell caps entries BELOW the
@@ -106,7 +127,7 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
         entries = decide_breakout_entries(
             sigs, state, book, position_usd=pos_usd, max_positions=max_pos,
             floor_usd=floor_usd, cooldown_symbols=cooling, settlement=settlement, allow=allow,
-            meme_usd=meme_usd, manage_classes=manage_classes)
+            meme_usd=meme_usd, manage_classes=manage_classes, safety_check=safety_check)
         for o in entries:
             sym = o.token_out
             if o.token_in == settlement and sym in prices:

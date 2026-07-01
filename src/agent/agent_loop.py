@@ -146,15 +146,35 @@ def _event_mode() -> bool:
     return settings.strategy_mode == "event_alpha" and settings.event_radar_enabled
 
 
-def _event_prices(symbols: list[str], balances: dict) -> dict[str, float]:
-    """USD prices for the universe + anything held (valuation + breakout).
+def _w3w_universe_prices(want: set[str]) -> dict[str, float]:
+    """Batch price via Binance W3W price-info — same venue as execution, no CMC
+    credit cost, covers runtime-discovered (hot-token) tokens via token_list."""
+    from .execution import binance_web3 as bw
+    contract_of: dict[str, str] = {}
+    for s in want:
+        try:
+            contract_of[s] = token_list.get_token(s).contract
+        except KeyError:
+            continue
+    try:
+        by_addr = bw.price_info(list(contract_of.values())) if contract_of else {}
+    except Exception as e:  # noqa: BLE001 — never let a pricing hiccup break the tick
+        log.warning("w3w_pricing_failed", error=type(e).__name__)
+        by_addr = {}
+    prices: dict[str, float] = {}
+    for s, c in contract_of.items():
+        entry = by_addr.get(c.lower())
+        price = entry.get("price") if entry else None
+        if price:
+            try:
+                prices[s] = float(price)
+            except (TypeError, ValueError):
+                continue
+    return prices
 
-    Priced via CMC by CMC-id (unambiguous, accurate). The on-chain DEX-V2 price is
-    GARBAGE for tokens whose liquidity lives outside Pancake V2 (AAVE read $0.81 vs
-    ~$200) — and since we now EXECUTE through an aggregator, the CMC fair price is both
-    correct and coherent with the actual fill. BNB/WBNB keep their on-chain price (deep,
-    correct V2 pool); stablecoins = $1; anything left unpriced falls back on-chain."""
-    want = {*symbols, *balances.keys()}
+
+def _cmc_universe_prices(want: set[str]) -> dict[str, float]:
+    """Legacy pricing path (flag off): CMC by-id, unambiguous but credit-metered."""
     id_of = {s: token_list.cmc_id(s) for s in want}
     ids = [i for i in id_of.values() if i]
     try:
@@ -162,7 +182,22 @@ def _event_prices(symbols: list[str], balances: dict) -> dict[str, float]:
     except Exception as e:  # noqa: BLE001 — never let a pricing hiccup break the tick
         log.warning("cmc_pricing_failed", error=type(e).__name__)
         by_id = {}
-    prices = {s: by_id[i] for s, i in id_of.items() if i and i in by_id}
+    return {s: by_id[i] for s, i in id_of.items() if i and i in by_id}
+
+
+def _event_prices(symbols: list[str], balances: dict) -> dict[str, float]:
+    """USD prices for the universe + anything held (valuation + breakout).
+
+    Post-contest (1/7): priced via Binance W3W `price-info` when
+    `binance_w3w_universe_enabled` (default) — same venue as execution, batched,
+    no monthly credit cap, and resolves runtime-discovered hot-token candidates.
+    Falls back to CMC-by-id when the flag is off. The on-chain DEX-V2 price is
+    GARBAGE for tokens whose liquidity lives outside Pancake V2 (AAVE read $0.81 vs
+    ~$200), so neither path uses it except for BNB/WBNB (deep, correct V2 pool) and
+    as the last-resort fallback below; stablecoins = $1."""
+    want = {*symbols, *balances.keys()}
+    prices = (_w3w_universe_prices(want) if settings.binance_w3w_universe_enabled
+             else _cmc_universe_prices(want))
 
     wbnb = price_feed.onchain_price_usd("WBNB")
     if wbnb:
@@ -251,6 +286,62 @@ def _volume_provider():
     return provider
 
 
+def _w3w_hot_token_items() -> list[dict] | None:
+    """Fetch this tick's server-side-filtered meme candidates (Option B discovery).
+    None (not []) on any failure or when the flag is off — the caller falls back to
+    the legacy client-side scan; an empty list would instead mean "scanned, found
+    nothing", which is a different and wrong signal to send on a network hiccup."""
+    if not settings.binance_w3w_universe_enabled:
+        return None
+    from .aegis import token_class as tc
+    from .execution import binance_web3 as bw
+    mp = tc.params(tc.MEME)
+    try:
+        return bw.hot_token(price_change_percent_min=mp.breakout_min * 100)
+    except Exception as e:  # noqa: BLE001 — a hiccup here must fall back, never break the tick
+        log.warning("w3w_hot_token_failed", error=type(e).__name__)
+        return None
+
+
+def _w3w_safety_check(equity_usd: float):
+    """Build the just-in-time honeypot/tax gate for one tick — a fresh `quote()` call
+    per candidate (30s TTL, never cached). On pass, registers the token so the rest
+    of the pipeline (pricing, execution) can resolve it via token_list.get_token()."""
+    from .aegis import sniper
+    from .execution import binance_web3 as bw
+
+    def check(sig) -> bool:
+        ticket = sniper.meme_ticket_usd(equity_usd)
+        amount_wei = str(int(ticket * 10**18))   # USDT has 18 decimals on BSC
+        try:
+            routes = bw.quote(settings.usdt_address, sig.contract, amount_wei)
+        except Exception as e:  # noqa: BLE001 — fail closed: no quote = no entry
+            log.warning("w3w_quote_failed", symbol=sig.symbol, error=type(e).__name__)
+            return False
+        if not routes:
+            return False
+        best = next((r for r in routes if r.get("isBest")), routes[0])
+        to_tok = best.get("toToken") or {}
+        if to_tok.get("isHoneyPot"):
+            log.warning("w3w_honeypot_blocked", symbol=sig.symbol, contract=sig.contract)
+            return False
+        try:
+            tax = float(to_tok.get("taxRate") or 0)
+        except (TypeError, ValueError):
+            tax = 1.0
+        if tax > settings.binance_w3w_max_tax_rate:
+            log.warning("w3w_tax_too_high", symbol=sig.symbol, tax=tax)
+            return False
+        try:
+            decimals = int(to_tok.get("decimal") or 18)
+        except (TypeError, ValueError):
+            decimals = 18
+        token_list.register_discovered(sig.symbol, sig.contract, decimals)
+        return True
+
+    return check
+
+
 def _beta_momentum(symbols: list[str]) -> dict[str, float]:
     """Blended (1h+24h) momentum for the MAJOR symbols, sourced by CMC id (same as the
     price feed → no same-symbol collision). Fail-safe: {} on any error (beta then holds)."""
@@ -292,7 +383,8 @@ def _maybe_update_regime(now_ts: float):
             flag, btc_quote=quote, fear_greed=fear_greed)
         if claude_reason:
             reason = f"{reason}; Claude: {claude_reason}"
-        st = rg.RegimeState(flag=flag.value, updated_at=now_ts, reason=reason)
+        fg_value = (fear_greed or {}).get("value")
+        st = rg.RegimeState(flag=flag.value, updated_at=now_ts, reason=reason, fg_value=fg_value)
         st.save(REGIME_FILE)
         log.info("regime_updated", flag=flag.value, reason=reason,
                  fear_greed=(fear_greed or {}).get("value"), claude=claude_rec or None)
@@ -538,6 +630,10 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
         from .aegis import beta_core as bc
         cooling = cooldowns.cooling_down(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
         base_floor = max(settings.stablecoin_floor_usd, state.equity_usd * settings.stablecoin_floor_pct)
+        # Beta-specific regime: extreme Fear & Greed forces beta to RISK_OFF even from
+        # CAUTIOUS (the 24/6 whipsaw fix — trend-following must not run through fear-driven
+        # chop). The meme sniper's own regime (`flag`) is untouched by this.
+        beta_flag = rg.beta_regime(flag, rstate.fg_value)
         # GLOBAL concurrent-position cap (shared across BOTH sleeves): RISK_ON N / CAUTIOUS 1 /
         # RISK_OFF 0. Alts are highly correlated to BTC, so total exposure — not per-sleeve — is
         # what a BTC dump hits; capping TOTAL positions is the real DD-gate control. Beta fills
@@ -545,20 +641,21 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
         # regime so the agent flexes with the market, never betting a direction.
         cap = (settings.max_concurrent_positions if flag == rg.Regime.RISK_ON
                else 1 if flag == rg.Regime.CAUTIOUS else 0)
-        beta_names = (settings.beta_core_max_names if flag == rg.Regime.RISK_ON
-                      else 1 if flag == rg.Regime.CAUTIOUS else 0)
+        beta_names = (settings.beta_core_max_names if beta_flag == rg.Regime.RISK_ON
+                      else 1 if beta_flag == rg.Regime.CAUTIOUS else 0)
         beta_max = min(beta_names, cap)
         # Reserve ONE meme ticket whenever memes can trade this regime (0 in RISK_OFF). At
         # ~$33 NAV, reserving 2 tickets ($10) starved beta below 2 names; reserving 1 ($5)
         # lets beta hold 2 majors while memes still get at least one lottery shot (a 2nd meme
         # is opportunistic from cash left after beta). Scales naturally as equity grows.
-        meme_reserve = settings.meme_order_usd if rg.params(flag).max_slots > 0 else 0.0
+        meme_reserve = sniper.meme_ticket_usd(state.equity_usd) if rg.params(flag).max_slots > 0 else 0.0
         beta_orders, beta_mode = bc.decide_beta(
-            state, prices, _beta_momentum(symbols), book=book, regime_flag=flag, now=now_ts,
+            state, prices, _beta_momentum(symbols), book=book, regime_flag=beta_flag, now=now_ts,
             max_names=beta_max,
             position_usd=state.equity_usd * settings.beta_core_position_pct,
             floor_usd=base_floor + meme_reserve,
             min_momentum=settings.beta_core_min_momentum, trail_pct=settings.beta_core_trail_pct,
+            hard_tp_pct=settings.beta_core_hard_tp_pct,
             hard_stop_pct=settings.beta_core_hard_stop_pct,
             breakeven_trigger=settings.aegis_breakeven_trigger_pct,
             breakeven_buffer=settings.aegis_breakeven_buffer_pct,
@@ -594,12 +691,20 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
         ticket_mult_full=settings.tournament_clock_ticket_mult_full)
     meme_cap, meme_usd, meme_flag, clock_label = _apply_clock(
         clock, meme_cap=meme_cap, base_max_slots=rg.params(entry_flag).max_slots,
-        entry_flag=entry_flag, flag=flag, meme_order_usd=settings.meme_order_usd)
+        entry_flag=entry_flag, flag=flag, meme_order_usd=sniper.meme_ticket_usd(state.equity_usd))
 
+    hot_token_items = _w3w_hot_token_items()
+    # A hot-token-discovered contract isn't in the static 149/tradable-alpha files (that
+    # gate is what's being retired), so it needs a permissive `allow` here — the REAL
+    # safety gate for these candidates is `_w3w_safety_check` (fresh honeypot/tax quote),
+    # not local list membership.
+    entry_allow = (lambda c: bool(c)) if hot_token_items is not None else None
     orders, mode = sniper.run(sniper_state, prices, book=book, feed=feed, cooldowns=cooldowns,
                               regime_flag=meme_flag, universe=symbols, now=now_ts, trending=trending,
                               max_meme_positions=meme_cap, meme_usd=meme_usd,
-                              manage_classes=sniper_classes)
+                              manage_classes=sniper_classes, allow=entry_allow,
+                              hot_token_items=hot_token_items,
+                              safety_check=_w3w_safety_check(state.equity_usd) if hot_token_items is not None else None)
     book.save(POSITIONS_FILE)
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
     cooldowns.save(COOLDOWN_FILE)
@@ -758,7 +863,7 @@ def tick(dry_run: bool | None = None) -> dict:
         orders = adaptive_hold_strategy.decide(state, basket, settings.deploy_frac)
         if action.halt_buys or daily_halt:   # baseline is stateless → safe to strip buys here
             orders = [o for o in orders if o.token_in not in STABLECOINS]
-        if action.needs_compliance_trade and not orders:
+        if action.needs_compliance_trade and not orders and settings.track1_compliance_enabled:
             orders = _compliance_orders(state)
 
     # Track-1 min-trade compliance (additive; event mode only, never bypasses gates).

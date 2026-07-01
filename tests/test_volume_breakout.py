@@ -1,7 +1,10 @@
 """TDD for the volume-breakout signal generator (v2 sniper primary trigger)."""
+import pytest
+
 from src.agent.aegis.volume_breakout import (
     BreakoutSignal,
     decide_breakout_entries,
+    hot_token_signals,
     scan_breakouts,
 )
 from src.agent.aegis.volume_anomaly_detector import MarketSnapshot
@@ -246,3 +249,87 @@ def test_dust_size_blocked():
         [_sig("AAA")], _state(), PositionBook(),
         position_usd=1.0, max_positions=3, floor_usd=6.0, allow=_allow_all)
     assert orders == []
+
+
+# ----------------------------- hot_token_signals (Option B discovery) -----------------------------
+
+def _hot_item(symbol, *, change, volume, liquidity, contract=None, price=1.0):
+    return {
+        "tokenSymbol": symbol, "tokenContractAddress": contract or f"0x{symbol.lower()}",
+        "change": str(change), "volume": str(volume), "liquidity": str(liquidity), "price": str(price),
+    }
+
+
+def test_hot_token_signals_converts_valid_items():
+    items = [_hot_item("MYX", change=8.0, volume=5000.0, liquidity=20000.0)]
+    sigs = hot_token_signals(items, breakout_min=0.06, breakout_max=0.20)
+    assert len(sigs) == 1
+    sig = sigs[0]
+    assert sig.symbol == "MYX" and sig.contract == "0xmyx"
+    assert sig.breakout_pct == pytest.approx(0.08)
+    assert sig.baseline_vol == 5000.0
+
+
+def test_hot_token_signals_rejects_below_min():
+    items = [_hot_item("WEAK", change=3.0, volume=5000.0, liquidity=20000.0)]
+    assert hot_token_signals(items, breakout_min=0.06, breakout_max=0.20) == []
+
+
+def test_hot_token_signals_rejects_above_max_blowoff():
+    items = [_hot_item("BLOWN", change=45.0, volume=5000.0, liquidity=20000.0)]
+    assert hot_token_signals(items, breakout_min=0.06, breakout_max=0.20) == []
+
+
+def test_hot_token_signals_rejects_missing_contract():
+    items = [{"tokenSymbol": "NOADDR", "change": "8.0", "volume": "5000", "liquidity": "1"}]
+    assert hot_token_signals(items, breakout_min=0.06, breakout_max=0.20) == []
+
+
+def test_hot_token_signals_skips_malformed_item():
+    items = [{"tokenSymbol": "BAD", "tokenContractAddress": "0xbad", "change": "not-a-number",
+             "volume": "1", "liquidity": "1"}]
+    assert hot_token_signals(items, breakout_min=0.06, breakout_max=0.20) == []
+
+
+def test_hot_token_signals_ranked_by_volume_desc():
+    items = [_hot_item("LOW", change=7.0, volume=100.0, liquidity=5000.0, contract="0xlow"),
+            _hot_item("HIGH", change=7.0, volume=9000.0, liquidity=5000.0, contract="0xhigh")]
+    sigs = hot_token_signals(items, breakout_min=0.06, breakout_max=0.20)
+    assert [s.symbol for s in sigs] == ["HIGH", "LOW"]
+
+
+def test_hot_token_signals_allow_filter():
+    items = [_hot_item("MYX", change=8.0, volume=5000.0, liquidity=20000.0, contract="0xmyx")]
+    sigs = hot_token_signals(items, breakout_min=0.06, breakout_max=0.20, allow=lambda c: c != "0xmyx")
+    assert sigs == []
+
+
+# ----------------------------- decide_breakout_entries: safety_check injection -----------------------------
+
+def test_safety_check_rejects_candidate_without_consuming_a_slot():
+    sigs = [_sig("BAD", contract="0xbad"), _sig("GOOD", contract="0xgood")]
+    orders = decide_breakout_entries(
+        sigs, _state(equity=60, stable=60), PositionBook(),
+        position_usd=6.0, max_positions=2, floor_usd=6.0, allow=_allow_all,
+        safety_check=lambda sig: sig.symbol != "BAD")
+    assert [o.token_out for o in orders] == ["GOOD"]
+
+
+def test_safety_check_none_means_no_extra_gate():
+    orders = decide_breakout_entries(
+        [_sig("AAA")], _state(), PositionBook(),
+        position_usd=6.0, max_positions=1, floor_usd=6.0, allow=_allow_all)
+    assert [o.token_out for o in orders] == ["AAA"]
+
+
+def test_safety_check_runs_after_the_cheap_gates():
+    # A candidate that fails cooldown must never even reach the (expensive) safety check.
+    calls = []
+    def _tracking_check(sig):
+        calls.append(sig.symbol)
+        return True
+    decide_breakout_entries(
+        [_sig("COOLING")], _state(), PositionBook(),
+        position_usd=6.0, max_positions=1, floor_usd=6.0, allow=_allow_all,
+        cooldown_symbols=frozenset({"COOLING"}), safety_check=_tracking_check)
+    assert calls == []

@@ -13,6 +13,7 @@ import time
 
 from src.agent.aegis import beta_core as bc
 from src.agent.aegis import regime as rg
+from src.agent.aegis import sniper
 from src.agent.agent_loop import (
     POSITIONS_FILE, REGIME_FILE, _event_prices,
 )
@@ -39,17 +40,19 @@ def main() -> None:
     quotes = {s: by_id[i] for s, i in id_of.items() if i and i in by_id}
     momentum = bc.build_momentum(quotes, w_1h=settings.beta_core_mom_w1h)
 
-    flag = rg.current_regime(rg.RegimeState.load(REGIME_FILE),
-                             max_age_s=settings.regime_max_age_seconds, now=now)
+    rstate = rg.RegimeState.load(REGIME_FILE)
+    flag = rg.current_regime(rstate, max_age_s=settings.regime_max_age_seconds, now=now)
+    # Beta-specific regime: extreme Fear & Greed forces beta to RISK_OFF even from CAUTIOUS.
+    beta_flag = rg.beta_regime(flag, rstate.fg_value)
     pf = Portfolio()
     equity = pf.equity(balances, prices)
     stable = pf.stable_value(balances, prices)
     position_usd = equity * settings.beta_core_position_pct
     base_floor = max(settings.stablecoin_floor_usd, equity * settings.stablecoin_floor_pct)
-    # Mirror the live tick: graduated max_names by regime + a 1-meme-ticket cash reserve.
-    beta_max = (settings.beta_core_max_names if flag == rg.Regime.RISK_ON
-                else 1 if flag == rg.Regime.CAUTIOUS else 0)
-    meme_reserve = settings.meme_order_usd if rg.params(flag).max_slots > 0 else 0.0
+    # Mirror the live tick: graduated max_names by beta-specific regime + a meme-ticket cash reserve.
+    beta_max = (settings.beta_core_max_names if beta_flag == rg.Regime.RISK_ON
+                else 1 if beta_flag == rg.Regime.CAUTIOUS else 0)
+    meme_reserve = sniper.meme_ticket_usd(equity) if rg.params(flag).max_slots > 0 else 0.0
     floor_usd = base_floor + meme_reserve
 
     basket = bc.select_basket(momentum, max_names=beta_max,

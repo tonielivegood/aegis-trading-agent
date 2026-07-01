@@ -225,3 +225,119 @@ def test_flatten_to_cash_sells_all_nonstable_and_clears_books(mocker):
     assert [(o.token_in, o.token_out) for o in orders] == [(alpha, "USDT")]  # sells the held token
     assert res["dry_run"] is True
     cleared.assert_called_once()
+
+
+# --- Binance W3W universe: pricing, discovery, just-in-time safety check ---
+
+def test_w3w_universe_prices_resolves_via_price_info(mocker):
+    from src.agent.data import token_list
+    token_list.register_discovered("WTEST", "0x1111111111111111111111111111111111111a")
+    try:
+        mocker.patch("src.agent.execution.binance_web3.price_info",
+                    return_value={"0x1111111111111111111111111111111111111a": {"price": "2.5"}})
+        prices = al._w3w_universe_prices({"WTEST"})
+        assert prices == {"WTEST": 2.5}
+    finally:
+        token_list._discovered.pop("WTEST", None)
+        token_list._discovered_classes.pop("WTEST", None)
+
+
+def test_w3w_universe_prices_skips_unresolvable_symbol(mocker):
+    price_info = mocker.patch("src.agent.execution.binance_web3.price_info", return_value={})
+    prices = al._w3w_universe_prices({"NOT_A_REAL_TOKEN_XYZ"})
+    assert prices == {}
+    price_info.assert_not_called()   # nothing resolvable -> never even calls the API
+
+
+def test_w3w_universe_prices_network_error_never_raises(mocker):
+    from src.agent.data import token_list
+    token_list.register_discovered("WTEST2", "0x2222222222222222222222222222222222222b")
+    try:
+        mocker.patch("src.agent.execution.binance_web3.price_info", side_effect=RuntimeError("boom"))
+        assert al._w3w_universe_prices({"WTEST2"}) == {}
+    finally:
+        token_list._discovered.pop("WTEST2", None)
+        token_list._discovered_classes.pop("WTEST2", None)
+
+
+def test_w3w_hot_token_items_returns_none_when_flag_off(mocker):
+    mocker.patch.object(al.settings, "binance_w3w_universe_enabled", False)
+    assert al._w3w_hot_token_items() is None
+
+
+def test_w3w_hot_token_items_returns_none_on_network_error(mocker):
+    mocker.patch.object(al.settings, "binance_w3w_universe_enabled", True)
+    mocker.patch("src.agent.execution.binance_web3.hot_token", side_effect=RuntimeError("boom"))
+    assert al._w3w_hot_token_items() is None
+
+
+def test_w3w_hot_token_items_passes_meme_breakout_min(mocker):
+    from src.agent.aegis import token_class as tc
+    mocker.patch.object(al.settings, "binance_w3w_universe_enabled", True)
+    hot = mocker.patch("src.agent.execution.binance_web3.hot_token", return_value=[{"a": 1}])
+    out = al._w3w_hot_token_items()
+    assert out == [{"a": 1}]
+    assert hot.call_args.kwargs["price_change_percent_min"] == tc.params(tc.MEME).breakout_min * 100
+
+
+def test_w3w_safety_check_registers_token_on_pass(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    from src.agent.data import token_list
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
+        {"isBest": True, "toToken": {"isHoneyPot": False, "taxRate": "0.01", "decimal": "9"}},
+    ])
+    sig = BreakoutSignal(symbol="NEWMEME", contract="0x3333333333333333333333333333333333333c",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    try:
+        check = al._w3w_safety_check(40.0)
+        assert check(sig) is True
+        tok = token_list.get_token("NEWMEME")
+        assert tok.contract.lower() == sig.contract and tok.decimals == 9
+    finally:
+        token_list._discovered.pop("NEWMEME", None)
+        token_list._discovered_classes.pop("NEWMEME", None)
+
+
+def test_w3w_safety_check_blocks_honeypot(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
+        {"isBest": True, "toToken": {"isHoneyPot": True, "taxRate": "0", "decimal": "18"}},
+    ])
+    sig = BreakoutSignal(symbol="SCAM", contract="0x4444444444444444444444444444444444444d",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    check = al._w3w_safety_check(40.0)
+    assert check(sig) is False
+
+
+def test_w3w_safety_check_blocks_high_tax(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
+        {"isBest": True, "toToken": {"isHoneyPot": False, "taxRate": "0.25", "decimal": "18"}},
+    ])
+    sig = BreakoutSignal(symbol="TAXED", contract="0x5555555555555555555555555555555555555e",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    check = al._w3w_safety_check(40.0)
+    assert check(sig) is False
+
+
+def test_w3w_safety_check_no_routes_fails_closed(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[])
+    sig = BreakoutSignal(symbol="NOROUTE", contract="0x6666666666666666666666666666666666666f",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    check = al._w3w_safety_check(40.0)
+    assert check(sig) is False
+
+
+def test_w3w_safety_check_network_error_fails_closed(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    mocker.patch("src.agent.execution.binance_web3.quote", side_effect=RuntimeError("boom"))
+    sig = BreakoutSignal(symbol="ERR", contract="0x7777777777777777777777777777777777777a",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    check = al._w3w_safety_check(40.0)
+    assert check(sig) is False

@@ -1,18 +1,25 @@
 """Token universe.
 
-Three layers:
+Static layers (from disk, unchanged since the contest):
   - `curated_core.json`  — 20 on-chain-verified blue chips (used for stable/WBNB
-    valuation infrastructure and as the original majors set).
-  - `eligible_tokens.json` — the OFFICIAL contest allowlist (149 BEP-20 tokens).
-    Eligibility is matched strictly by CONTRACT ADDRESS — there is no "majors are
-    always eligible" assumption (that was the root bug that aimed the agent at a
-    non-scoring universe).
-  - `tradable_alpha.json` — the liquid subset of the allowlist that actually has
-    a deep enough PancakeSwap route to trade (built by scripts/build_alpha_universe.py).
-    This is the universe the contest strategy deploys into.
+    valuation infrastructure and as the majors set — NOT auto-expanded post-contest,
+    see [[post-contest-product-pivot]]).
+  - `eligible_tokens.json` / `is_eligible()` — the OFFICIAL contest allowlist (149
+    BEP-20 tokens). VESTIGIAL post-contest: no live entry gate calls `is_eligible()`
+    any more (the meme universe moved to Binance's live hot-token feed — see
+    `register_discovered` below); only the disabled `track1_compliance` module and
+    the dead `event_driven_alpha_momentum.decide_entries()` path still reference it.
+  - `tradable_alpha.json` — the liquid subset of the (contest-era) allowlist that had
+    a deep enough PancakeSwap route to trade. Still used for MAJOR classification and
+    as the legacy meme-scan fallback when `binance_w3w_universe_enabled=False`.
 
-`get_token` resolves across core ∪ tradable-alpha, so pricing/execution work for
-any eligible contract (no more KeyError outside the majors).
+Runtime layer (process-lifetime, not on disk):
+  - `register_discovered` — a meme found live via Binance's hot-token feed, already
+    server-side-filtered (wash-trading/mint/freeze) and quote-checked (isHoneyPot/
+    taxRate) before registration. This is the ACTIVE post-contest meme universe.
+
+`get_token` resolves across core ∪ tradable-alpha ∪ discovered, so pricing/execution
+work for any contract the live pipeline actually decided to touch.
 """
 from __future__ import annotations
 
@@ -114,7 +121,10 @@ def _classes() -> dict[str, str]:
 
 def token_class(symbol: str) -> str:
     """Trading class of a tradable token (default 'meme' = ride if unknown)."""
-    return _classes().get(symbol.upper(), "meme")
+    key = symbol.upper()
+    if key in _discovered_classes:
+        return _discovered_classes[key]
+    return _classes().get(key, "meme")
 
 
 @lru_cache(maxsize=1)
@@ -178,7 +188,8 @@ def tradable_alpha_tokens() -> list[Token]:
 
 
 def get_token(symbol: str) -> Token:
-    """Resolve a token across core ∪ tradable-alpha (core wins on overlap)."""
+    """Resolve a token across core ∪ tradable-alpha ∪ runtime-discovered
+    (static registries win on overlap — see `register_discovered`)."""
     key = symbol.upper()
     core = _core()
     if key in core:
@@ -186,12 +197,48 @@ def get_token(symbol: str) -> Token:
     alpha = _alpha()
     if key in alpha:
         return alpha[key]
-    raise KeyError(f"{symbol} not in tradable set (core or eligible-alpha)")
+    if key in _discovered:
+        return _discovered[key]
+    raise KeyError(f"{symbol} not in tradable set (core, eligible-alpha, or discovered)")
 
 
 def get_token_by_address(address: str) -> Token | None:
     """Resolve a token by its (case-insensitive) contract address, or None."""
-    return _by_address().get(address.lower())
+    tok = _by_address().get(address.lower())
+    if tok is not None:
+        return tok
+    for t in _discovered.values():
+        if t.contract.lower() == address.lower():
+            return t
+    return None
+
+
+# --- Runtime-discovered tokens (Binance hot-token universe, post-contest) ---
+# Process-lifetime only (NOT persisted to disk): a token found live via the
+# server-side-filtered hot-token feed, outside the static core/alpha files. Kept
+# as a SEPARATE layer (never merged into the lru_cached static dicts above) so
+# discovery can never shadow or corrupt the hand-verified registries.
+_discovered: dict[str, Token] = {}
+_discovered_classes: dict[str, str] = {}
+
+
+def register_discovered(symbol: str, contract: str, decimals: int = 18) -> Token:
+    """Register a token found live (e.g. via Binance hot-token) so the rest of the
+    pipeline (pricing, execution, valuation) can resolve it via get_token() for the
+    rest of this process's life. Always classed 'meme' — the major basket stays on
+    the static, hand-verified curated_core.json (never auto-expanded). A symbol
+    already present in the static registries is left untouched (static wins)."""
+    key = symbol.upper()
+    if key in _core() or key in _alpha():
+        return get_token(symbol)
+    tok = Token(symbol=symbol, contract=contract, decimals=decimals)
+    _discovered[key] = tok
+    _discovered_classes[key] = "meme"
+    return tok
+
+
+def is_discovered(symbol: str) -> bool:
+    return symbol.upper() in _discovered
 
 
 @lru_cache(maxsize=1)
@@ -200,8 +247,13 @@ def _alpha_addrs() -> set[str]:
 
 
 def is_tradable_alpha(address: str) -> bool:
-    """True if the address is in the liquid, tradable Alpha subset."""
-    return address.lower() in _alpha_addrs()
+    """True if the address is in the liquid, tradable Alpha subset — including a
+    runtime-discovered token (already passed hot-token's server-side filters +
+    the just-in-time honeypot/tax check before being registered)."""
+    addr = address.lower()
+    if addr in _alpha_addrs():
+        return True
+    return any(t.contract.lower() == addr for t in _discovered.values())
 
 
 def stablecoins() -> list[Token]:

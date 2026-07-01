@@ -113,6 +113,37 @@ def scan_breakouts(snapshots: dict[str, MarketSnapshot], *,
     return out
 
 
+def hot_token_signals(items: list[dict], *, breakout_min: float, breakout_max: float,
+                      allow: Callable[[str], bool] | None = None) -> list[BreakoutSignal]:
+    """Convert Binance's server-side-filtered hot-token results (Option B discovery)
+    into ranked BreakoutSignals — a PURE conversion, the caller already fetched
+    `items` via `binance_web3.hot_token(...)`. Wash-trading/mint/freeze exclusion and
+    the price-change FLOOR already happened server-side; this only applies the
+    chase-cap ceiling (hot-token has no upper price-change filter) and ranks by
+    the $ volume hot-token reports (there is no baseline-multiple concept here)."""
+    out: list[BreakoutSignal] = []
+    for it in items:
+        contract = (it.get("tokenContractAddress") or "").strip().lower()
+        if not contract or (allow and not allow(contract)):
+            continue
+        try:
+            change = float(it.get("change")) / 100.0
+            volume = float(it.get("volume"))
+            price = float(it.get("price") or 0)
+        except (TypeError, ValueError):
+            continue
+        if change <= 0 or change < breakout_min or change > breakout_max:
+            continue
+        out.append(BreakoutSignal(
+            symbol=it.get("tokenSymbol") or contract, contract=contract,
+            vol_multiple=0.0, breakout_pct=change, recent_pump_pct=0.0, slippage_est=0.0,
+            price_now=price, baseline_vol=volume,
+            reasons=(f"hot-token +{change * 100:.1f}% vol=${volume:,.0f}",),
+        ))
+    out.sort(key=lambda s: s.baseline_vol, reverse=True)
+    return out
+
+
 def _default_allow(contract: str) -> bool:
     """A signal may only enter if it is BOTH contest-eligible (in the 149) AND in
     our liquid, tradable Alpha subset — checked by contract address."""
@@ -128,6 +159,7 @@ def decide_breakout_entries(
     allow: Callable[[str], bool] | None = None,
     meme_usd: float | None = None,
     manage_classes: set[str] | frozenset[str] | None = None,
+    safety_check: Callable[[BreakoutSignal], bool] | None = None,
 ) -> list[TradeOrder]:
     """Turn ranked breakout signals into entry orders, applying every risk gate.
 
@@ -135,7 +167,16 @@ def decide_breakout_entries(
     (RISK_OFF => position_usd=0 / max_positions=0 => no entries). Signals are
     assumed pre-ranked (strongest money-flow first); we fill the free slots in
     that order. Never pyramids, never re-enters a token in cooldown, never lets
-    settlement cash drop below the floor. No chain/network access here.
+    settlement cash drop below the floor. No chain/network access here — this
+    function itself stays pure.
+
+    `safety_check`, if given, is called ONLY after every cheap gate already passed
+    (not held, not cooling, allowed, sized, floor ok) — i.e. only for a candidate
+    that would otherwise take a slot right now. Lets the caller inject a live,
+    just-in-time check (e.g. a fresh honeypot/tax quote) without this function
+    itself touching the network, and without wasting the check on a candidate
+    that would have been skipped anyway. Returning False skips the candidate
+    WITHOUT consuming a slot — the next-ranked signal still gets a chance.
     """
     if state.drawdown_tripped or state.cap_breached:
         return []                                    # breaker: no fresh risk
@@ -170,6 +211,8 @@ def decide_breakout_entries(
             continue                                 # dust
         if stable_left - size < floor_usd:
             continue                                 # would breach the settlement floor
+        if safety_check is not None and not safety_check(sig):
+            continue                                 # just-in-time check failed (e.g. honeypot)
         orders.append(TradeOrder(
             settlement, sig.symbol, size,
             f"breakout vol {sig.vol_multiple:.1f}x +{sig.breakout_pct * 100:.1f}%"))
