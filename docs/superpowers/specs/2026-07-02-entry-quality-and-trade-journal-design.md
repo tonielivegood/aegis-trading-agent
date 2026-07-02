@@ -83,12 +83,13 @@ binance_w3w_min_holders: int = 30            # reject a candidate with fewer hol
 binance_w3w_min_liquidity_usd_check: float = 10_000.0  # second-layer liquidity floor (JIT quote time)
 ```
 
-Inside `check()`, after the existing honeypot/tax/price-impact checks, read `holders` and
-`liquidity` from the same `price_info()`-shaped data already available at this point (the
-`quote()` response's `toToken`/route data — confirm exact field availability during
-implementation; fall back to a fresh `price_info()` call for the single contract if the quote
-response doesn't carry it, batching cost is negligible for one candidate). Reject and log
-(`w3w_holders_too_low`, `w3w_liquidity_too_low`) if either floor isn't met.
+Confirmed: `quote()`'s response (`fromToken`/`toToken`/route data) does NOT carry `holders` or
+`liquidity` — only `price_info()` does. So `check()` makes one additional `price_info([sig.contract])`
+call (single-contract, still cheap) after the existing honeypot/tax/price-impact checks pass,
+and reads `holders` (int) and `liquidity` (string, parse as float) from that response. Reject
+and log (`w3w_holders_too_low`, `w3w_liquidity_too_low`) if either floor isn't met; if the
+`price_info` call itself fails or returns nothing for the contract, fail closed (reject, same
+policy as every other check in this function).
 
 ### 3.3 Entry-fail cooldown (`agent_loop._execute`)
 
@@ -152,15 +153,18 @@ simulated) inside `_execute()`:
 the entry price via `prices[o.token_out]`.
 
 For an EXIT, the entry_price/entry_time needed for PnL live in the `OpenPosition` that
-`edam.decide_exits()` / `beta_core.decide_beta()` already read (as `p`) right before calling
-`book.close(symbol)` — but by the time `_execute()` runs, the book has already been saved with
-that position removed. Decision: both exit-producing functions capture the just-closed
-`OpenPosition` into a `closed: dict[str, OpenPosition]` they already have in local scope, and
-return it as an additional value (alongside the existing `(orders, mode)` / `(orders,)`
-returns) so `_event_decision()`/`sniper.run()`/`tick()` can thread it through to `_execute()`
-(or to a journal-writing step called right after `_execute()` with both `results` and this
-`closed` map available). This is the only signature change needed — `TradeOrder` itself stays
-untouched.
+`edam.decide_exits()` reads and then removes via `book.close(symbol)` (11 different call
+sites inside that function, one per exit reason) — by the time `_execute()` runs, the book has
+already been saved with the position gone. Decision: rather than touching all 11 call sites,
+the CALLER (`sniper.run()`, the only live caller of `decide_exits` today — `beta_core` is
+currently disabled, out of scope) snapshots `held_before = dict(book.positions)` once, before
+calling `decide_exits()`. `OpenPosition` objects are looked up by reference, so this shallow
+copy is enough (the only field `decide_exits` mutates in place is `peak_price`, which PnL
+doesn't need). After `decide_exits()` returns `exits`, build
+`closed = {o.token_in: held_before[o.token_in] for o in exits if o.token_in in held_before}`
+and return it as an additional value from `sniper.run()` (alongside the existing
+`(orders, mode)`), threaded through `_event_decision()` and `tick()` to wherever the journal
+write happens. Zero changes to `decide_exits()` or `TradeOrder` needed.
 
 PnL is computed once both prices are known: `pnl_usd = usd_size * (exit_price/entry_price - 1)`
 for a full-position exit (matches how this bot always exits — no partial scale-outs currently).
