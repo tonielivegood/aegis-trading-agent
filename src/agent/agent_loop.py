@@ -39,6 +39,7 @@ BASELINE_FILE = RUNTIME / "baseline.json"
 POSITIONS_FILE = RUNTIME / "aegis_positions.json"
 COMPLIANCE_FILE = RUNTIME / "track1_compliance.json"
 COOLDOWN_FILE = RUNTIME / "aegis_cooldown.json"
+ENTRY_FAIL_COOLDOWN_FILE = RUNTIME / "aegis_entry_fail_cooldown.json"
 REGIME_FILE = RUNTIME / "regime.json"
 DAYSTATE_FILE = RUNTIME / "daily_breaker.json"
 PRICECACHE_FILE = RUNTIME / "last_prices.json"
@@ -682,6 +683,7 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
     now_ts = time.time()
     book = PositionBook.load(POSITIONS_FILE)
     cooldowns = CooldownBook.load(COOLDOWN_FILE)
+    entry_fail_cooldowns = CooldownBook.load(ENTRY_FAIL_COOLDOWN_FILE)
     feed = MarketFeed(volume_provider=_volume_provider())
     rstate = _maybe_update_regime(now_ts)
     flag = rg.current_regime(rstate, max_age_s=settings.regime_max_age_seconds, now=now_ts)
@@ -776,7 +778,9 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
                               max_meme_positions=meme_cap, meme_usd=meme_usd,
                               manage_classes=sniper_classes, allow=entry_allow,
                               hot_token_items=hot_token_items,
-                              safety_check=_w3w_safety_check(state.equity_usd) if hot_token_items is not None else None)
+                              safety_check=_w3w_safety_check(state.equity_usd) if hot_token_items is not None else None,
+                              entry_fail_cooldowns=entry_fail_cooldowns,
+                              entry_fail_cooldown_s=settings.entry_fail_cooldown_seconds)
     book.save(POSITIONS_FILE)
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
     cooldowns.save(COOLDOWN_FILE)
@@ -1134,7 +1138,20 @@ def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
                             "token_in": o.token_in, "token_out": o.token_out})
             if is_exit:                                     # a stuck EXIT is a real DD risk → page now
                 _alert_exit_failure(o, str(last_err))
+            else:
+                _record_entry_fail_cooldown(o.token_out, now)
     return results
+
+
+def _record_entry_fail_cooldown(symbol: str, now) -> None:
+    """Every backend failed to buy `symbol` — cool it down so the bot doesn't hammer
+    the same dead candidate every tick (2/7 hardening; observed 5+ min of retries)."""
+    from .aegis.cooldown import CooldownBook
+    now_ts = now.timestamp() if hasattr(now, "timestamp") else float(now)
+    book = CooldownBook.load(ENTRY_FAIL_COOLDOWN_FILE)
+    book.record_exit(symbol, now_ts)
+    book.prune(now=now_ts, cooldown_s=settings.entry_fail_cooldown_seconds)
+    book.save(ENTRY_FAIL_COOLDOWN_FILE)
 
 
 def _alert_exit_failure(order, error: str) -> None:

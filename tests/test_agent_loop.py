@@ -212,6 +212,32 @@ def test_twak_primary_does_not_failover(mocker):
     assert "error" in out[0] and oo.calls == []   # separate wallet → never cross over
 
 
+def test_execute_records_entry_fail_cooldown(tmp_path, mocker):
+    mocker.patch.object(al, "ENTRY_FAIL_COOLDOWN_FILE", tmp_path / "entry_fail_cooldown.json")
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    mocker.patch.object(al.settings, "entry_fail_cooldown_seconds", 900)
+    failing = _FakeDex(fail=True)
+    _patch_backends(mocker, {"1inch": failing, "openocean": _FakeDex(fail=True),
+                             "pancake": _FakeDex(fail=True)})
+    al._execute([_entry_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=0)
+    from src.agent.aegis.cooldown import CooldownBook
+    book = CooldownBook.load(al.ENTRY_FAIL_COOLDOWN_FILE)
+    assert "BAS" in book.last_exit
+
+
+def test_execute_does_not_record_cooldown_for_failed_exit(tmp_path, mocker):
+    mocker.patch.object(al, "ENTRY_FAIL_COOLDOWN_FILE", tmp_path / "entry_fail_cooldown.json")
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    send = mocker.patch.object(al.notifier, "send")
+    _patch_backends(mocker, {"1inch": _FakeDex(fail=True), "openocean": _FakeDex(fail=True),
+                             "pancake": _FakeDex(fail=True)})
+    al._execute([_exit_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=0)
+    from src.agent.aegis.cooldown import CooldownBook
+    book = CooldownBook.load(al.ENTRY_FAIL_COOLDOWN_FILE)
+    assert book.last_exit == {}
+    assert send.called   # the existing exit-failure alert still fires
+
+
 # --- flexible venue selection (2/7): live-quote every aggregator, pick best liquidity ---
 
 class _PancakeQuoteLike:

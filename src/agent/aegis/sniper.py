@@ -73,6 +73,8 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
         meme_usd: float | None = None,
         hot_token_items: list[dict] | None = None,
         safety_check: Callable[[BreakoutSignal], bool] | None = None,
+        entry_fail_cooldowns: CooldownBook | None = None,
+        entry_fail_cooldown_s: float | None = None,
         ) -> tuple[list[TradeOrder], str]:
     overpump_pct = settings.aegis_overpump_pct if overpump_pct is None else overpump_pct
     cooldown_s = settings.aegis_cooldown_seconds if cooldown_s is None else cooldown_s
@@ -119,6 +121,11 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
                                trending=trending, manage_classes=scan_classes)
         sigs.sort(key=lambda s: s.strength, reverse=True)
         cooling = cooldowns.cooling_down(now=now, cooldown_s=cooldown_s)
+        if entry_fail_cooldowns is not None and entry_fail_cooldown_s is not None:
+            # A symbol that failed to enter recently is skipped too — stops the bot
+            # hammering the same dead candidate every tick (2/7 hardening).
+            cooling = cooling | entry_fail_cooldowns.cooling_down(
+                now=now, cooldown_s=entry_fail_cooldown_s)
         pos_usd = rg.position_usd(state.equity_usd, regime_flag)
         # The caller's cap is AUTHORITATIVE when given: the barbell caps entries BELOW the
         # regime's own slots (shared global cap), while the tournament-clock may raise the

@@ -87,6 +87,39 @@ def test_hot_token_entry_tracked_even_when_symbol_missing_from_prices():
     assert book.positions["SPCX"].entry_price == 1.0    # from the hot-token item's "price" field
 
 
+def test_entry_fail_cooldown_blocks_reentry():
+    from src.agent.aegis.cooldown import CooldownBook as CB
+    fail_book = CB()
+    fail_book.record_exit("MEOW", 1000.0)   # "MEOW" failed to enter 0s ago
+    items = [_hot_item("MEOW", change=8.0, volume=9000.0, contract="0xmeow")]
+    orders, _ = sniper.run(
+        _state(), {"MEOW": 1.0}, book=PositionBook(), feed=FakeFeed({}), cooldowns=CooldownBook(),
+        regime_flag=Regime.RISK_ON, universe=[], now=1000.0, floor_usd=6.0, allow=_allow,
+        hot_token_items=items, entry_fail_cooldowns=fail_book, entry_fail_cooldown_s=900.0)
+    assert orders == []
+
+
+def test_entry_fail_cooldown_expires():
+    from src.agent.aegis.cooldown import CooldownBook as CB
+    fail_book = CB()
+    fail_book.record_exit("MEOW", 0.0)      # failed a long time ago
+    items = [_hot_item("MEOW", change=8.0, volume=9000.0, contract="0xmeow")]
+    orders, _ = sniper.run(
+        _state(), {"MEOW": 1.0}, book=PositionBook(), feed=FakeFeed({}), cooldowns=CooldownBook(),
+        regime_flag=Regime.RISK_ON, universe=[], now=1000.0, floor_usd=6.0, allow=_allow,
+        hot_token_items=items, entry_fail_cooldowns=fail_book, entry_fail_cooldown_s=900.0)
+    assert len(orders) == 1 and orders[0].token_out == "MEOW"
+
+
+def test_no_entry_fail_cooldown_param_behaves_as_before():
+    items = [_hot_item("MEOW", change=8.0, volume=9000.0, contract="0xmeow")]
+    orders, _ = sniper.run(
+        _state(), {"MEOW": 1.0}, book=PositionBook(), feed=FakeFeed({}), cooldowns=CooldownBook(),
+        regime_flag=Regime.RISK_ON, universe=[], now=1000.0, floor_usd=6.0, allow=_allow,
+        hot_token_items=items)
+    assert len(orders) == 1
+
+
 def test_hot_token_items_respects_manage_classes_meme_only():
     # manage_classes={"meme"}: majors must NOT come from the snapshot scan either
     # (beta_core owns majors when this filter is active).
