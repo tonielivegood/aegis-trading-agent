@@ -253,6 +253,18 @@ class Settings(BaseModel):
                                                   # honeypot/tax pass alone doesn't catch a pool too
                                                   # thin to exit (SPCX: not a honeypot, 0% tax, but an
                                                   # 86% price-impact trap on exit).
+    # NEW (2/7, post-SPCX hardening): server-side hot-token discovery filters — Binance
+    # filters these OUT before the candidate list ever reaches the bot, so a 10-holder,
+    # ~$1-liquidity pool (SPCX) never even shows up as a candidate.
+    binance_w3w_min_liquidity_usd: float = 20_000.0     # hot-token liquidityMin
+    binance_w3w_min_volume_usd: float = 5_000.0         # hot-token volumeMin
+    binance_w3w_max_top10_holding_pct: float = 30.0     # hot-token top10HoldingPercentMax
+    # Second-layer JIT floor (in case liquidity moved between discovery and entry decision).
+    binance_w3w_min_holders: int = 30
+    binance_w3w_min_liquidity_usd_check: float = 10_000.0
+    # Cooldown after EVERY backend fails an entry attempt — stops the bot hammering the
+    # same dead candidate every tick (observed: 5+ minutes of retries on one symbol, 2/7).
+    entry_fail_cooldown_seconds: int = 900
 
     # --- Mode ---
     dry_run: bool = True
@@ -422,6 +434,12 @@ def get_settings() -> Settings:
         binance_w3w_universe_enabled=_get_bool("BINANCE_W3W_UNIVERSE_ENABLED", "true"),
         binance_w3w_max_tax_rate=float(_get("BINANCE_W3W_MAX_TAX_RATE", "0.10")),
         binance_w3w_max_price_impact=float(_get("BINANCE_W3W_MAX_PRICE_IMPACT", "0.15")),
+        binance_w3w_min_liquidity_usd=float(_get("BINANCE_W3W_MIN_LIQUIDITY_USD", "20000")),
+        binance_w3w_min_volume_usd=float(_get("BINANCE_W3W_MIN_VOLUME_USD", "5000")),
+        binance_w3w_max_top10_holding_pct=float(_get("BINANCE_W3W_MAX_TOP10_HOLDING_PCT", "30")),
+        binance_w3w_min_holders=int(_get("BINANCE_W3W_MIN_HOLDERS", "30")),
+        binance_w3w_min_liquidity_usd_check=float(_get("BINANCE_W3W_MIN_LIQUIDITY_USD_CHECK", "10000")),
+        entry_fail_cooldown_seconds=int(_get("ENTRY_FAIL_COOLDOWN_SECONDS", "900")),
         catalyst_x_enabled=_get_bool("CATALYST_X_ENABLED"),
         dry_run=_get("DRY_RUN", "true").lower() in ("1", "true", "yes"),
     )
