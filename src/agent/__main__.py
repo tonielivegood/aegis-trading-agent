@@ -20,7 +20,10 @@ def cmd_status() -> None:
     from .risk.portfolio import Portfolio, read_onchain_balances
     from .data import price_feed, token_list
 
-    bals = read_onchain_balances(settings.agent_wallet_address)
+    agent_loop._rehydrate_discovered_from_book()   # show a held hot-token position too
+    bals = read_onchain_balances(
+        settings.agent_wallet_address,
+        symbols=[t.symbol for t in token_list.held_valuation_tokens()])
     syms = [s for s in bals if s != "BNB"]
     prices = price_feed.get_prices(syms) if syms else {}
     if "BNB" in bals:
