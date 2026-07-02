@@ -56,10 +56,18 @@ def _selected_tokens(symbols: list[str] | None):
     # Valuation reads the FULL holdable universe (core ∪ alpha), not the trading
     # subset — otherwise a holding outside the trading set reads as 0 and trips a
     # phantom drawdown. Callers that want a specific set still filter by symbol.
-    tokens = token_list.valuation_tokens()
-    if symbols is not None:
-        wanted = {s.upper() for s in symbols}
-        tokens = [t for t in tokens if t.symbol.upper() in wanted]
+    if symbols is None:
+        return token_list.valuation_tokens()
+    # Resolve each wanted symbol via get_token() (core ∪ alpha ∪ runtime-discovered),
+    # NOT by filtering the static valuation_tokens() list — a discovered hot-token
+    # symbol is never in that static list, so filtering it always yielded nothing
+    # (real-money bug, 2/7: a held discovered token's balance silently read as 0).
+    tokens = []
+    for s in symbols:
+        try:
+            tokens.append(token_list.get_token(s))
+        except KeyError:
+            continue
     return tokens
 
 

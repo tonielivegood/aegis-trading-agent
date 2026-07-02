@@ -332,6 +332,30 @@ def test_multicall_omits_zero_and_failed(mocker):
     assert out == {"CAKE": pytest.approx(3.0)}
 
 
+def test_selected_tokens_resolves_runtime_discovered_symbol():
+    # REGRESSION (real-money bug, 2/7): passing an explicit `symbols=[...]` list used
+    # to FILTER the static valuation_tokens() list — a runtime-discovered hot-token
+    # symbol is never in that static list, so it was silently dropped, meaning its
+    # balance was NEVER read even when explicitly requested by symbol.
+    from src.agent.data import token_list
+    from src.agent.risk.portfolio import _selected_tokens
+
+    token_list.register_discovered("SELTEST", "0x1234567890123456789012345678901234567890")
+    try:
+        toks = _selected_tokens(["SELTEST"])
+        assert [t.symbol for t in toks] == ["SELTEST"]
+    finally:
+        token_list._discovered.pop("SELTEST", None)
+        token_list._discovered_classes.pop("SELTEST", None)
+
+
+def test_selected_tokens_none_returns_full_static_universe():
+    from src.agent.data import token_list
+    from src.agent.risk.portfolio import _selected_tokens
+
+    assert _selected_tokens(None) == token_list.valuation_tokens()
+
+
 def test_balance_read_values_alpha_holdings_not_just_core(mocker):
     """Regression for the phantom-drawdown false trip: a wallet holding an alpha
     token outside the trading core (LUNC) must be read, so equity == real wallet."""
