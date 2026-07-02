@@ -38,6 +38,22 @@ def test_valuation_tokens_cover_full_holdable_universe():
     assert len(addrs) == len(set(addrs))
 
 
+def test_held_valuation_tokens_includes_runtime_discovered():
+    # REGRESSION (real-money bug, 2/7): a hot-token buy's symbol is registered at
+    # runtime, not in the static core/alpha files — valuation_tokens() alone never
+    # sees it, so its balance/price silently never gets read at all.
+    addr = "0x9999999999999999999999999999999999999b"
+    token_list.register_discovered("HELDMEME", addr)
+    try:
+        syms = {t.symbol.upper() for t in token_list.held_valuation_tokens()}
+        assert "HELDMEME" in syms
+        static_syms = {t.symbol.upper() for t in token_list.valuation_tokens()}
+        assert "HELDMEME" not in static_syms   # confirms it's NOT in the static list
+    finally:
+        token_list._discovered.pop("HELDMEME", None)
+        token_list._discovered_classes.pop("HELDMEME", None)
+
+
 def test_doge_decimals():
     assert token_list.get_token("DOGE").decimals == 8
     assert token_list.get_token("WBNB").decimals == 18

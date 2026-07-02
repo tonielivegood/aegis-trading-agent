@@ -6,6 +6,8 @@ and compliance-trade selection.
 """
 from __future__ import annotations
 
+import pytest
+
 from src.agent import agent_loop as al
 from src.agent.strategy.base_strategy import PortfolioState, TradeOrder
 
@@ -321,6 +323,41 @@ def test_w3w_universe_prices_network_error_never_raises(mocker):
         token_list._discovered_classes.pop("WTEST2", None)
 
 
+def test_rehydrate_discovered_from_book_restores_held_position(tmp_path, mocker):
+    # REGRESSION (real-money bug, 2/7): a held hot-token position's symbol->contract
+    # mapping lives only in-process (token_list._discovered), so a bot RESTART
+    # otherwise orphans a still-held position: unresolvable, unpriced, unmanaged,
+    # even though the position book on disk still correctly has the entry.
+    from src.agent.aegis.positions import OpenPosition, PositionBook
+    from src.agent.data import token_list
+    mocker.patch.object(al, "POSITIONS_FILE", tmp_path / "aegis_positions.json")
+    book = PositionBook()
+    book.open(OpenPosition(symbol="ORPHAN", contract="0x3333333333333333333333333333333333333c",
+                           entry_price=1.0, usd_size=5.0))
+    book.save(al.POSITIONS_FILE)
+    assert "ORPHAN" not in token_list._discovered   # sanity: not registered yet (fresh process)
+
+    try:
+        with pytest.raises(KeyError):
+            token_list.get_token("ORPHAN")
+        al._rehydrate_discovered_from_book()
+        assert token_list.get_token("ORPHAN").contract.lower() == "0x3333333333333333333333333333333333333c"
+    finally:
+        token_list._discovered.pop("ORPHAN", None)
+        token_list._discovered_classes.pop("ORPHAN", None)
+
+
+def test_rehydrate_discovered_from_book_skips_already_known_symbols(mocker, tmp_path):
+    # A held MAJOR/core symbol (already resolvable) must not be touched/overridden.
+    from src.agent.aegis.positions import OpenPosition, PositionBook
+    mocker.patch.object(al, "POSITIONS_FILE", tmp_path / "aegis_positions.json")
+    book = PositionBook()
+    book.open(OpenPosition(symbol="ETH", contract="0xWRONGADDRESS", entry_price=1.0, usd_size=5.0))
+    book.save(al.POSITIONS_FILE)
+    al._rehydrate_discovered_from_book()          # must not raise, must not clobber ETH
+    assert al.token_list.get_token("ETH").contract != "0xWRONGADDRESS"
+
+
 def test_w3w_hot_token_items_returns_none_when_flag_off(mocker):
     mocker.patch.object(al.settings, "binance_w3w_universe_enabled", False)
     assert al._w3w_hot_token_items() is None
@@ -382,6 +419,39 @@ def test_w3w_safety_check_blocks_high_tax(mocker):
                          slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
     check = al._w3w_safety_check(40.0)
     assert check(sig) is False
+
+
+def test_w3w_safety_check_blocks_high_price_impact(mocker):
+    # REGRESSION (real-money incident, 2/7): SPCX passed honeypot+tax but was an
+    # 86%-price-impact liquidity trap — not a honeypot, but unexitable at any size.
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
+        {"isBest": True, "priceImpactPercent": "86.17",
+         "toToken": {"isHoneyPot": False, "taxRate": "0", "decimal": "18"}},
+    ])
+    sig = BreakoutSignal(symbol="SPCX", contract="0x8888888888888888888888888888888888888b",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    check = al._w3w_safety_check(40.0)
+    assert check(sig) is False
+
+
+def test_w3w_safety_check_allows_low_price_impact(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    from src.agent.data import token_list
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
+        {"isBest": True, "priceImpactPercent": "1.2",
+         "toToken": {"isHoneyPot": False, "taxRate": "0", "decimal": "18"}},
+    ])
+    sig = BreakoutSignal(symbol="LIQUIDMEME", contract="0x9999999999999999999999999999999999999c",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    try:
+        check = al._w3w_safety_check(40.0)
+        assert check(sig) is True
+    finally:
+        token_list._discovered.pop("LIQUIDMEME", None)
+        token_list._discovered_classes.pop("LIQUIDMEME", None)
 
 
 def test_w3w_safety_check_no_routes_fails_closed(mocker):

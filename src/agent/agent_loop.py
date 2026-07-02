@@ -264,6 +264,23 @@ def _clear_position_book() -> None:
         book.save(POSITIONS_FILE)
 
 
+def _rehydrate_discovered_from_book() -> None:
+    """Re-register any held position's symbol/contract into token_list's runtime
+    discovery registry — self-heals across a bot RESTART (real-money bug, 2/7):
+    a hot-token buy's symbol->contract mapping lives only in that process's memory,
+    so a restart otherwise orphans a still-held position (unresolvable, unpriced,
+    unmanaged) even though the position book itself correctly persisted it to disk."""
+    from .aegis.positions import PositionBook
+    book = PositionBook.load(POSITIONS_FILE)
+    for sym, pos in book.positions.items():
+        if not pos.contract:
+            continue
+        try:
+            token_list.get_token(sym)
+        except KeyError:
+            token_list.register_discovered(sym, pos.contract)
+
+
 def _volume_provider():
     """Class-routed volume: MAJORS use Binance spot klines, MEMES use Binance Alpha
     klines. Returns a callable(symbol)->(vol, baseline); fail-safe (0,0) per token.
@@ -331,6 +348,15 @@ def _w3w_safety_check(equity_usd: float):
             tax = 1.0
         if tax > settings.binance_w3w_max_tax_rate:
             log.warning("w3w_tax_too_high", symbol=sig.symbol, tax=tax)
+            return False
+        # Real-money incident (2/7): not a honeypot, 0% tax, still an 86% price-impact
+        # trap — the pool was too thin to exit even though buying in looked fine.
+        try:
+            impact = float(best.get("priceImpactPercent") or 0) / 100.0
+        except (TypeError, ValueError):
+            impact = 1.0
+        if impact > settings.binance_w3w_max_price_impact:
+            log.warning("w3w_price_impact_too_high", symbol=sig.symbol, impact=impact)
             return False
         try:
             decimals = int(to_tok.get("decimal") or 18)
@@ -798,7 +824,10 @@ def tick(dry_run: bool | None = None) -> dict:
     now = utcnow()
     event_mode = _event_mode()
 
-    balances = read_onchain_balances(settings.agent_wallet_address)
+    _rehydrate_discovered_from_book()   # restart-survival for a held hot-token position
+    balances = read_onchain_balances(
+        settings.agent_wallet_address,
+        symbols=[t.symbol for t in token_list.held_valuation_tokens()])
     if event_mode:
         # Primary strategy: trade the liquid eligible (Alpha) universe, priced on-chain.
         symbols = token_list.alpha_symbols()
@@ -918,7 +947,10 @@ def flatten_to_cash(dry_run: bool | None = None) -> dict:
     emergency halt. Honors DRY_RUN unless explicitly overridden (CLI passes False)."""
     dry_run = settings.dry_run if dry_run is None else dry_run
     now = utcnow()
-    balances = read_onchain_balances(settings.agent_wallet_address)
+    _rehydrate_discovered_from_book()   # a kill-switch must see a held hot-token position too
+    balances = read_onchain_balances(
+        settings.agent_wallet_address,
+        symbols=[t.symbol for t in token_list.held_valuation_tokens()])
     prices = _apply_price_fallback(_event_prices(token_list.alpha_symbols(), balances), balances)
     pf = Portfolio()
     # Value EVERY held token (not just the alpha universe) so nothing is left behind;

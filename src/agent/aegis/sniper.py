@@ -128,16 +128,24 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
             sigs, state, book, position_usd=pos_usd, max_positions=max_pos,
             floor_usd=floor_usd, cooldown_symbols=cooling, settlement=settlement, allow=allow,
             meme_usd=meme_usd, manage_classes=manage_classes, safety_check=safety_check)
+        # Fallback price per symbol from THIS tick's own signals — a hot-token discovery
+        # is never in `prices` yet (prices are built before discovery runs each tick), so
+        # gating book.open() on `sym in prices` silently dropped tracking of a REAL fill
+        # (real-money bug, 2/7). The signal's own live-quoted price is the entry price.
+        sig_price = {s.symbol: s.price_now for s in sigs}
         for o in entries:
             sym = o.token_out
-            if o.token_in == settlement and sym in prices:
+            if o.token_in == settlement:
+                entry_price = prices.get(sym) or sig_price.get(sym, 0.0)
+                if entry_price <= 0:
+                    continue                          # never open a position we can't price
                 snap = snapshots.get(sym)
                 try:
                     contract = token_list.get_token(sym).contract
                 except KeyError:
                     contract = ""
                 book.open(OpenPosition(
-                    symbol=sym, contract=contract, entry_price=prices[sym],
+                    symbol=sym, contract=contract, entry_price=entry_price,
                     usd_size=o.amount_in_usd, token_class=token_list.token_class(sym),
                     entry_baseline_vol=(snap.vol_5m if snap else 0.0)))
     return exits + entries, "sniper"

@@ -247,6 +247,12 @@ class Settings(BaseModel):
     binance_w3w_universe_enabled: bool = True
     binance_w3w_max_tax_rate: float = 0.10        # reject a candidate taxed above this (matches
                                                   # Binance's own query-token-audit "critical" bar)
+    binance_w3w_max_price_impact: float = 0.15    # NEW (2/7, real-money incident): reject a candidate
+                                                  # whose OWN quote shows selling our ticket size back
+                                                  # would lose more than this to price impact — an
+                                                  # honeypot/tax pass alone doesn't catch a pool too
+                                                  # thin to exit (SPCX: not a honeypot, 0% tax, but an
+                                                  # 86% price-impact trap on exit).
 
     # --- Mode ---
     dry_run: bool = True
@@ -415,6 +421,7 @@ def get_settings() -> Settings:
         binance_alpha_market_data_enabled=_get_bool("BINANCE_ALPHA_MARKET_DATA_ENABLED", "true"),
         binance_w3w_universe_enabled=_get_bool("BINANCE_W3W_UNIVERSE_ENABLED", "true"),
         binance_w3w_max_tax_rate=float(_get("BINANCE_W3W_MAX_TAX_RATE", "0.10")),
+        binance_w3w_max_price_impact=float(_get("BINANCE_W3W_MAX_PRICE_IMPACT", "0.15")),
         catalyst_x_enabled=_get_bool("CATALYST_X_ENABLED"),
         dry_run=_get("DRY_RUN", "true").lower() in ("1", "true", "yes"),
     )

@@ -165,6 +165,15 @@ def valuation_tokens() -> list[Token]:
     return list(out.values())
 
 
+def held_valuation_tokens() -> list[Token]:
+    """valuation_tokens() PLUS any runtime-discovered token (a hot-token meme buy,
+    outside the static core/alpha files) — NOT cached, since `_discovered` grows
+    during the process's life. Without this, a discovered token's balance/price is
+    never read at all (real-money bug, 2/7): it silently drops out of equity and
+    the exit rails, even though the wallet genuinely holds it."""
+    return valuation_tokens() + list(_discovered.values())
+
+
 def tradable_symbols() -> list[str]:
     return list(_core().keys())
 

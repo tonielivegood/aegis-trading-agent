@@ -69,6 +69,24 @@ def test_hot_token_items_drive_meme_entries_instead_of_snapshot_scan():
     assert book.is_open("MEOW")
 
 
+def test_hot_token_entry_tracked_even_when_symbol_missing_from_prices():
+    # REGRESSION (real-money bug, 2/7): in production `prices` is built BEFORE this
+    # tick's hot-token discovery runs, so a brand-new symbol is NEVER in `prices` at
+    # book.open() time. The old code gated book.open() on `sym in prices` — silently
+    # skipping it, leaving a REAL on-chain buy completely untracked (no stop/trail
+    # ever manages it again). The entry must still be recorded, using the signal's
+    # own live-quoted price as entry_price.
+    book = PositionBook()
+    items = [_hot_item("SPCX", change=8.0, volume=9000.0, contract="0xspcx")]
+    orders, _ = sniper.run(
+        _state(), {}, book=book, feed=FakeFeed({}), cooldowns=CooldownBook(),   # prices={} !
+        regime_flag=Regime.RISK_ON, universe=[], now=1000.0, floor_usd=6.0, allow=_allow,
+        hot_token_items=items)
+    assert len(orders) == 1
+    assert book.is_open("SPCX")
+    assert book.positions["SPCX"].entry_price == 1.0    # from the hot-token item's "price" field
+
+
 def test_hot_token_items_respects_manage_classes_meme_only():
     # manage_classes={"meme"}: majors must NOT come from the snapshot scan either
     # (beta_core owns majors when this filter is active).
