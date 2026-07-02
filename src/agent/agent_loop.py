@@ -330,6 +330,25 @@ def _w3w_hot_token_items() -> list[dict] | None:
         return None
 
 
+def _w3w_hot_token_volume_data(items: list[dict] | None) -> dict[str, dict]:
+    """Batch price_info() for every hot-token candidate this tick, so
+    hot_token_signals() can compute a REAL vol_multiple instead of the old
+    hardcoded 0.0 (real-money bug, 2/7 — see the SPCX incident). {} on any
+    failure or when there are no candidates — hot_token_signals() then rejects
+    everything (fail-safe: no real volume data, never fire)."""
+    if not items:
+        return {}
+    from .execution import binance_web3 as bw
+    contracts = [it.get("tokenContractAddress") for it in items if it.get("tokenContractAddress")]
+    if not contracts:
+        return {}
+    try:
+        return bw.price_info(contracts)
+    except Exception as e:  # noqa: BLE001 — a hiccup here must fall back, never break the tick
+        log.warning("w3w_hot_token_volume_failed", error=type(e).__name__)
+        return {}
+
+
 def _w3w_safety_check(equity_usd: float):
     """Build the just-in-time honeypot/tax gate for one tick — a fresh `quote()` call
     per candidate (30s TTL, never cached). On pass, registers the token so the rest
@@ -770,6 +789,7 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
         entry_flag=entry_flag, flag=flag, meme_order_usd=sniper.meme_ticket_usd(state.equity_usd))
 
     hot_token_items = _w3w_hot_token_items()
+    hot_token_volume = _w3w_hot_token_volume_data(hot_token_items)
     # A hot-token-discovered contract isn't in the static 149/tradable-alpha files (that
     # gate is what's being retired), so it needs a permissive `allow` here — the REAL
     # safety gate for these candidates is `_w3w_safety_check` (fresh honeypot/tax quote),
@@ -782,7 +802,8 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
                               hot_token_items=hot_token_items,
                               safety_check=_w3w_safety_check(state.equity_usd) if hot_token_items is not None else None,
                               entry_fail_cooldowns=entry_fail_cooldowns,
-                              entry_fail_cooldown_s=settings.entry_fail_cooldown_seconds)
+                              entry_fail_cooldown_s=settings.entry_fail_cooldown_seconds,
+                              hot_token_volume=hot_token_volume)
     book.save(POSITIONS_FILE)
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
     cooldowns.save(COOLDOWN_FILE)

@@ -457,6 +457,25 @@ def test_w3w_hot_token_items_returns_none_on_network_error(mocker):
     assert al._w3w_hot_token_items() is None
 
 
+def test_hot_token_volume_data_batches_price_info(mocker):
+    items = [{"tokenContractAddress": "0xaaa"}, {"tokenContractAddress": "0xbbb"}]
+    pi = mocker.patch("src.agent.execution.binance_web3.price_info",
+                      return_value={"0xaaa": {"volume5M": "1"}})
+    out = al._w3w_hot_token_volume_data(items)
+    assert out == {"0xaaa": {"volume5M": "1"}}
+    assert pi.call_args.args[0] == ["0xaaa", "0xbbb"]
+
+
+def test_hot_token_volume_data_empty_items_returns_empty():
+    assert al._w3w_hot_token_volume_data(None) == {}
+    assert al._w3w_hot_token_volume_data([]) == {}
+
+
+def test_hot_token_volume_data_network_error_returns_empty(mocker):
+    mocker.patch("src.agent.execution.binance_web3.price_info", side_effect=RuntimeError("boom"))
+    assert al._w3w_hot_token_volume_data([{"tokenContractAddress": "0xaaa"}]) == {}
+
+
 def test_w3w_hot_token_items_passes_meme_breakout_min(mocker):
     from src.agent.aegis import token_class as tc
     mocker.patch.object(al.settings, "binance_w3w_universe_enabled", True)

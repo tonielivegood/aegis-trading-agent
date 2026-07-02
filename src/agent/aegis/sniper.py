@@ -75,6 +75,7 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
         safety_check: Callable[[BreakoutSignal], bool] | None = None,
         entry_fail_cooldowns: CooldownBook | None = None,
         entry_fail_cooldown_s: float | None = None,
+        hot_token_volume: dict[str, dict] | None = None,
         ) -> tuple[list[TradeOrder], str]:
     overpump_pct = settings.aegis_overpump_pct if overpump_pct is None else overpump_pct
     cooldown_s = settings.aegis_cooldown_seconds if cooldown_s is None else cooldown_s
@@ -113,7 +114,8 @@ def run(state: PortfolioState, prices: dict[str, float], *, book: PositionBook,
             if manage_classes is None or tc.MEME in manage_classes:
                 mp = tc.params(tc.MEME)
                 sigs += hot_token_signals(hot_token_items, breakout_min=mp.breakout_min,
-                                          breakout_max=mp.breakout_max)
+                                          breakout_max=mp.breakout_max, vol_mult=mp.vol_mult,
+                                          price_info_by_contract=hot_token_volume)
             scan_classes = {tc.MAJOR} if manage_classes is None else (manage_classes - {tc.MEME})
         else:
             scan_classes = manage_classes

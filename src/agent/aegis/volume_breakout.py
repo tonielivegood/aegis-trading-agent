@@ -114,13 +114,26 @@ def scan_breakouts(snapshots: dict[str, MarketSnapshot], *,
 
 
 def hot_token_signals(items: list[dict], *, breakout_min: float, breakout_max: float,
-                      allow: Callable[[str], bool] | None = None) -> list[BreakoutSignal]:
+                      allow: Callable[[str], bool] | None = None,
+                      vol_mult: float = 0.0,
+                      price_info_by_contract: dict[str, dict] | None = None) -> list[BreakoutSignal]:
     """Convert Binance's server-side-filtered hot-token results (Option B discovery)
     into ranked BreakoutSignals — a PURE conversion, the caller already fetched
     `items` via `binance_web3.hot_token(...)`. Wash-trading/mint/freeze exclusion and
-    the price-change FLOOR already happened server-side; this only applies the
-    chase-cap ceiling (hot-token has no upper price-change filter) and ranks by
-    the $ volume hot-token reports (there is no baseline-multiple concept here)."""
+    the price-change FLOOR already happened server-side; this applies the chase-cap
+    ceiling (hot-token has no upper price-change filter) and ranks by the $ volume
+    hot-token reports.
+
+    Real volume confirmation (2/7, post-SPCX hardening): if `price_info_by_contract`
+    is supplied (a batch `binance_web3.price_info()` result keyed by lowercase
+    contract) AND `vol_mult > 0`, a candidate must show `volume5M >= vol_mult x
+    baseline` to pass — baseline is approximated as `volume1H / 12` (a rough "average
+    5-minute bucket over the last hour"; this is contaminated by the spike itself
+    since price_info's rolling window includes the current moment, so it under-states
+    a true pre-spike baseline — still a real improvement over the previous hardcoded
+    vol_multiple=0.0, which applied NO volume confirmation at all). Omitting these
+    kwargs (the default) reproduces the OLD behavior exactly, for backward compat."""
+    gate_active = vol_mult > 0 and price_info_by_contract is not None
     out: list[BreakoutSignal] = []
     for it in items:
         contract = (it.get("tokenContractAddress") or "").strip().lower()
@@ -134,9 +147,22 @@ def hot_token_signals(items: list[dict], *, breakout_min: float, breakout_max: f
             continue
         if change <= 0 or change < breakout_min or change > breakout_max:
             continue
+        vol_multiple = 0.0
+        if gate_active:
+            info = price_info_by_contract.get(contract)
+            if not info:
+                continue                                  # no real volume data -> never fire
+            try:
+                vol_5m = float(info.get("volume5M") or 0)
+                baseline = float(info.get("volume1H") or 0) / 12.0
+            except (TypeError, ValueError):
+                continue
+            if baseline <= 0 or vol_5m < vol_mult * baseline:
+                continue                                  # fails the REAL volume-confirmation bar
+            vol_multiple = vol_5m / baseline
         out.append(BreakoutSignal(
             symbol=it.get("tokenSymbol") or contract, contract=contract,
-            vol_multiple=0.0, breakout_pct=change, recent_pump_pct=0.0, slippage_est=0.0,
+            vol_multiple=vol_multiple, breakout_pct=change, recent_pump_pct=0.0, slippage_est=0.0,
             price_now=price, baseline_vol=volume,
             reasons=(f"hot-token +{change * 100:.1f}% vol=${volume:,.0f}",),
         ))

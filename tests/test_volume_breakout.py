@@ -304,6 +304,50 @@ def test_hot_token_signals_allow_filter():
     assert sigs == []
 
 
+def test_hot_token_signals_computes_real_vol_multiple(mocker):
+    items = [_hot_item("MYX", change=8.0, volume=5000.0, liquidity=20000.0, contract="0xmyx")]
+    # volume1H=1200 -> 5m-equivalent baseline = 1200/12 = 100; volume5M=600 -> 6x baseline.
+    price_info = {"0xmyx": {"volume5M": "600", "volume1H": "1200"}}
+    sigs = hot_token_signals(items, breakout_min=0.06, breakout_max=0.20,
+                             vol_mult=4.0, price_info_by_contract=price_info)
+    assert len(sigs) == 1
+    assert sigs[0].vol_multiple == pytest.approx(6.0)
+
+
+def test_hot_token_signals_rejects_below_real_volume_bar():
+    items = [_hot_item("WEAKVOL", change=8.0, volume=5000.0, liquidity=20000.0, contract="0xweakvol")]
+    # volume1H=1200 -> baseline 100; volume5M=200 -> only 2x, below the 4x meme bar.
+    price_info = {"0xweakvol": {"volume5M": "200", "volume1H": "1200"}}
+    sigs = hot_token_signals(items, breakout_min=0.06, breakout_max=0.20,
+                             vol_mult=4.0, price_info_by_contract=price_info)
+    assert sigs == []
+
+
+def test_hot_token_signals_rejects_zero_baseline_volume():
+    # This is exactly the SPCX shape: real activity happened, but the rolling 1h window
+    # shows nothing right now (fail-safe: no real baseline, never fire).
+    items = [_hot_item("DEADVOL", change=14.3, volume=1997.0, liquidity=1.0, contract="0xdeadvol")]
+    price_info = {"0xdeadvol": {"volume5M": "0", "volume1H": "0"}}
+    sigs = hot_token_signals(items, breakout_min=0.06, breakout_max=0.20,
+                             vol_mult=4.0, price_info_by_contract=price_info)
+    assert sigs == []
+
+
+def test_hot_token_signals_missing_price_info_entry_rejected_when_gate_active():
+    items = [_hot_item("NODATA", change=8.0, volume=5000.0, liquidity=20000.0, contract="0xnodata")]
+    sigs = hot_token_signals(items, breakout_min=0.06, breakout_max=0.20,
+                             vol_mult=4.0, price_info_by_contract={})   # no entry for 0xnodata
+    assert sigs == []
+
+
+def test_hot_token_signals_no_gate_when_vol_mult_zero_matches_old_behavior():
+    # Backward compatibility: omitting the new kwargs (or vol_mult=0.0) behaves exactly
+    # like before this task — every existing caller/test relies on this.
+    items = [_hot_item("MYX", change=8.0, volume=5000.0, liquidity=20000.0, contract="0xmyx")]
+    sigs = hot_token_signals(items, breakout_min=0.06, breakout_max=0.20)
+    assert len(sigs) == 1 and sigs[0].vol_multiple == 0.0
+
+
 # ----------------------------- decide_breakout_entries: safety_check injection -----------------------------
 
 def test_safety_check_rejects_candidate_without_consuming_a_slot():

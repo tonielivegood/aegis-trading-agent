@@ -120,6 +120,26 @@ def test_no_entry_fail_cooldown_param_behaves_as_before():
     assert len(orders) == 1
 
 
+def test_hot_token_volume_gate_rejects_weak_candidate():
+    items = [_hot_item("WEAK", change=8.0, volume=9000.0, contract="0xweak")]
+    weak_volume = {"0xweak": {"volume5M": "50", "volume1H": "1200"}}   # baseline 100, only 0.5x
+    orders, _ = sniper.run(
+        _state(), {"WEAK": 1.0}, book=PositionBook(), feed=FakeFeed({}), cooldowns=CooldownBook(),
+        regime_flag=Regime.RISK_ON, universe=[], now=1000.0, floor_usd=6.0, allow=_allow,
+        hot_token_items=items, hot_token_volume=weak_volume)
+    assert orders == []
+
+
+def test_hot_token_volume_gate_admits_strong_candidate():
+    items = [_hot_item("STRONG", change=8.0, volume=9000.0, contract="0xstrong")]
+    strong_volume = {"0xstrong": {"volume5M": "600", "volume1H": "1200"}}   # baseline 100, 6x
+    orders, _ = sniper.run(
+        _state(), {"STRONG": 1.0}, book=PositionBook(), feed=FakeFeed({}), cooldowns=CooldownBook(),
+        regime_flag=Regime.RISK_ON, universe=[], now=1000.0, floor_usd=6.0, allow=_allow,
+        hot_token_items=items, hot_token_volume=strong_volume)
+    assert len(orders) == 1 and orders[0].token_out == "STRONG"
+
+
 def test_hot_token_items_respects_manage_classes_meme_only():
     # manage_classes={"meme"}: majors must NOT come from the snapshot scan either
     # (beta_core owns majors when this filter is active).
