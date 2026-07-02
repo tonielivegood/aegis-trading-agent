@@ -396,6 +396,9 @@ def test_w3w_safety_check_registers_token_on_pass(mocker):
     mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
         {"isBest": True, "toToken": {"isHoneyPot": False, "taxRate": "0.01", "decimal": "9"}},
     ])
+    mocker.patch("src.agent.execution.binance_web3.price_info", return_value={
+        "0x3333333333333333333333333333333333333c": {"holders": 500, "liquidity": "80000"},
+    })
     sig = BreakoutSignal(symbol="NEWMEME", contract="0x3333333333333333333333333333333333333c",
                          vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
                          slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
@@ -455,6 +458,9 @@ def test_w3w_safety_check_allows_low_price_impact(mocker):
         {"isBest": True, "priceImpactPercent": "1.2",
          "toToken": {"isHoneyPot": False, "taxRate": "0", "decimal": "18"}},
     ])
+    mocker.patch("src.agent.execution.binance_web3.price_info", return_value={
+        "0x9999999999999999999999999999999999999c": {"holders": 500, "liquidity": "80000"},
+    })
     sig = BreakoutSignal(symbol="LIQUIDMEME", contract="0x9999999999999999999999999999999999999c",
                          vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
                          slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
@@ -464,6 +470,75 @@ def test_w3w_safety_check_allows_low_price_impact(mocker):
     finally:
         token_list._discovered.pop("LIQUIDMEME", None)
         token_list._discovered_classes.pop("LIQUIDMEME", None)
+
+
+def test_w3w_safety_check_blocks_low_holders(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    mocker.patch.object(al.settings, "binance_w3w_min_holders", 30)
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
+        {"isBest": True, "priceImpactPercent": "1.0",
+         "toToken": {"isHoneyPot": False, "taxRate": "0", "decimal": "18"}},
+    ])
+    mocker.patch("src.agent.execution.binance_web3.price_info", return_value={
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaad": {"holders": 10, "liquidity": "50000"},
+    })
+    sig = BreakoutSignal(symbol="THINHOLD", contract="0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaad",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    check = al._w3w_safety_check(40.0)
+    assert check(sig) is False
+
+
+def test_w3w_safety_check_blocks_low_liquidity(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    mocker.patch.object(al.settings, "binance_w3w_min_liquidity_usd_check", 10000.0)
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
+        {"isBest": True, "priceImpactPercent": "1.0",
+         "toToken": {"isHoneyPot": False, "taxRate": "0", "decimal": "18"}},
+    ])
+    mocker.patch("src.agent.execution.binance_web3.price_info", return_value={
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbe": {"holders": 100, "liquidity": "0.83"},
+    })
+    sig = BreakoutSignal(symbol="SPCX2", contract="0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbe",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    check = al._w3w_safety_check(40.0)
+    assert check(sig) is False
+
+
+def test_w3w_safety_check_price_info_failure_fails_closed(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
+        {"isBest": True, "priceImpactPercent": "1.0",
+         "toToken": {"isHoneyPot": False, "taxRate": "0", "decimal": "18"}},
+    ])
+    mocker.patch("src.agent.execution.binance_web3.price_info", side_effect=RuntimeError("boom"))
+    sig = BreakoutSignal(symbol="NETERR", contract="0xccccccccccccccccccccccccccccccccccccccf",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    check = al._w3w_safety_check(40.0)
+    assert check(sig) is False
+
+
+def test_w3w_safety_check_passes_when_holders_and_liquidity_ok(mocker):
+    from src.agent.aegis.volume_breakout import BreakoutSignal
+    from src.agent.data import token_list
+    mocker.patch("src.agent.execution.binance_web3.quote", return_value=[
+        {"isBest": True, "priceImpactPercent": "1.0",
+         "toToken": {"isHoneyPot": False, "taxRate": "0", "decimal": "18"}},
+    ])
+    mocker.patch("src.agent.execution.binance_web3.price_info", return_value={
+        "0xddddddddddddddddddddddddddddddddddddddd0": {"holders": 500, "liquidity": "80000"},
+    })
+    sig = BreakoutSignal(symbol="GOODLIQ", contract="0xddddddddddddddddddddddddddddddddddddddd0",
+                         vol_multiple=0.0, breakout_pct=0.08, recent_pump_pct=0.0,
+                         slippage_est=0.0, price_now=1.0, baseline_vol=1000.0)
+    try:
+        check = al._w3w_safety_check(40.0)
+        assert check(sig) is True
+    finally:
+        token_list._discovered.pop("GOODLIQ", None)
+        token_list._discovered_classes.pop("GOODLIQ", None)
 
 
 def test_w3w_safety_check_no_routes_fails_closed(mocker):

@@ -366,6 +366,31 @@ def _w3w_safety_check(equity_usd: float):
         if impact > settings.binance_w3w_max_price_impact:
             log.warning("w3w_price_impact_too_high", symbol=sig.symbol, impact=impact)
             return False
+        # Second-layer liquidity/holder floor (2/7): quote() doesn't carry holders/liquidity,
+        # so a dedicated price_info() call is needed. Fail closed on any error — same policy
+        # as every other check in this function.
+        try:
+            info = bw.price_info([sig.contract]).get(sig.contract.lower())
+        except Exception as e:  # noqa: BLE001 — fail closed
+            log.warning("w3w_price_info_failed", symbol=sig.symbol, error=type(e).__name__)
+            return False
+        if not info:
+            log.warning("w3w_price_info_missing", symbol=sig.symbol)
+            return False
+        try:
+            holders = int(info.get("holders") or 0)
+        except (TypeError, ValueError):
+            holders = 0
+        if holders < settings.binance_w3w_min_holders:
+            log.warning("w3w_holders_too_low", symbol=sig.symbol, holders=holders)
+            return False
+        try:
+            liquidity = float(info.get("liquidity") or 0)
+        except (TypeError, ValueError):
+            liquidity = 0.0
+        if liquidity < settings.binance_w3w_min_liquidity_usd_check:
+            log.warning("w3w_liquidity_too_low", symbol=sig.symbol, liquidity=liquidity)
+            return False
         try:
             decimals = int(to_tok.get("decimal") or 18)
         except (TypeError, ValueError):
