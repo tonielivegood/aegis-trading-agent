@@ -59,26 +59,27 @@ def test_decide_regime_applies_fear_greed_overlay():
 
 
 def test_params_per_regime():
-    # Concentrated sizing: few, heavy positions (winners must move the needle).
-    assert params(Regime.RISK_ON).size_pct == 0.35
-    assert params(Regime.RISK_ON).max_slots == 2
+    # More, smaller positions in a good market (2/7 retune): 4 slots at 20% each
+    # instead of 2 at 35% — winners still move the needle, more shots when it's real.
+    assert params(Regime.RISK_ON).size_pct == 0.20
+    assert params(Regime.RISK_ON).max_slots == 4
     assert params(Regime.RISK_ON).allow_new is True
     assert params(Regime.CAUTIOUS).size_pct == 0.20
     assert params(Regime.CAUTIOUS).max_slots == 1
     assert params(Regime.RISK_OFF).size_pct == 0.0
     assert params(Regime.RISK_OFF).max_slots == 0
     assert params(Regime.RISK_OFF).allow_new is False
-    # RISK_ON total deployment stays under 100% NAV (DQ cushion).
-    assert params(Regime.RISK_ON).size_pct * params(Regime.RISK_ON).max_slots <= 0.75
+    # RISK_ON total deployment stays under 100% NAV, with a real cash buffer.
+    assert params(Regime.RISK_ON).size_pct * params(Regime.RISK_ON).max_slots <= 0.80
     # Regime throttles EXPOSURE (size/slots), not signal quality: the entry bar is
     # full (1.0) in every regime — the old RISK_ON beta-valve was removed after it
-    # over-fired live (churn bleed). RISK_ON still risks more via bigger size + 2 slots.
+    # over-fired live (churn bleed). RISK_ON still risks more via more slots.
     assert params(Regime.RISK_ON).entry_vol_factor == 1.0
     assert params(Regime.CAUTIOUS).entry_vol_factor == 1.0
 
 
 def test_position_usd_scales_with_nav():
-    assert position_usd(30.0, Regime.RISK_ON) == pytest.approx(10.5)    # 35%
+    assert position_usd(30.0, Regime.RISK_ON) == pytest.approx(6.0)     # 20%
     assert position_usd(30.0, Regime.CAUTIOUS) == pytest.approx(6.0)    # 20%
     assert position_usd(30.0, Regime.RISK_OFF) == 0.0                   # halt
 

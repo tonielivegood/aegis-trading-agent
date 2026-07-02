@@ -50,10 +50,14 @@ class RegimeParams:
 # 2.0→1.5×) was REMOVED after a live soak (21/6) showed it over-fired in an active
 # market — many marginal 1.5× spikes that mean-reverted → fee/slippage churn that bled
 # equity ~4%/2h. Fewer, higher-conviction entries (full bar) + the meme asymmetric ride
-# are the raw-return edge; regime still throttles exposure (RISK_ON 35%/2 vs CAUTIOUS
+# are the raw-return edge; regime still throttles exposure (RISK_ON 20%/4 vs CAUTIOUS
 # 20%/1 vs RISK_OFF 0). Downside bounded by per-position stop, regime-to-cash, breaker.
+# RISK_ON slots 2->4 + size 35%->20% (2/7, user call, post-contest): more concurrent
+# shots in a genuinely good market, sized so all 4 can actually fill (4x20%=80% of NAV,
+# still a 20% cash buffer) — the old 35%/2 combo already deployed 70%, so this keeps a
+# similar total-exposure ceiling while spreading it across more, smaller positions.
 _PARAMS: dict[Regime, RegimeParams] = {
-    Regime.RISK_ON: RegimeParams(0.35, 2, True, entry_vol_factor=1.0),
+    Regime.RISK_ON: RegimeParams(0.20, 4, True, entry_vol_factor=1.0),
     Regime.CAUTIOUS: RegimeParams(0.20, 1, True, entry_vol_factor=1.0),
     Regime.RISK_OFF: RegimeParams(0.0, 0, False, entry_vol_factor=1.0),
 }

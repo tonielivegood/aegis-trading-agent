@@ -171,7 +171,7 @@ def test_breakout_opens_regime_sized_entry():
                               universe=["ETH"], now=1000.0, floor_usd=6.0, allow=_allow)
     assert mode == "sniper"
     assert len(orders) == 1 and orders[0].token_out == "ETH"
-    assert orders[0].amount_in_usd == 10.5         # 35% of $30 NAV (RISK_ON, concentrated)
+    assert orders[0].amount_in_usd == 6.0          # 20% of $30 NAV (RISK_ON, 2/7 retune)
     assert book.is_open("ETH")
 
 
