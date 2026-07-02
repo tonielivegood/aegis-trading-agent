@@ -40,6 +40,7 @@ POSITIONS_FILE = RUNTIME / "aegis_positions.json"
 COMPLIANCE_FILE = RUNTIME / "track1_compliance.json"
 COOLDOWN_FILE = RUNTIME / "aegis_cooldown.json"
 ENTRY_FAIL_COOLDOWN_FILE = RUNTIME / "aegis_entry_fail_cooldown.json"
+TRADE_JOURNAL_FILE = RUNTIME / "trade_journal.jsonl"
 REGIME_FILE = RUNTIME / "regime.json"
 DAYSTATE_FILE = RUNTIME / "daily_breaker.json"
 PRICECACHE_FILE = RUNTIME / "last_prices.json"
@@ -682,6 +683,7 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
     from .aegis.positions import PositionBook
     now_ts = time.time()
     book = PositionBook.load(POSITIONS_FILE)
+    positions_before = dict(book.positions)   # snapshot for the closed-position diff below
     cooldowns = CooldownBook.load(COOLDOWN_FILE)
     entry_fail_cooldowns = CooldownBook.load(ENTRY_FAIL_COOLDOWN_FILE)
     feed = MarketFeed(volume_provider=_volume_provider())
@@ -785,7 +787,11 @@ def _event_decision(state: PortfolioState, prices: dict, symbols: list[str],
     cooldowns.prune(now=now_ts, cooldown_s=settings.aegis_cooldown_seconds)
     cooldowns.save(COOLDOWN_FILE)
     label = f"{mode}:{flag.value}" + beta_label + clock_label + (":dayhalt" if block_entries else "")
-    return beta_orders + orders, label, _scan_rows(feed.last_snapshots)
+    # Every position present before this tick and gone now was closed THIS tick, by
+    # whichever of the 11 exit branches in decide_exits() fired — a before/after diff
+    # avoids touching any of those call sites just to capture PnL context (2/7).
+    closed = {sym: pos for sym, pos in positions_before.items() if sym not in book.positions}
+    return beta_orders + orders, label, _scan_rows(feed.last_snapshots), closed
 
 
 def _scan_rows(snapshots, limit: int = 8) -> list[dict]:
@@ -921,6 +927,7 @@ def tick(dry_run: bool | None = None) -> dict:
                       low_equity_usd=LOW_EQUITY_USD)
 
     scan_rows: list[dict] = []
+    closed_positions: dict = {}
     if action.derisk:
         orders = rebalance_strategy.derisk_orders(state)
         mode = "derisk"
@@ -929,7 +936,7 @@ def tick(dry_run: bool | None = None) -> dict:
     elif event_mode:
         # Layer B primary (event radar) with Layer A (eligible basket) fallback.
         # daily_halt blocks new entries at the SOURCE (no phantom book positions).
-        orders, mode, scan_rows = _event_decision(
+        orders, mode, scan_rows, closed_positions = _event_decision(
             state, prices, symbols, block_entries=daily_halt,
             our_return=pnl.cumulative_return(_baseline_equity(equity), equity),
             current_dd=drawdown.current_drawdown())
@@ -966,7 +973,7 @@ def tick(dry_run: bool | None = None) -> dict:
              cumulative_return=round(cum_return, 4), strategy=mode,
              safeguard=action.reason, n_orders=len(orders), dry_run=dry_run)
 
-    results = _execute(orders, prices, dry_run, trade_counter, now)
+    results = _execute(orders, prices, dry_run, trade_counter, now, closed=closed_positions)
     if event_mode:
         _record_valid_trades(results, time.time())
         _reconcile_failed_entries(results)   # drop phantom positions from reverted buys
@@ -1081,9 +1088,10 @@ def _make_executor(dry_run: bool):
 _ROUTABLE_BACKENDS = ("1inch", "openocean", "pancake")   # every backend the live router can quote
 
 
-def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
+def _execute(orders, prices, dry_run, trade_counter, now, closed: dict | None = None) -> list[dict]:
     if not orders:
         return []
+    closed = closed or {}
     configured = settings.execution_backend
     executors: dict[str, object] = {}                       # built lazily, reused this tick
 
@@ -1122,6 +1130,7 @@ def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
                 r = _dex(backend).swap(o.token_in, o.token_out, amount_in)
                 if not r.simulated:
                     trade_counter.record_trade(now)
+                    _journal_trade(o, is_exit, closed, prices, backend, r.tx_hash, now)
                 row = {"order": o.reason, "simulated": r.simulated, "tx": r.tx_hash,
                        "token_in": o.token_in, "token_out": o.token_out,
                        "amount_usd": o.amount_in_usd, "backend": backend}
@@ -1141,6 +1150,35 @@ def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
             else:
                 _record_entry_fail_cooldown(o.token_out, now)
     return results
+
+
+def _journal_trade(o, is_exit: bool, closed: dict, prices: dict, backend: str,
+                   tx: str | None, now) -> None:
+    """Best-effort trade-journal write for a REAL (already-confirmed-live) fill.
+    Never raises into the tick — a journal-write hiccup must not affect trading."""
+    try:
+        from .aegis import trade_journal
+        time_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ") if hasattr(now, "strftime") else ""
+        if is_exit:
+            pos = closed.get(o.token_in)
+            if pos is None:      # no entry context available (e.g. flatten_to_cash) — skip
+                return
+            exit_price = prices.get(o.token_in, 0.0)
+            hold_minutes = (now.timestamp() - pos.entry_time) / 60.0 if hasattr(now, "timestamp") else 0.0
+            trade_journal.record_exit(
+                TRADE_JOURNAL_FILE, symbol=o.token_in, token_class=pos.token_class,
+                entry_price=pos.entry_price, exit_price=exit_price, usd_size=pos.usd_size,
+                hold_minutes=hold_minutes, reason=o.reason, backend=backend, tx=tx,
+                time_iso=time_iso)
+        else:
+            entry_price = prices.get(o.token_out, 0.0)
+            trade_journal.record_entry(
+                TRADE_JOURNAL_FILE, symbol=o.token_out, token_class=token_list.token_class(o.token_out),
+                entry_price=entry_price, usd_size=o.amount_in_usd, reason=o.reason,
+                backend=backend, tx=tx, time_iso=time_iso)
+    except Exception as e:  # noqa: BLE001 — a journal-write hiccup must never break the tick
+        log.warning("trade_journal_write_failed", symbol=o.token_out if not is_exit else o.token_in,
+                   error=type(e).__name__)
 
 
 def _record_entry_fail_cooldown(symbol: str, now) -> None:

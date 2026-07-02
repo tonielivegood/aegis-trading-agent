@@ -238,6 +238,68 @@ def test_execute_does_not_record_cooldown_for_failed_exit(tmp_path, mocker):
     assert send.called   # the existing exit-failure alert still fires
 
 
+# --- trade journal wiring (2/7 hardening): journal writes on REAL fills only ---
+
+def test_execute_journals_successful_entry(tmp_path, mocker):
+    mocker.patch.object(al, "TRADE_JOURNAL_FILE", tmp_path / "journal.jsonl")
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    primary = _FakeDex(tx="0xentry")
+    _patch_backends(mocker, {"1inch": primary, "openocean": _FakeDex(), "pancake": _FakeDex()})
+    now = al.utcnow()
+    al._execute([_entry_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=now)
+    from src.agent.aegis import trade_journal
+    rows = trade_journal.read_all(al.TRADE_JOURNAL_FILE)
+    assert len(rows) == 1
+    assert rows[0]["event"] == "entry" and rows[0]["symbol"] == "BAS"
+    assert rows[0]["usd_size"] == 5.0 and rows[0]["tx"] == "0xentry"
+
+
+def test_execute_journals_successful_exit_with_pnl(tmp_path, mocker):
+    from src.agent.aegis.positions import OpenPosition
+    mocker.patch.object(al, "TRADE_JOURNAL_FILE", tmp_path / "journal.jsonl")
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    primary = _FakeDex(tx="0xexit")
+    _patch_backends(mocker, {"1inch": primary, "openocean": _FakeDex(), "pancake": _FakeDex()})
+    now = al.utcnow()
+    closed = {"BAS": OpenPosition(symbol="BAS", contract="0xbas", entry_price=0.02,
+                                  usd_size=4.0, entry_time=now.timestamp() - 600,
+                                  token_class="meme")}
+    al._execute([_exit_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(),
+               now=now, closed=closed)
+    from src.agent.aegis import trade_journal
+    rows = trade_journal.read_all(al.TRADE_JOURNAL_FILE)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["event"] == "exit" and row["symbol"] == "BAS"
+    assert row["entry_price"] == 0.02 and row["exit_price"] == 0.03   # _PRICES["BAS"] = 0.03
+    assert row["pnl_pct"] == pytest.approx(0.5)          # (0.03/0.02 - 1)
+    assert row["pnl_usd"] == pytest.approx(2.0)           # 4.0 * 0.5
+    assert row["hold_minutes"] == pytest.approx(10.0, abs=0.1)
+
+
+def test_execute_skips_exit_journal_when_no_closed_context(tmp_path, mocker):
+    # flatten_to_cash() has no `closed` map — must not crash, must not fabricate PnL.
+    mocker.patch.object(al, "TRADE_JOURNAL_FILE", tmp_path / "journal.jsonl")
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    _patch_backends(mocker, {"1inch": _FakeDex(tx="0xnoctx"), "openocean": _FakeDex(),
+                             "pancake": _FakeDex()})
+    now = al.utcnow()
+    al._execute([_exit_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=now)
+    from src.agent.aegis import trade_journal
+    assert trade_journal.read_all(al.TRADE_JOURNAL_FILE) == []
+
+
+def test_execute_does_not_journal_simulated_swaps(tmp_path, mocker):
+    mocker.patch.object(al, "TRADE_JOURNAL_FILE", tmp_path / "journal.jsonl")
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    _patch_backends(mocker, {"1inch": _FakeDex(simulated=True, tx="0xsim"),
+                             "openocean": _FakeDex(), "pancake": _FakeDex()})
+    now = al.utcnow()
+    al._execute([_entry_order()], _PRICES, dry_run=True, trade_counter=mocker.Mock(), now=now)
+    from src.agent.aegis import trade_journal
+    assert trade_journal.read_all(al.TRADE_JOURNAL_FILE) == []
+
+
 # --- flexible venue selection (2/7): live-quote every aggregator, pick best liquidity ---
 
 class _PancakeQuoteLike:
