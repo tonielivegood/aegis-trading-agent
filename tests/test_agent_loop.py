@@ -210,6 +210,67 @@ def test_twak_primary_does_not_failover(mocker):
     assert "error" in out[0] and oo.calls == []   # separate wallet → never cross over
 
 
+# --- flexible venue selection (2/7): live-quote every aggregator, pick best liquidity ---
+
+class _PancakeQuoteLike:
+    def __init__(self, expected_out_wei):
+        self.expected_out_wei = expected_out_wei
+
+
+def test_flexible_router_picks_best_live_quote_over_configured_primary(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    # 1inch is the CONFIGURED primary but quotes worse than openocean right now for
+    # this token — the router should still pick openocean (best liquidity wins).
+    primary = _FakeDex(tx="0xinch")
+    primary._quote_out_wei = mocker.Mock(return_value=int(4.0 * 10**18))
+    oo = _FakeDex(tx="0xoo")
+    oo.quote = mocker.Mock(return_value={"outAmount": str(int(5.0 * 10**18))})
+    pancake = _FakeDex(tx="0xpc")
+    pancake.quote = mocker.Mock(return_value=_PancakeQuoteLike(int(3.0 * 10**18)))
+    _patch_backends(mocker, {"1inch": primary, "openocean": oo, "pancake": pancake})
+
+    out = al._execute([_entry_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=0)
+    assert out[0]["tx"] == "0xoo" and out[0]["backend"] == "openocean"
+    assert primary.calls == []                     # never even swapped through 1inch
+
+
+def test_btc_quote_uses_cmc_when_healthy(mocker):
+    mocker.patch.object(al.cmc_client, "get_quotes", return_value={"BTC": {"price": 65000.0}})
+    cg = mocker.patch("src.agent.data.coingecko_client.get_quotes")
+    assert al._btc_quote() == {"price": 65000.0}
+    cg.assert_not_called()
+
+
+def test_btc_quote_falls_back_to_coingecko_when_cmc_errors(mocker):
+    mocker.patch.object(al.cmc_client, "get_quotes", side_effect=RuntimeError("quota exceeded"))
+    mocker.patch("src.agent.data.coingecko_client.get_quotes",
+                 return_value={"BTC": {"price": 64500.0}})
+    assert al._btc_quote() == {"price": 64500.0}
+
+
+def test_btc_quote_empty_when_both_sources_fail(mocker):
+    mocker.patch.object(al.cmc_client, "get_quotes", side_effect=RuntimeError("quota exceeded"))
+    mocker.patch("src.agent.data.coingecko_client.get_quotes", return_value={})
+    assert al._btc_quote() == {}
+
+
+def test_flexible_router_exit_fails_over_after_best_quote_reverts(mocker):
+    mocker.patch.object(al.settings, "execution_backend", "1inch")
+    # openocean quotes best but its swap REVERTS on-chain, and 1inch can't quote at
+    # all right now (dropped from ranking) — exit must fail over to pancake, the
+    # only other backend that BOTH quoted and can swap, never just give up.
+    primary = _FakeDex(tx="0xinch")     # no quote method -> dropped from the ranking
+    oo = _FakeDex(fail=True)
+    oo.quote = mocker.Mock(return_value={"outAmount": str(int(5.0 * 10**18))})
+    pancake = _FakeDex(tx="0xpc")
+    pancake.quote = mocker.Mock(return_value=_PancakeQuoteLike(int(3.0 * 10**18)))
+    _patch_backends(mocker, {"1inch": primary, "openocean": oo, "pancake": pancake})
+
+    out = al._execute([_exit_order()], _PRICES, dry_run=False, trade_counter=mocker.Mock(), now=0)
+    assert out[0]["tx"] == "0xpc" and out[0]["failover_backend"] == "pancake"
+    assert primary.calls == []                     # 1inch was never even the top choice
+
+
 # --- kill-switch (flatten_to_cash) ---
 
 def test_flatten_to_cash_sells_all_nonstable_and_clears_books(mocker):

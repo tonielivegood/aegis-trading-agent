@@ -44,24 +44,18 @@ class ClassParams:
 
 
 PARAMS: dict[str, ClassParams] = {
-    # MAJOR — ACTIVE on a CONFIRMED move. A 2.5x sustained 5m volume surge WITH price
-    # already +3% (up to +15%) = a real major move starting (good days run +10-30%).
-    # RIDE it: 7% trail locks most of a modest major move, +30% hard-TP banks a great
-    # day, cut at −7%. No time exit — the +3% confirmation + ride (not a high bar) are
-    # what stop the churn, so a lower bar here is safe and lets us catch major days.
-    MAJOR: ClassParams(vol_mult=2.5, breakout_min=0.03, breakout_max=0.15,
-                       hard_tp_mult=1.30, trailing_pct=0.07, hard_stop_pct=0.07,
+    # MAJOR — retuned (2/7, user call) alongside disabling beta_core: majors now enter
+    # on the SAME kind of signal as memes (volume+price breakout), not CMC momentum.
+    # 2x sustained 5m volume surge WITH price already +3% (up to +8% — tighter chase-cap
+    # than before, majors move less violently than memes). RIDE it: 5% trail, +20% hard-TP,
+    # cut at −5% (tightened from 7%/30%/7% to match the user's target risk per name).
+    MAJOR: ClassParams(vol_mult=2.0, breakout_min=0.03, breakout_max=0.08,
+                       hard_tp_mult=1.20, trailing_pct=0.05, hard_stop_pct=0.05,
                        no_progress_min=0),
-    # MEME — entry unchanged (still the anti-noise +6%/4x ignition bar from 23/6 — no live
-    # evidence to justify moving it). Exit RETUNED post-contest (1/7): the old +80% cap/10%
-    # trail/−8% stop was tuned for a rare-moonshot lottery under contest DQ pressure (small
-    # ticket, needed one huge winner). Post-contest goal is different — consistent, disciplined
-    # hits ("bắn phát nào trúng phát đấy") over a rare jackpot: +80% was almost never reached
-    # (gains round-tripped through the wide 10% trail first), so profit is now banked sooner
-    # (+40% cap), the trail locks more of a move (6%), and the stop cuts faster (6%) — tighter
-    # than MAJOR's 7% by design, accepting more noise-driven stopouts in exchange for smaller
-    # losses per miss. No time exit.
-    MEME: ClassParams(vol_mult=4.0, breakout_min=0.06, breakout_max=0.20,
+    # MEME — entry retuned (2/7, user call): 4x volume unchanged, price band tightened to
+    # +5%..+10% (from +6%..+20%) — a narrower, more disciplined confirmation window. Exit
+    # UNCHANGED (+40% cap / 6% trail / −6% stop) — not part of this request. No time exit.
+    MEME: ClassParams(vol_mult=4.0, breakout_min=0.05, breakout_max=0.10,
                       hard_tp_mult=1.40, trailing_pct=0.06, hard_stop_pct=0.06,
                       no_progress_min=0),
 }

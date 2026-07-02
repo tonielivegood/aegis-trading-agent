@@ -27,17 +27,17 @@ def test_params_both_ride_no_time_exit():
     maj, meme = tc.params("major"), tc.params("meme")
     # No time-based exit on either tier — rides exit on TP/stop/trail only.
     assert maj.no_progress_min == 0 and meme.no_progress_min == 0
-    # MEME post-contest re-tune (1/7): +40% cap, 6% trail, −6% stop — bank consistent
-    # hits instead of chasing a rare +80% moonshot (see token_class.py comment).
+    # MEME re-tune (1/7): +40% cap, 6% trail, −6% stop — bank consistent hits instead
+    # of chasing a rare +80% moonshot (see token_class.py comment).
     assert meme.hard_tp_mult == 1.40 and meme.trailing_pct == 0.06 and meme.hard_stop_pct == 0.06
-    # MAJOR = active on confirmed +10-30% days: tight 7% trail, +30% cap lock, −7% stop.
-    assert maj.hard_tp_mult == 1.30 and maj.trailing_pct == 0.07 and maj.hard_stop_pct == 0.07
+    # MAJOR retuned (2/7, user call, alongside disabling beta_core): +20% cap, 5% trail,
+    # −5% stop — tighter risk per name now that majors enter on volume+price like memes.
+    assert maj.hard_tp_mult == 1.20 and maj.trailing_pct == 0.05 and maj.hard_stop_pct == 0.05
     # MAJOR fires EASIER than meme now (lower bar): cheaper to trade, catch major days.
     assert maj.vol_mult < meme.vol_mult
-    # MAJOR confirms on +3%; MEME now demands a STRONGER +6% ignition (raised 23/6): a +3%
-    # meme floor fired on noise (PIEVERSE/UB mean-reverted), and with only 2 slots a marginal
-    # meme shouldn't squat on a slot beta could use. Fewer, higher-conviction meme tickets.
-    assert maj.breakout_min == 0.03 and meme.breakout_min == 0.06
+    # MAJOR confirms on +3%; MEME demands a stronger +5% ignition (retuned 2/7, narrowed
+    # from +6%) — still a higher floor than major, fewer/higher-conviction meme tickets.
+    assert maj.breakout_min == 0.03 and meme.breakout_min == 0.05
     assert tc.params("unknown").hard_tp_mult == 1.40           # unknown → meme default
 
 
@@ -62,16 +62,16 @@ def test_take_profit_caps_diverge():
     assert meme == []
 
 
-def test_meme_stop_tighter_than_major_post_retune():
-    # Post-contest re-tune (1/7): MEME's −6% stop is now TIGHTER than MAJOR's −7% —
-    # deliberately accepts more noise-driven stopouts for smaller losses per miss.
-    # −6.5%: MAJOR holds (within its −7% stop); MEME cuts (past its −6% stop).
-    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 0.935}, {},
-                            _state({"FOO": 5.61}), class_aware=True, now=60)
-    assert maj == []
-    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 0.935}, {},
-                             _state({"FOO": 5.61}), class_aware=True, now=60)
-    assert meme and "hard stop" in meme[0].reason
+def test_major_stop_tighter_than_meme_post_rewire():
+    # Re-tune (2/7, alongside disabling beta_core): MAJOR's −5% stop is now TIGHTER
+    # than MEME's −6% — majors are the more disciplined, "confirmed move" tier now.
+    # −5.5%: MAJOR cuts (past its −5% stop); MEME holds (within its −6% stop).
+    maj = edam.decide_exits(_book("FOO", 1.0, "major"), {"FOO": 0.945}, {},
+                            _state({"FOO": 5.67}), class_aware=True, now=60)
+    assert maj and "hard stop" in maj[0].reason
+    meme = edam.decide_exits(_book("FOO", 1.0, "meme"), {"FOO": 0.945}, {},
+                             _state({"FOO": 5.67}), class_aware=True, now=60)
+    assert meme == []
 
 
 # --- entry: MAJOR confirms on >=3%; MEME needs a stronger >=6% (anti-noise) ---
@@ -93,7 +93,7 @@ def _snap(sym, vol_5m, baseline, now_p, ago_p):
 
 
 def test_major_enters_easier_than_meme():
-    # a 3x-volume, +5% confirmed move: a MAJOR breakout (>=2.5x), but NOT a meme one (needs 4x).
+    # a 3x-volume, +5% confirmed move: a MAJOR breakout (>=2x), but NOT a meme one (needs 4x).
     snaps = {"M": _snap("M", vol_5m=300, baseline=100, now_p=1.05, ago_p=1.0)}
     mp, ep = tc.params("major"), tc.params("meme")
     assert len(scan_breakouts(snaps, vol_mult=mp.vol_mult, breakout_min=mp.breakout_min,
@@ -111,14 +111,14 @@ def test_unconfirmed_move_rejected():
 
 
 def test_confirmed_move_enters_but_blowoff_rejected():
-    # +8% confirmed move on 6x vol → ENTERS (within both caps now).
-    ok = {"M": _snap("M", vol_5m=600, baseline=100, now_p=1.08, ago_p=1.0)}
+    # +7% confirmed move on 6x vol → ENTERS on both tiers (major cap 8%, meme cap 10%).
+    ok = {"M": _snap("M", vol_5m=600, baseline=100, now_p=1.07, ago_p=1.0)}
     mp, ep = tc.params("major"), tc.params("meme")
     assert len(scan_breakouts(ok, vol_mult=mp.vol_mult, breakout_min=mp.breakout_min,
                               breakout_max=mp.breakout_max)) == 1
     assert len(scan_breakouts(ok, vol_mult=ep.vol_mult, breakout_min=ep.breakout_min,
                               breakout_max=ep.breakout_max)) == 1
-    # +25% is already blown off past both caps (major 15%, meme 20%) → no entry.
+    # +25% is already blown off past both caps (major 8%, meme 10%) → no entry.
     blown = {"M": _snap("M", vol_5m=600, baseline=100, now_p=1.25, ago_p=1.0)}
     for p in (mp, ep):
         assert scan_breakouts(blown, vol_mult=p.vol_mult, breakout_min=p.breakout_min,

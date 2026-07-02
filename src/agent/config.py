@@ -138,7 +138,11 @@ class Settings(BaseModel):
     # Post-contest (1/7): ENABLED as a real profit sleeve, retuned tighter (see
     # docs/superpowers/specs/2026-07-01-beta-core-fear-gate-design.md) — a real whipsaw
     # (24/6, CAUTIOUS + extreme fear + chop) is now fixed via regime.beta_regime().
-    beta_core_enabled: bool = True            # master switch (live tick wiring is gated on this)
+    # DISABLED again (2/7, user call): majors now enter on the SAME volume+price breakout
+    # signal as memes (see token_class.py MAJOR params) instead of CMC hourly momentum —
+    # when disabled, the sniper (manage_classes=None) owns both classes. Kept in the
+    # codebase (not deleted) in case CMC-momentum majors are wanted again later.
+    beta_core_enabled: bool = False           # master switch (live tick wiring is gated on this)
     beta_core_max_names: int = 2             # RISK_ON basket size. 2 (not 3): at ~$33 NAV a 3rd name
                                              # can't clear floor+reserve (3×25% + $6 + $5 > stable). 2×25%
                                              # = 50% deploy fits + leaves room for a meme. Bump once equity grows.
@@ -146,8 +150,9 @@ class Settings(BaseModel):
     beta_core_min_momentum: float = 4.0      # min blended (1h+24h) momentum %. 4 (not 2): +2% is noise —
                                              # buying it then trailing at 6% = whipsaw. 4% = only real leaders.
     beta_core_mom_w1h: float = 0.5           # weight on 1h vs 1.0 on 24h in the momentum blend
-    beta_core_hard_tp_pct: float = 0.15      # NEW (1/7): bank a clean win at +15% instead of only riding —
-                                             # post-contest goal is consistent hits, not an unbounded ride.
+    beta_core_hard_tp_pct: float = 0.20      # 0.15->0.20 (2/7, user call): bank a clean win at +20% instead
+                                             # of only riding — post-contest goal is consistent hits, not
+                                             # an unbounded ride, but +15% was cutting winners short.
     beta_core_trail_pct: float = 0.05        # trailing stop, tightened 0.06->0.05 (1/7) — bank major moves harder.
     beta_core_hard_stop_pct: float = 0.05    # hard per-name stop, tightened 0.08->0.05 (1/7) — paired with the
                                              # tighter trail and the new hard TP; faster loss-cut, disciplined sizing.
@@ -199,10 +204,9 @@ class Settings(BaseModel):
     alpha_baseline_candles: int = 24          # recent 5m candles for the baseline
     alpha_freshness_seconds: int = 600        # reject candles older than this (2x 5m)
     event_tick_seconds: int = 60              # event-mode loop cadence while FLAT (no urgency scanning)
-    event_tick_seconds_holding: int = 30      # faster cadence while a position is OPEN — protects/harvests
+    event_tick_seconds_holding: int = 15      # faster cadence while a position is OPEN — protects/harvests
                                               # it more closely (the MYX lesson: a slow tick missed the real
-                                              # peak). Conservative first step (60->30); watch logs before
-                                              # tuning lower toward 15-10s via env, don't jump straight there.
+                                              # peak). 30->15 (2/7, user call) after the 30s step ran clean.
 
     # --- Track 1 contest compliance (min-trade qualification; does NOT alter the strategy) ---
     # Contest ended — OFF by default. Forcing a daily trade has no purpose once there's no
@@ -350,12 +354,12 @@ def get_settings() -> Settings:
         aegis_volume_death_in_profit=_get("AEGIS_VOLUME_DEATH_IN_PROFIT", "false").lower() in ("1", "true", "yes"),
         aegis_breakeven_trigger_pct=float(_get("AEGIS_BREAKEVEN_TRIGGER_PCT", "0.05")),
         aegis_breakeven_buffer_pct=float(_get("AEGIS_BREAKEVEN_BUFFER_PCT", "0.005")),
-        beta_core_enabled=_get_bool("BETA_CORE_ENABLED", "true"),
+        beta_core_enabled=_get_bool("BETA_CORE_ENABLED", "false"),
         beta_core_max_names=int(_get("BETA_CORE_MAX_NAMES", "2")),
         beta_core_position_pct=float(_get("BETA_CORE_POSITION_PCT", "0.25")),
         beta_core_min_momentum=float(_get("BETA_CORE_MIN_MOMENTUM", "4.0")),
         beta_core_mom_w1h=float(_get("BETA_CORE_MOM_W1H", "0.5")),
-        beta_core_hard_tp_pct=float(_get("BETA_CORE_HARD_TP_PCT", "0.15")),
+        beta_core_hard_tp_pct=float(_get("BETA_CORE_HARD_TP_PCT", "0.20")),
         beta_core_trail_pct=float(_get("BETA_CORE_TRAIL_PCT", "0.05")),
         beta_core_hard_stop_pct=float(_get("BETA_CORE_HARD_STOP_PCT", "0.05")),
         beta_core_exit_min_momentum=float(_get("BETA_CORE_EXIT_MIN_MOMENTUM", "2.0")),
@@ -387,7 +391,7 @@ def get_settings() -> Settings:
         alpha_baseline_candles=int(_get("ALPHA_BASELINE_CANDLES", "24")),
         alpha_freshness_seconds=int(_get("ALPHA_FRESHNESS_SECONDS", "600")),
         event_tick_seconds=int(_get("EVENT_TICK_SECONDS", "60")),
-        event_tick_seconds_holding=int(_get("EVENT_TICK_SECONDS_HOLDING", "30")),
+        event_tick_seconds_holding=int(_get("EVENT_TICK_SECONDS_HOLDING", "15")),
         track1_compliance_enabled=_get_bool("TRACK1_COMPLIANCE_ENABLED", "false"),
         track1_min_trades_per_day=int(_get("TRACK1_MIN_TRADES_PER_DAY", "1")),
         track1_min_trades_total=int(_get("TRACK1_MIN_TRADES_TOTAL", "7")),

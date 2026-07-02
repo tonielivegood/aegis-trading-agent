@@ -360,19 +360,32 @@ def _beta_momentum(symbols: list[str]) -> dict[str, float]:
     return bc.build_momentum(quotes, w_1h=settings.beta_core_mom_w1h)
 
 
+def _btc_quote() -> dict:
+    """BTC quote for regime classification: CMC primary, CoinGecko FALLBACK (2/7,
+    user call) if CMC errors (quota/network) — "2 cái đó tác dụng như nhau" for this
+    read, so either source is fine. Never raises; {} on total failure (caller keeps
+    the last regime flag, same as any other regime-update failure)."""
+    try:
+        return cmc_client.get_quotes(["BTC"]).get("BTC", {})
+    except Exception as e:  # noqa: BLE001 — CMC hiccup: try the fallback, don't give up yet
+        log.warning("cmc_btc_quote_failed", error=type(e).__name__)
+        from .data import coingecko_client
+        return coingecko_client.get_quotes(["BTC"]).get("BTC", {})
+
+
 def _maybe_update_regime(now_ts: float):
     """Refresh the regime flag at most once per `regime_update_seconds` (hourly).
 
-    Reads BTC momentum from CMC and classifies it (deterministic, robust, free).
-    On any failure we keep the last flag — `current_regime` downgrades to CAUTIOUS
-    if it goes stale, so a dead updater can never silently keep us aggressive.
+    Reads BTC momentum from CMC (CoinGecko fallback) and classifies it (deterministic,
+    robust, free). On any failure we keep the last flag — `current_regime` downgrades
+    to CAUTIOUS if it goes stale, so a dead updater can never silently keep us aggressive.
     """
     from .aegis import regime as rg
     st = rg.RegimeState.load(REGIME_FILE)
     if now_ts - st.updated_at < settings.regime_update_seconds:
         return st
     try:
-        quote = cmc_client.get_quotes(["BTC"]).get("BTC", {})
+        quote = _btc_quote()
         # CMC Agent Hub: market Fear & Greed refines the BTC regime (tightening-only).
         fear_greed = cmc_agent_hub.get_fear_greed()
         flag, reason = rg.decide_regime(quote, fear_greed=fear_greed)
@@ -967,11 +980,6 @@ def _compliance_orders(state: PortfolioState) -> list[TradeOrder]:
     return []
 
 
-# EXIT-only failover chain, tried in order after the configured primary fails:
-# OpenOcean (keyless aggregator — broad universe, an API independent of 1inch) then
-# PancakeSwap (on-chain, no aggregator API at all — the API-independent last resort).
-# Getting OUT of a position is non-negotiable; entries keep price discipline (no failover).
-_FAILOVER_BACKENDS = ("openocean", "pancake")
 
 
 def _make_executor_for(backend: str, dry_run: bool):
@@ -1001,12 +1009,13 @@ def _make_executor(dry_run: bool):
     return _make_executor_for(settings.execution_backend, dry_run)
 
 
+_ROUTABLE_BACKENDS = ("1inch", "openocean", "pancake")   # every backend the live router can quote
+
+
 def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
     if not orders:
         return []
-    primary = settings.execution_backend
-    # EXIT orders may fail over to backup backends; twak (separate wallet) never does.
-    failover = [] if primary == "twak" else [b for b in _FAILOVER_BACKENDS if b != primary]
+    configured = settings.execution_backend
     executors: dict[str, object] = {}                       # built lazily, reused this tick
 
     def _dex(backend):
@@ -1020,7 +1029,24 @@ def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
         if amount_in <= 0:
             continue
         is_exit = o.token_out in STABLECOINS              # selling to stable = closing a position
-        backends = [primary] + (failover if is_exit else [])
+        if configured == "twak":
+            backends = ["twak"]                            # separate wallet → never crosses over
+        else:
+            # Flexible venue selection (2/7, user call): quote every aggregator LIVE
+            # for THIS token/size and prefer whichever has the best liquidity right
+            # now, instead of a fixed configured primary. Falls back to the configured
+            # backend if every live quote fails (network hiccup, no route yet).
+            from .execution import best_execution
+            ranked = best_execution.rank_backends(
+                {b: _dex(b) for b in _ROUTABLE_BACKENDS}, o.token_in, o.token_out, amount_in)
+            best = ranked[0] if ranked else configured
+            if is_exit:
+                # EXIT is non-negotiable: fail over through the rest of the ranking,
+                # then any backend the live ranking couldn't quote, as a last resort.
+                rest = ranked[1:] + [b for b in _ROUTABLE_BACKENDS if b != best and b not in ranked]
+                backends = [best, *rest]
+            else:
+                backends = [best]        # ENTRY: best-liquidity venue only, no failover (price discipline)
         last_err = None
         for attempt, backend in enumerate(backends):
             try:
@@ -1029,10 +1055,10 @@ def _execute(orders, prices, dry_run, trade_counter, now) -> list[dict]:
                     trade_counter.record_trade(now)
                 row = {"order": o.reason, "simulated": r.simulated, "tx": r.tx_hash,
                        "token_in": o.token_in, "token_out": o.token_out,
-                       "amount_usd": o.amount_in_usd}
-                if attempt > 0:                            # the primary had failed → record the save
+                       "amount_usd": o.amount_in_usd, "backend": backend}
+                if attempt > 0:                            # the top choice had failed → record the save
                     row["failover_backend"] = backend
-                    log.warning("swap_failover_ok", reason=o.reason, backend=backend, primary=primary)
+                    log.warning("swap_failover_ok", reason=o.reason, backend=backend)
                 results.append(row)
                 break
             except Exception as e:  # noqa: BLE001 — one failed swap must not abort the tick
