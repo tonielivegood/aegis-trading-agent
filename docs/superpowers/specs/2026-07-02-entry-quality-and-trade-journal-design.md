@@ -152,19 +152,22 @@ simulated) inside `_execute()`:
 `o.reason`, `o.token_in`/`token_out`, `o.amount_in_usd`, the executed backend, the tx hash, and
 the entry price via `prices[o.token_out]`.
 
-For an EXIT, the entry_price/entry_time needed for PnL live in the `OpenPosition` that
-`edam.decide_exits()` reads and then removes via `book.close(symbol)` (11 different call
-sites inside that function, one per exit reason) — by the time `_execute()` runs, the book has
-already been saved with the position gone. Decision: rather than touching all 11 call sites,
-the CALLER (`sniper.run()`, the only live caller of `decide_exits` today — `beta_core` is
-currently disabled, out of scope) snapshots `held_before = dict(book.positions)` once, before
-calling `decide_exits()`. `OpenPosition` objects are looked up by reference, so this shallow
-copy is enough (the only field `decide_exits` mutates in place is `peak_price`, which PnL
-doesn't need). After `decide_exits()` returns `exits`, build
-`closed = {o.token_in: held_before[o.token_in] for o in exits if o.token_in in held_before}`
-and return it as an additional value from `sniper.run()` (alongside the existing
-`(orders, mode)`), threaded through `_event_decision()` and `tick()` to wherever the journal
-write happens. Zero changes to `decide_exits()` or `TradeOrder` needed.
+For an EXIT, the entry_price/entry_time needed for PnL live in the `OpenPosition` that gets
+removed from the position book via `book.close(symbol)` (11 different call sites across
+`edam.decide_exits()`, one per exit reason) — by the time `_execute()` runs, the book has
+already been saved with the position gone. Decision: rather than touching any of those call
+sites (in `decide_exits`, `sniper.run`, or a currently-disabled `beta_core`), do a simple
+before/after DIFF at the single point that already owns the whole book for a tick —
+`agent_loop._event_decision()` (the only caller of `sniper.run`, itself only called once, from
+`tick()`). At the top of `_event_decision()`, right after `book = PositionBook.load(...)`,
+snapshot `positions_before = dict(book.positions)` (a shallow copy — cheap, and the only field
+mutated in place downstream is `peak_price`, which PnL doesn't need). At the end, right before
+returning, compute `closed = {sym: pos for sym, pos in positions_before.items() if sym not in book.positions}`
+— this is exactly the set of positions that were closed THIS tick, by any sleeve, for any
+reason, no matter which of the 11 exit branches fired. Add `closed` as a 4th return value from
+`_event_decision()` (its only caller, inside `tick()`, already destructures its tuple and is
+the only place that needs updating). Zero changes to `sniper.py`, `decide_exits()`, or
+`TradeOrder` — and zero test churn in `test_sniper.py`.
 
 PnL is computed once both prices are known: `pnl_usd = usd_size * (exit_price/entry_price - 1)`
 for a full-position exit (matches how this bot always exits — no partial scale-outs currently).
