@@ -307,14 +307,22 @@ def _w3w_hot_token_items() -> list[dict] | None:
     """Fetch this tick's server-side-filtered meme candidates (Option B discovery).
     None (not []) on any failure or when the flag is off — the caller falls back to
     the legacy client-side scan; an empty list would instead mean "scanned, found
-    nothing", which is a different and wrong signal to send on a network hiccup."""
+    nothing", which is a different and wrong signal to send on a network hiccup.
+
+    Liquidity/volume/top10-holding filters (2/7, post-SPCX hardening) are applied
+    SERVER-SIDE by Binance — a near-zero-liquidity, 10-holder token never even
+    reaches the candidate list, instead of relying only on the JIT safety check."""
     if not settings.binance_w3w_universe_enabled:
         return None
     from .aegis import token_class as tc
     from .execution import binance_web3 as bw
     mp = tc.params(tc.MEME)
     try:
-        return bw.hot_token(price_change_percent_min=mp.breakout_min * 100)
+        return bw.hot_token(
+            price_change_percent_min=mp.breakout_min * 100,
+            liquidity_min=settings.binance_w3w_min_liquidity_usd,
+            volume_min=settings.binance_w3w_min_volume_usd,
+            top10_holding_percent_max=settings.binance_w3w_max_top10_holding_pct)
     except Exception as e:  # noqa: BLE001 — a hiccup here must fall back, never break the tick
         log.warning("w3w_hot_token_failed", error=type(e).__name__)
         return None

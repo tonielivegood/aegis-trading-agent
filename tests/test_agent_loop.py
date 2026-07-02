@@ -378,6 +378,18 @@ def test_w3w_hot_token_items_passes_meme_breakout_min(mocker):
     assert hot.call_args.kwargs["price_change_percent_min"] == tc.params(tc.MEME).breakout_min * 100
 
 
+def test_w3w_hot_token_items_passes_liquidity_volume_holder_filters(mocker):
+    mocker.patch.object(al.settings, "binance_w3w_universe_enabled", True)
+    mocker.patch.object(al.settings, "binance_w3w_min_liquidity_usd", 20000.0)
+    mocker.patch.object(al.settings, "binance_w3w_min_volume_usd", 5000.0)
+    mocker.patch.object(al.settings, "binance_w3w_max_top10_holding_pct", 30.0)
+    hot = mocker.patch("src.agent.execution.binance_web3.hot_token", return_value=[])
+    al._w3w_hot_token_items()
+    assert hot.call_args.kwargs["liquidity_min"] == 20000.0
+    assert hot.call_args.kwargs["volume_min"] == 5000.0
+    assert hot.call_args.kwargs["top10_holding_percent_max"] == 30.0
+
+
 def test_w3w_safety_check_registers_token_on_pass(mocker):
     from src.agent.aegis.volume_breakout import BreakoutSignal
     from src.agent.data import token_list
