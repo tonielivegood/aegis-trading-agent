@@ -359,64 +359,11 @@ def _w3w_safety_check(equity_usd: float):
     def check(sig) -> bool:
         ticket = sniper.meme_ticket_usd(equity_usd)
         amount_wei = str(int(ticket * 10**18))   # USDT has 18 decimals on BSC
-        try:
-            routes = bw.quote(settings.usdt_address, sig.contract, amount_wei)
-        except Exception as e:  # noqa: BLE001 — fail closed: no quote = no entry
-            log.warning("w3w_quote_failed", symbol=sig.symbol, error=type(e).__name__)
+        ok, decimals = bw.passes_safety_check(settings.usdt_address, sig.contract, amount_wei)
+        if not ok:
+            log.warning("w3w_safety_check_failed", symbol=sig.symbol, contract=sig.contract)
             return False
-        if not routes:
-            return False
-        best = next((r for r in routes if r.get("isBest")), routes[0])
-        to_tok = best.get("toToken") or {}
-        if to_tok.get("isHoneyPot"):
-            log.warning("w3w_honeypot_blocked", symbol=sig.symbol, contract=sig.contract)
-            return False
-        try:
-            tax = float(to_tok.get("taxRate") or 0)
-        except (TypeError, ValueError):
-            tax = 1.0
-        if tax > settings.binance_w3w_max_tax_rate:
-            log.warning("w3w_tax_too_high", symbol=sig.symbol, tax=tax)
-            return False
-        # Real-money incident (2/7): not a honeypot, 0% tax, still an 86% price-impact
-        # trap — the pool was too thin to exit even though buying in looked fine.
-        try:
-            impact = float(best.get("priceImpactPercent") or 0) / 100.0
-        except (TypeError, ValueError):
-            impact = 1.0
-        if impact > settings.binance_w3w_max_price_impact:
-            log.warning("w3w_price_impact_too_high", symbol=sig.symbol, impact=impact)
-            return False
-        # Second-layer liquidity/holder floor (2/7): quote() doesn't carry holders/liquidity,
-        # so a dedicated price_info() call is needed. Fail closed on any error — same policy
-        # as every other check in this function.
-        try:
-            info = bw.price_info([sig.contract]).get(sig.contract.lower())
-        except Exception as e:  # noqa: BLE001 — fail closed
-            log.warning("w3w_price_info_failed", symbol=sig.symbol, error=type(e).__name__)
-            return False
-        if not info:
-            log.warning("w3w_price_info_missing", symbol=sig.symbol)
-            return False
-        try:
-            holders = int(info.get("holders") or 0)
-        except (TypeError, ValueError):
-            holders = 0
-        if holders < settings.binance_w3w_min_holders:
-            log.warning("w3w_holders_too_low", symbol=sig.symbol, holders=holders)
-            return False
-        try:
-            liquidity = float(info.get("liquidity") or 0)
-        except (TypeError, ValueError):
-            liquidity = 0.0
-        if liquidity < settings.binance_w3w_min_liquidity_usd_check:
-            log.warning("w3w_liquidity_too_low", symbol=sig.symbol, liquidity=liquidity)
-            return False
-        try:
-            decimals = int(to_tok.get("decimal") or 18)
-        except (TypeError, ValueError):
-            decimals = 18
-        token_list.register_discovered(sig.symbol, sig.contract, decimals)
+        token_list.register_discovered(sig.symbol, sig.contract, decimals or 18)
         return True
 
     return check

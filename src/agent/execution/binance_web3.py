@@ -325,3 +325,67 @@ def quote(from_token: str, to_token: str, amount_wei: str, *, chain_id: str = _B
     if payload.get("code") != 0:
         return []
     return payload.get("data") or []
+
+
+def passes_safety_check(from_token: str, to_token: str, amount_wei: str) -> tuple[bool, int | None]:
+    """Honeypot/tax/price-impact/holder/liquidity gate for a buy candidate — shared
+    by Aegis (agent_loop._w3w_safety_check) and the copy-trade module so neither
+    duplicates the other's checks. Fails closed: any error or missing data returns
+    (False, None), never a pass. On success returns (True, decimals) using the
+    destination token's decimals from the quote response."""
+    try:
+        routes = quote(from_token, to_token, amount_wei)
+    except Exception as e:  # noqa: BLE001 — fail closed: no quote = no entry
+        log.warning("safety_check_quote_failed", to_token=to_token, error=type(e).__name__)
+        return False, None
+    if not routes:
+        return False, None
+    best = next((r for r in routes if r.get("isBest")), routes[0])
+    to_tok = best.get("toToken") or {}
+
+    if to_tok.get("isHoneyPot"):
+        log.warning("safety_check_honeypot_blocked", to_token=to_token)
+        return False, None
+    try:
+        tax = float(to_tok.get("taxRate") or 0)
+    except (TypeError, ValueError):
+        tax = 1.0
+    if tax > settings.binance_w3w_max_tax_rate:
+        log.warning("safety_check_tax_too_high", to_token=to_token, tax=tax)
+        return False, None
+    try:
+        impact = float(best.get("priceImpactPercent") or 0) / 100.0
+    except (TypeError, ValueError):
+        impact = 1.0
+    if impact > settings.binance_w3w_max_price_impact:
+        log.warning("safety_check_price_impact_too_high", to_token=to_token, impact=impact)
+        return False, None
+
+    try:
+        info = price_info([to_token]).get(to_token.lower())
+    except Exception as e:  # noqa: BLE001 — fail closed
+        log.warning("safety_check_price_info_failed", to_token=to_token, error=type(e).__name__)
+        return False, None
+    if not info:
+        log.warning("safety_check_price_info_missing", to_token=to_token)
+        return False, None
+    try:
+        holders = int(info.get("holders") or 0)
+    except (TypeError, ValueError):
+        holders = 0
+    if holders < settings.binance_w3w_min_holders:
+        log.warning("safety_check_holders_too_low", to_token=to_token, holders=holders)
+        return False, None
+    try:
+        liquidity = float(info.get("liquidity") or 0)
+    except (TypeError, ValueError):
+        liquidity = 0.0
+    if liquidity < settings.binance_w3w_min_liquidity_usd_check:
+        log.warning("safety_check_liquidity_too_low", to_token=to_token, liquidity=liquidity)
+        return False, None
+
+    try:
+        decimals = int(to_tok.get("decimal") or 18)
+    except (TypeError, ValueError):
+        decimals = 18
+    return True, decimals

@@ -270,3 +270,61 @@ def test_quote_network_error_never_raises(mocker):
     mocker.patch("src.agent.execution.binance_web3.requests.get",
                  side_effect=requests.ConnectionError("boom"))
     assert bw.quote("0xfrom", "0xto", "1") == []
+
+
+# ----------------------------- passes_safety_check -----------------------------
+
+def _quote_response(is_honeypot=False, tax="0", price_impact="1", decimal="9"):
+    return [{
+        "isBest": True,
+        "toToken": {"isHoneyPot": is_honeypot, "taxRate": tax, "decimal": decimal},
+        "priceImpactPercent": price_impact,
+    }]
+
+
+def _price_info(holders=500, liquidity=50000.0):
+    return {"0xtoken1": {"holders": holders, "liquidity": liquidity}}
+
+
+def test_safety_check_rejects_honeypot(mocker):
+    mocker.patch.object(bw, "quote", return_value=_quote_response(is_honeypot=True))
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is False and decimals is None
+
+
+def test_safety_check_rejects_tax_above_threshold(mocker):
+    mocker.patch.object(bw, "settings", mocker.Mock(binance_w3w_max_tax_rate=0.1,
+                                                      binance_w3w_max_price_impact=0.5,
+                                                      binance_w3w_min_holders=10,
+                                                      binance_w3w_min_liquidity_usd_check=1000))
+    mocker.patch.object(bw, "quote", return_value=_quote_response(tax="50"))
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is False and decimals is None
+
+
+def test_safety_check_rejects_low_liquidity(mocker):
+    mocker.patch.object(bw, "settings", mocker.Mock(binance_w3w_max_tax_rate=0.1,
+                                                      binance_w3w_max_price_impact=0.5,
+                                                      binance_w3w_min_holders=10,
+                                                      binance_w3w_min_liquidity_usd_check=1000))
+    mocker.patch.object(bw, "quote", return_value=_quote_response())
+    mocker.patch.object(bw, "price_info", return_value=_price_info(liquidity=1.0))
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is False and decimals is None
+
+
+def test_safety_check_passes_clean_token_and_returns_decimals(mocker):
+    mocker.patch.object(bw, "settings", mocker.Mock(binance_w3w_max_tax_rate=0.1,
+                                                      binance_w3w_max_price_impact=0.5,
+                                                      binance_w3w_min_holders=10,
+                                                      binance_w3w_min_liquidity_usd_check=1000))
+    mocker.patch.object(bw, "quote", return_value=_quote_response(decimal="9"))
+    mocker.patch.object(bw, "price_info", return_value=_price_info())
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is True and decimals == 9
+
+
+def test_safety_check_quote_failure_fails_closed(mocker):
+    mocker.patch.object(bw, "quote", side_effect=RuntimeError("timeout"))
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is False and decimals is None
