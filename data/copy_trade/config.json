@@ -65,6 +65,76 @@
       "role": "Hackathon Top 4 (42 swap, RAVE/TRX/ZAMA)",
       "priority": 3,
       "monitor": true
+    },
+    {
+      "address": "0x51a43425e30a7e5826021f36f76045d7a5895ebe",
+      "label": "GMGN_SMART_1",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
+    },
+    {
+      "address": "0x3664654b5e27e9e3c29ccdf4395193b9d18811f0",
+      "label": "GMGN_SMART_2",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
+    },
+    {
+      "address": "0xf98ab9fe84bf564b3de827fc9e3bacddc3122679",
+      "label": "GMGN_SMART_3",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
+    },
+    {
+      "address": "0xdd4066bb7ad5dffbff46b4da4daa339b90974a93",
+      "label": "GMGN_SMART_4",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
+    },
+    {
+      "address": "0x73077cb82462201f7d3ac4e3ccbdac4b4ab981e4",
+      "label": "GMGN_SMART_5",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
+    },
+    {
+      "address": "0xaa4e9e8f1e9c03e6de9f5f78680a0f8ae5908709",
+      "label": "GMGN_SMART_6",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
+    },
+    {
+      "address": "0x3e61dc3d7864d7d79c62b137200b3eb709138f9e",
+      "label": "GMGN_SMART_7",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
+    },
+    {
+      "address": "0xdaa14f06c65fc048f7f60e551f1f9249e510e2f3",
+      "label": "GMGN_SMART_8",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
+    },
+    {
+      "address": "0x3a5c0083071e70623463fbbd96b698eafa9359f2",
+      "label": "GMGN_SMART_9",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
+    },
+    {
+      "address": "0xce9a4a7a7783e7a79f9905e5550f15c62734d68d",
+      "label": "GMGN_SMART_10",
+      "role": "GMGN smart-money (BSC, auto-sourced)",
+      "priority": 5,
+      "monitor": true
     }
   ],
   "copy_settings": {
@@ -74,7 +144,12 @@
     "max_copy_usd": 50.0,
     "total_budget_usd": 15.39,
     "slice_usd": 1.5,
-    "ignore_tokens": ["uBTC", "YFIT", "Web3", "Web3Ai"],
+    "ignore_tokens": [
+      "uBTC",
+      "YFIT",
+      "Web3",
+      "Web3Ai"
+    ],
     "poll_interval_seconds": 30
   }
 }
