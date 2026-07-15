@@ -8,14 +8,14 @@
       "label": "MAIN_TRADE",
       "role": "Ví Trade cá nhân chính (65 swap, 186 nonce, ClipX $645)",
       "priority": 1,
-      "monitor": true
+      "monitor": false
     },
     {
       "address": "0xd606fb0e384852c261e262e8f9d450b44f9861fc",
       "label": "HUB",
       "role": "Ví Hub phân phối vốn (nếu tạo ví mới, tiền sẽ qua đây)",
       "priority": 2,
-      "monitor": true
+      "monitor": false
     },
     {
       "address": "0x8ec6ab4e0f4383ecb01f870fc70cb351a12c43af",
@@ -68,10 +68,12 @@
     }
   ],
   "copy_settings": {
-    "auto_execute": false,
-    "alert_only": true,
+    "auto_execute": true,
+    "alert_only": false,
     "min_swap_usd": 3.0,
     "max_copy_usd": 50.0,
+    "total_budget_usd": 15.39,
+    "slice_usd": 1.5,
     "ignore_tokens": ["uBTC", "YFIT", "Web3", "Web3Ai"],
     "poll_interval_seconds": 30
   }
