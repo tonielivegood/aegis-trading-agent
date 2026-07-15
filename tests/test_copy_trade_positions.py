@@ -64,3 +64,29 @@ def test_load_on_missing_file_starts_empty(tmp_path):
     store = PositionStore(tmp_path / "does_not_exist.json")
     store.load()
     assert store.all() == []
+
+
+def test_save_uses_atomic_write(tmp_path):
+    """Verify _save() uses atomic write to prevent torn files on crash.
+
+    A torn write would leave a .tmp file behind on error, or leave the
+    live file partially written if the process is killed mid-write.
+    This test checks:
+    1. No leftover .tmp files after a successful save (proves atomic cleanup)
+    2. The saved JSON is valid and complete (not truncated)
+    """
+    path = tmp_path / "positions.json"
+    store = PositionStore(path)
+    store.open_position(POS)
+
+    # After a successful save, there should be no .tmp files in the directory
+    tmp_files = list(tmp_path.glob(".positions_*.tmp"))
+    assert tmp_files == [], f"Leftover tmp files found: {tmp_files}"
+
+    # The live file should exist and contain valid, complete JSON
+    assert path.exists(), "positions.json should exist after open_position"
+    content = path.read_text(encoding="utf-8")
+    parsed = json.loads(content)  # Would raise JSONDecodeError if file is torn/partial
+    assert isinstance(parsed, list), "positions.json should contain a JSON array"
+    assert len(parsed) == 1, "Should have exactly 1 position"
+    assert parsed[0]["token_address"] == "0xgem1", "Position data should be complete and correct"

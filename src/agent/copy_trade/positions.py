@@ -6,6 +6,8 @@ open positions by reloading this file — the exact property the RAM-only
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -35,10 +37,15 @@ class PositionStore:
 
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps([asdict(p) for p in self._positions], indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        data = json.dumps([asdict(p) for p in self._positions], indent=2, ensure_ascii=False)
+        fd, tmp_path = tempfile.mkstemp(dir=self._path.parent, prefix=".positions_", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(data)
+            os.replace(tmp_path, self._path)
+        except BaseException:
+            Path(tmp_path).unlink(missing_ok=True)
+            raise
 
     def open_position(self, pos: CopyPosition) -> None:
         self._positions.append(pos)
