@@ -26,6 +26,8 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from dotenv import dotenv_values
 
+from ..config import settings
+from ..data.token_list import register_discovered
 from ..email_notifier import EmailNotifier
 from ..execution.oneinch import OneInch
 from ..execution.openocean import OpenOcean
@@ -47,6 +49,23 @@ HEADERS = {"X-API-Key": API_KEY, "accept": "application/json"}
 POSITIONS_PATH = ROOT / "data" / "copy_trade" / "positions.json"
 
 
+def _reconcile_after_restart(budget: CopyTradeBudget, store: PositionStore) -> None:
+    """Replay disk-persisted state into the fresh in-RAM runtime (C2 + C3).
+
+    The token registry (`register_discovered`) and the budget tracker are both
+    RAM-only and start empty on every process. After a restart while holding open
+    positions, we must (C2) re-register each position's token so a mirror-sell can
+    resolve it via `get_token()`, and (C3) re-consume its budget slice so we never
+    over-allocate past the $15.39 hard cap. Without this the exact orphan-position /
+    over-allocation bugs this branch exists to fix reappear on the next deploy."""
+    for p in store.all():
+        register_discovered(p.token_symbol, p.token_address, p.token_decimals)
+        # ponytail: guard so a hand-edited/over-full positions.json can't crash
+        # startup (allocate() raises when below one slice) into a systemd restart loop.
+        if budget.can_open_new():
+            budget.allocate()
+
+
 def _build_runtime():
     """One-time construction of the shared budget tracker, position store, and
     executor pool — called once from main(), passed down into the scan loop."""
@@ -58,7 +77,18 @@ def _build_runtime():
     )
     store = PositionStore(POSITIONS_PATH)
     store.load()
-    executors = {"1inch": OneInch(), "openocean": OpenOcean(), "pancake": PancakeSwap()}
+    _reconcile_after_restart(budget, store)
+    # C1: build executors with a real signing account (live) exactly like
+    # agent_loop._make_executor_for, so live swaps never crash on a missing account.
+    account = None
+    if not settings.dry_run:
+        from eth_account import Account
+        account = Account.from_key(settings.agent_private_key)
+    executors = {
+        "1inch": OneInch(account=account, dry_run=settings.dry_run),
+        "openocean": OpenOcean(account=account, dry_run=settings.dry_run),
+        "pancake": PancakeSwap(account=account, dry_run=settings.dry_run),
+    }
     return budget, store, executors
 
 
@@ -230,7 +260,14 @@ def run_scan(once: bool = False):
                         pass  # SMTP not configured — alert still logged to console above
 
                 if settings.get("auto_execute"):
-                    handle_alert(a["parsed"], budget, store, executors)
+                    # I2: a reverted swap (slippage/gas/honeypot) raises RuntimeError —
+                    # routine in live trading. Guard it so one bad alert never kills the
+                    # scan loop (which would crash-loop under systemd Restart=always).
+                    try:
+                        handle_alert(a["parsed"], budget, store, executors)
+                    except Exception as e:  # noqa: BLE001
+                        _log("ERROR", "handle_alert failed — skipping this alert",
+                             symbol=a["parsed"].token_symbol, error=str(e))
         else:
             _log("INFO", "No new swaps detected")
             _save_json(STATE_PATH, state)
