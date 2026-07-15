@@ -42,6 +42,40 @@ toàn vốn — đây là thử nghiệm đầu cơ, không phải nâng cấp c
 - Không chi thêm ngân sách hạ tầng ngoài $15.39 vốn trade (free tier only).
 - Không giữ song song bot Aegis — thay thế hoàn toàn, dừng `agent.service`.
 
+## Audit code có sẵn (2026-07-15, trước khi build)
+
+Rà soát kỹ `src/agent/copy_trade/monitor.py` và các file liên quan trước khi quyết
+định tái dùng — code cũ do một phiên AI khác (Gemini) viết, chưa từng được review.
+Kết luận: **giữ khung polling/dedup, viết lại toàn bộ phần diễn giải giao dịch.**
+
+Lỗi thật tìm thấy:
+
+1. **Parse sai token khi swap đi qua nhiều bước (nghiêm trọng).** Trong `parse_swap()`,
+   vòng lặp gán `token_in`/`token_out` từ `erc20_transfers` không kiểm tra "đã có giá
+   trị chưa" — với swap multi-hop (rất phổ biến khi mua memecoin thanh khoản mỏng qua
+   1inch/PancakeSwap, ví dụ USDT→WBNB→token đích), biến sẽ bị **ghi đè liên tục**, kết
+   quả là token của bước trung gian cuối cùng, không phải token thật đã vào/ra ví. Xây
+   auto-execute trên nền này sẽ mua/bán nhầm token — rủi ro tiền thật trực tiếp, bắt
+   buộc viết lại bằng cách parse theo route/logic index thay vì ghi đè tuần tự.
+2. **`min_swap_usd` đọc từ config nhưng không được áp dụng ở đâu cả** — bộ lọc ngưỡng
+   coi như không tồn tại, mọi giao dịch dù nhỏ đều lọt qua.
+3. **`ignore_tokens` lọc theo symbol (chuỗi text), không phải contract address** — token
+   giả mạo trùng tên có thể lách qua.
+4. **Không lấy `decimals` của token đã phát hiện** — `parse_swap()` chỉ có
+   symbol/amount/address; để gọi `token_list.register_discovered()` và tính đúng số
+   lượng khi mua/bán thật, bắt buộc thêm bước tra `decimals` on-chain.
+5. **Hai implementation gửi email trùng lặp, không dùng chung:** `monitor.py` có
+   `send_email_alert()` viết tay riêng; `src/agent/email_notifier.py` là một class
+   `EmailNotifier` khác, đầy đủ hơn, không liên quan. Hợp nhất về một chỗ duy nhất khi
+   build (ưu tiên `EmailNotifier`, xoá bản trùng trong `monitor.py`).
+6. **Đã biết nhưng chưa sửa:** `scripts/verify_inactivity.py` (cũng chưa commit) từng
+   xác minh một số ví TOP 2/3/4 nghi ngờ ngừng hoạt động, nhưng `config.json` vẫn để
+   `"monitor": true` cho tất cả — phát hiện có nhưng không được đưa vào cấu hình.
+
+Giữ được, không cần viết lại: cơ chế poll Moralis mỗi 30s, dedup qua `processed_txs`
+trong `check_wallet()`, cấu trúc file `config.json`/`state.json`, và
+`deploy/copy-trade.service` (đúng cấu hình, chỉ cần cài đặt).
+
 ## Kiến trúc
 
 ### 1. Nguồn tín hiệu ví
@@ -56,13 +90,21 @@ toàn vốn — đây là thử nghiệm đầu cơ, không phải nâng cấp c
 - Merge cả hai nguồn vào `target_wallets`, refresh danh sách GMGN định kỳ (vd. mỗi
   ngày, vì bảng xếp hạng GMGN đổi theo thời gian).
 
-### 2. Vòng quét phát hiện (nâng cấp `monitor.py` có sẵn)
+### 2. Vòng quét phát hiện (giữ khung poll/dedup, viết lại phần parse)
 
-- Giữ nguyên cơ chế poll Moralis mỗi 30s + dedup qua `processed_txs`.
+- Giữ nguyên cơ chế poll Moralis mỗi 30s + dedup qua `processed_txs` trong
+  `check_wallet()`.
+- **Viết lại `parse_swap()`:** xác định token_in/token_out theo đúng thứ tự route của
+  giao dịch (không ghi đè tuần tự), xử lý đúng trường hợp multi-hop (§Audit #1). Thêm
+  bước tra `decimals` on-chain cho token mới phát hiện (§Audit #4).
+- Áp dụng đúng `min_swap_usd`/`max_copy_usd` (§Audit #2) — hiện đọc nhưng không dùng.
+- Đổi `ignore_tokens` sang lọc theo contract address thay vì symbol (§Audit #3).
+- Hợp nhất về một implementation gửi email duy nhất (`EmailNotifier`), xoá
+  `send_email_alert()` trùng lặp trong `monitor.py` (§Audit #5).
 - **Bắt buộc trước tiên:** thay `MORALIS_API_KEY` bằng key mới hợp lệ (key hiện tại
   401 toàn bộ, im lặng suốt 8 ngày qua — bài học trực tiếp cần vá).
 - Thêm cảnh báo lỗi liên tục: N lần quét lỗi liên tiếp (vd. 10 lần ~5 phút) → gửi 1
-  email cảnh báo qua `send_email_alert` đã có sẵn, tránh lặp lại kiểu hỏng-âm-thầm.
+  email cảnh báo qua `EmailNotifier`, tránh lặp lại kiểu hỏng-âm-thầm.
 
 ### 3. Ngân sách & kích thước lệnh (module mới, nhỏ, pure function — dễ unit test)
 
