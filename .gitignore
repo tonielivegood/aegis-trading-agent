@@ -38,3 +38,6 @@ agent-skills/
 
 # live dashboard snapshot (generated)
 web/status.json
+data/copy_trade/state.json
+data/copy_trade/state_vps.json
+data/copy_trade/positions.json

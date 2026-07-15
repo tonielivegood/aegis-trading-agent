@@ -1,0 +1,19 @@
+[Unit]
+Description=Aegis Copy Trade Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agent
+WorkingDirectory=/home/agent/Track1-trade-onchain
+ExecStart=/home/agent/Track1-trade-onchain/.venv/bin/python -u -m src.agent.copy_trade.monitor
+Restart=always
+RestartSec=15
+StandardOutput=append:/home/agent/Track1-trade-onchain/logs/copy_trade.log
+StandardError=append:/home/agent/Track1-trade-onchain/logs/copy_trade.log
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

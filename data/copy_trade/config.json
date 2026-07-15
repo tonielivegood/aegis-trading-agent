@@ -1,0 +1,78 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-07-04T06:03:00Z",
+  "description": "Copy-trade theo ví Top 1 BNB Hackathon 2026",
+  "target_wallets": [
+    {
+      "address": "0x7b59b32ced7dbb24d1bde0a63913a1c173c60d9b",
+      "label": "MAIN_TRADE",
+      "role": "Ví Trade cá nhân chính (65 swap, 186 nonce, ClipX $645)",
+      "priority": 1,
+      "monitor": true
+    },
+    {
+      "address": "0xd606fb0e384852c261e262e8f9d450b44f9861fc",
+      "label": "HUB",
+      "role": "Ví Hub phân phối vốn (nếu tạo ví mới, tiền sẽ qua đây)",
+      "priority": 2,
+      "monitor": true
+    },
+    {
+      "address": "0x8ec6ab4e0f4383ecb01f870fc70cb351a12c43af",
+      "label": "HACK_1",
+      "role": "Hackathon #1 (Top 16 cuộc thi)",
+      "priority": 3,
+      "monitor": true
+    },
+    {
+      "address": "0x6bcf0027f1d151d8cbc8d6ff07915b0ba9616b1e",
+      "label": "HACK_2",
+      "role": "Hackathon #2 (34 swap, ETH/LINK/AAVE)",
+      "priority": 3,
+      "monitor": true
+    },
+    {
+      "address": "0x87e60c7f4b9e8991d62f4753538236607c8b91b0",
+      "label": "BRIDGE",
+      "role": "Ví cầu nối Binance ($7,598)",
+      "priority": 4,
+      "monitor": false
+    },
+    {
+      "address": "0x9aac2ad40f05b77be6f69a7b84e609f7d3592926",
+      "label": "CLIPX_HOLD",
+      "role": "Ví tích trữ ClipX ($16,047)",
+      "priority": 4,
+      "monitor": false
+    },
+    {
+      "address": "0xab9af0e53c29850c225ec966dbe5fab5701d41b2",
+      "label": "TOP_2_HACK",
+      "role": "Hackathon Top 2 (75 swap, USDT/H/BTCB)",
+      "priority": 3,
+      "monitor": true
+    },
+    {
+      "address": "0x7053676258ef5bfb9b27fcf42092f13fb37b9989",
+      "label": "TOP_3_HACK",
+      "role": "Hackathon Top 3 (77 swap, AAVE/USDT)",
+      "priority": 3,
+      "monitor": true
+    },
+    {
+      "address": "0xbc1cb36c8fe1538e2f19de468b0c3258df4d32a9",
+      "label": "TOP_4_HACK",
+      "role": "Hackathon Top 4 (42 swap, RAVE/TRX/ZAMA)",
+      "priority": 3,
+      "monitor": true
+    }
+  ],
+  "copy_settings": {
+    "auto_execute": false,
+    "alert_only": true,
+    "min_swap_usd": 3.0,
+    "max_copy_usd": 50.0,
+    "ignore_tokens": ["uBTC", "YFIT", "Web3", "Web3Ai"],
+    "poll_interval_seconds": 30
+  }
+}
