@@ -363,7 +363,7 @@ def _w3w_safety_check(equity_usd: float):
         if not ok:
             log.warning("w3w_safety_check_failed", symbol=sig.symbol, contract=sig.contract)
             return False
-        token_list.register_discovered(sig.symbol, sig.contract, decimals or 18)
+        token_list.register_discovered(sig.symbol, sig.contract, decimals)
         return True
 
     return check
