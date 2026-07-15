@@ -1,5 +1,6 @@
 import pytest
 
+from src.agent.config import settings
 from src.agent.copy_trade.budget import CopyTradeBudget
 from src.agent.copy_trade.executor import handle_alert
 from src.agent.copy_trade.positions import CopyPosition, PositionStore
@@ -25,9 +26,9 @@ def _mock_executors(mocker):
 
 def test_buy_signal_allocates_budget_registers_token_and_executes(mocker, tmp_path):
     executors, winning = _mock_executors(mocker)
-    mocker.patch("src.agent.copy_trade.executor.passes_safety_check", return_value=(True, 9))
+    mock_safety = mocker.patch("src.agent.copy_trade.executor.passes_safety_check", return_value=(True, 9))
     mock_register = mocker.patch("src.agent.copy_trade.executor.register_discovered")
-    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
+    mock_rank = mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
     budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
     store = PositionStore(tmp_path / "positions.json")
 
@@ -37,6 +38,27 @@ def test_buy_signal_allocates_budget_registers_token_and_executes(mocker, tmp_pa
     winning.swap.assert_called_once_with("USDT", "GEM", 1.5)
     assert budget.available_usd == pytest.approx(13.89)
     assert store.find("0xgem1", "0xshark1") is not None
+    # Pin the slice-size fix: gating calls must use the per-trade slice (1.5),
+    # not the full pool (15.39).
+    mock_safety.assert_called_once_with(
+        settings.usdt_address, "0xgem1", str(int(1.5 * 10**18))
+    )
+    mock_rank.assert_called_once_with(executors, "USDT", "GEM", 1.5)
+
+
+def test_buy_signal_releases_budget_when_no_route_found(mocker, tmp_path):
+    executors, winning = _mock_executors(mocker)
+    mocker.patch("src.agent.copy_trade.executor.passes_safety_check", return_value=(True, 9))
+    mocker.patch("src.agent.copy_trade.executor.register_discovered")
+    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=[])
+    budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
+    store = PositionStore(tmp_path / "positions.json")
+
+    handle_alert(BUY, budget, store, executors)
+
+    winning.swap.assert_not_called()
+    assert budget.available_usd == pytest.approx(15.39)
+    assert store.find("0xgem1", "0xshark1") is None
 
 
 def test_buy_signal_skipped_when_safety_check_fails(mocker, tmp_path):
