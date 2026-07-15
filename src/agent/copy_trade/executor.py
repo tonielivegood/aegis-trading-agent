@@ -40,19 +40,21 @@ def _handle_buy(
         log.info("copy_trade_buy_skipped_budget", token=alert.token_symbol)
         return
 
-    amount_wei = str(int(budget.available_usd * 10**18))  # USDT has 18 decimals on BSC
+    usd_size = budget.allocate()
+    amount_wei = str(int(usd_size * 10**18))  # USDT has 18 decimals on BSC
     ok, decimals = passes_safety_check(settings.usdt_address, alert.token_address, amount_wei)
     if not ok:
+        budget.release(usd_size)
         log.warning("copy_trade_buy_skipped_safety", token=alert.token_symbol)
         return
 
     register_discovered(alert.token_symbol, alert.token_address, decimals or alert.token_decimals)
-    ranked = rank_backends(executors, "USDT", alert.token_symbol, budget.available_usd)
+    ranked = rank_backends(executors, "USDT", alert.token_symbol, usd_size)
     if not ranked:
+        budget.release(usd_size)
         log.warning("copy_trade_buy_no_route", token=alert.token_symbol)
         return
 
-    usd_size = budget.allocate()
     executor = executors[ranked[0]]
     result = executor.swap("USDT", alert.token_symbol, usd_size)
     store.open_position(CopyPosition(
