@@ -1443,8 +1443,9 @@ skills docs, but confirm against the real response before writing Task 9's parse
 - Test: `tests/test_fetch_gmgn_smart_money.py`
 
 **Interfaces:**
-- Consumes: `gmgn-cli track smartmoney --chain bsc --limit <n> --json` (external CLI,
-  confirmed working in Task 8) via `subprocess.run`.
+- Consumes: `gmgn-cli track smartmoney --chain bsc --limit <n> --raw` (external CLI,
+  confirmed working live in Task 8 — real response shape verified: `{"list": [...]}`,
+  each item has a `maker` field with the wallet address) via `subprocess.run`.
 - Produces: `extract_wallets(trades: list[dict], max_wallets: int) -> list[dict]` —
   pure function taking the parsed JSON trade list, returning deduplicated
   `{"address": ..., "label": "GMGN_SMART_N", "role": "GMGN smart-money", "priority": 5,
@@ -1558,14 +1559,14 @@ def merge_wallets(existing: list[dict], new: list[dict]) -> list[dict]:
 
 def main() -> None:
     proc = subprocess.run(
-        ["gmgn-cli", "track", "smartmoney", "--chain", "bsc", "--limit", "100", "--json"],
+        ["gmgn-cli", "track", "smartmoney", "--chain", "bsc", "--limit", "100", "--raw"],
         capture_output=True, text=True, timeout=30,
     )
     if proc.returncode != 0:
         print(f"gmgn-cli failed: {proc.stderr.strip()}", file=sys.stderr)
         sys.exit(1)
 
-    trades = json.loads(proc.stdout)
+    trades = json.loads(proc.stdout).get("list", [])
     wallets = extract_wallets(trades, max_wallets=10)
 
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
@@ -1585,10 +1586,8 @@ Expected: PASS (3 passed)
 
 - [ ] **Step 5: Run the real script once against the live `gmgn-cli`**
 
-First run `gmgn-cli track smartmoney --help` and confirm a `--json` (or equivalent
-machine-readable output) flag actually exists — the public docs fetched while writing
-this plan didn't show one explicitly. If the flag name differs, update the
-`subprocess.run` argument list in `main()` accordingly before proceeding.
+`gmgn-cli` is already installed globally and configured (`gmgn-cli config --check`
+should exit 0 — confirmed working in Task 8, both on this machine's user profile).
 
 Run: `python scripts/fetch_gmgn_smart_money.py`
 Expected: prints `Merged N GMGN smart-money wallets into ...config.json`; inspect
