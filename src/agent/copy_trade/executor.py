@@ -56,18 +56,41 @@ def _handle_buy(
         return
 
     executor = executors[ranked[0]]
-    result = executor.swap("USDT", alert.token_symbol, usd_size)
-    store.open_position(CopyPosition(
-        token_symbol=alert.token_symbol,
-        token_address=alert.token_address,
-        token_decimals=decimals or alert.token_decimals,
-        source_wallet=alert.wallet,
-        usd_size=usd_size,
-        token_amount=alert.token_amount,
-        opened_at=datetime.now(timezone.utc).isoformat(),
-    ))
+    resolved_decimals = decimals or alert.token_decimals
+    try:
+        result = executor.swap("USDT", alert.token_symbol, usd_size)
+        # I1: store what OUR swap actually received, NOT alert.token_amount (the source
+        # wallet's own, larger buy) — otherwise a mirror-sell can under-sell and strand
+        # untracked residual tokens.
+        token_amount = _received_amount(result, resolved_decimals, alert.token_amount)
+        store.open_position(CopyPosition(
+            token_symbol=alert.token_symbol,
+            token_address=alert.token_address,
+            token_decimals=resolved_decimals,
+            source_wallet=alert.wallet,
+            usd_size=usd_size,
+            token_amount=token_amount,
+            opened_at=datetime.now(timezone.utc).isoformat(),
+        ))
+    except Exception:
+        # I2: a swap revert (or persist failure) after allocate() would otherwise leak
+        # the slice forever. Return it to the pool before the error propagates to the
+        # monitor's scan-loop guard.
+        budget.release(usd_size)
+        log.warning("copy_trade_buy_failed", token=alert.token_symbol)
+        raise
     log.info("copy_trade_bought", token=alert.token_symbol, usd_size=usd_size,
               simulated=getattr(result, "simulated", None))
+
+
+def _received_amount(result, decimals: int, dry_run_fallback: float) -> float:
+    """Human-unit amount of the bought token OUR swap actually yielded, read from the
+    SwapResult (`expected_out_wei`). In DRY_RUN (simulated) there is no real balance to
+    be wrong about, so fall back to the source-wallet alert amount. (I1)"""
+    out_wei = getattr(result, "expected_out_wei", 0) or 0
+    if getattr(result, "simulated", False) or out_wei <= 0:
+        return dry_run_fallback
+    return out_wei / (10 ** decimals)
 
 
 def _handle_sell(

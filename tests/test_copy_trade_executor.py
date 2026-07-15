@@ -20,7 +20,10 @@ SELL = ParsedSwap(
 
 def _mock_executors(mocker):
     winning = mocker.MagicMock()
-    winning.swap.return_value = mocker.MagicMock(simulated=False, tx_hash="0xexec1")
+    # A live (non-simulated) fill of 5000 GEM (9 decimals) — deliberately different from
+    # the source wallet's 12345.0 amount so I1's "store what WE received" is observable.
+    winning.swap.return_value = mocker.MagicMock(
+        simulated=False, expected_out_wei=5000 * 10**9, tx_hash="0xexec1")
     return {"1inch": winning}, winning
 
 
@@ -118,3 +121,58 @@ def test_sell_signal_for_untracked_position_is_a_noop(mocker, tmp_path):
     handle_alert(SELL, budget, store, executors)  # never bought this one
 
     winning.swap.assert_not_called()
+
+
+def test_buy_stores_our_received_amount_not_source_wallet_amount(mocker, tmp_path):
+    """I1: token_amount on the stored position must reflect OUR swap's expected_out_wei
+    (5000 GEM), not the source wallet's much larger buy amount (12345.0)."""
+    executors, winning = _mock_executors(mocker)
+    mocker.patch("src.agent.copy_trade.executor.passes_safety_check", return_value=(True, 9))
+    mocker.patch("src.agent.copy_trade.executor.register_discovered")
+    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
+    budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
+    store = PositionStore(tmp_path / "positions.json")
+
+    handle_alert(BUY, budget, store, executors)
+
+    pos = store.find("0xgem1", "0xshark1")
+    assert pos is not None
+    assert pos.token_amount == pytest.approx(5000.0)   # our fill
+    assert pos.token_amount != pytest.approx(12345.0)  # NOT the source wallet's amount
+
+
+def test_buy_dry_run_falls_back_to_source_amount(mocker, tmp_path):
+    """I1: a simulated (DRY_RUN) swap has no real balance, so token_amount falls back
+    to the source-wallet alert amount."""
+    winning = mocker.MagicMock()
+    winning.swap.return_value = mocker.MagicMock(simulated=True, expected_out_wei=0)
+    executors = {"1inch": winning}
+    mocker.patch("src.agent.copy_trade.executor.passes_safety_check", return_value=(True, 9))
+    mocker.patch("src.agent.copy_trade.executor.register_discovered")
+    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
+    budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
+    store = PositionStore(tmp_path / "positions.json")
+
+    handle_alert(BUY, budget, store, executors)
+
+    pos = store.find("0xgem1", "0xshark1")
+    assert pos is not None
+    assert pos.token_amount == pytest.approx(12345.0)
+
+
+def test_buy_releases_budget_when_swap_raises(mocker, tmp_path):
+    """I2: a swap that reverts after budget.allocate() must return the slice to the
+    pool (and propagate) so the allocated budget is never leaked."""
+    executors, winning = _mock_executors(mocker)
+    winning.swap.side_effect = RuntimeError("on-chain revert (slippage)")
+    mocker.patch("src.agent.copy_trade.executor.passes_safety_check", return_value=(True, 9))
+    mocker.patch("src.agent.copy_trade.executor.register_discovered")
+    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
+    budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
+    store = PositionStore(tmp_path / "positions.json")
+
+    with pytest.raises(RuntimeError):
+        handle_alert(BUY, budget, store, executors)
+
+    assert budget.available_usd == pytest.approx(15.39)  # slice returned, not leaked
+    assert store.find("0xgem1", "0xshark1") is None
