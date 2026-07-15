@@ -1,0 +1,105 @@
+{
+  "direct_swap": {
+    "hash": "0xaaa1",
+    "category": "token swap",
+    "block_timestamp": "2026-07-15T10:00:00.000Z",
+    "summary": "Swapped 5 USDT for 12345 GEM",
+    "erc20_transfers": [
+      {
+        "from_address": "0xWALLET000000000000000000000000000000001",
+        "to_address": "0xROUTER00000000000000000000000000000001",
+        "token_symbol": "USDT",
+        "token_decimals": "18",
+        "address": "0x55d398326f99059fF775485246999027B3197955",
+        "value_formatted": "5.0"
+      },
+      {
+        "from_address": "0xROUTER00000000000000000000000000000001",
+        "to_address": "0xWALLET000000000000000000000000000000001",
+        "token_symbol": "GEM",
+        "token_decimals": "9",
+        "address": "0x00000000000000000000000000000000000gem1",
+        "value_formatted": "12345.0"
+      }
+    ]
+  },
+  "multi_hop_swap": {
+    "hash": "0xbbb2",
+    "category": "token swap",
+    "block_timestamp": "2026-07-15T10:05:00.000Z",
+    "summary": "Swapped 5 USDT for 999 GEM2 via WBNB",
+    "erc20_transfers": [
+      {
+        "from_address": "0xWALLET000000000000000000000000000000001",
+        "to_address": "0xROUTER00000000000000000000000000000001",
+        "token_symbol": "USDT",
+        "token_decimals": "18",
+        "address": "0x55d398326f99059fF775485246999027B3197955",
+        "value_formatted": "5.0"
+      },
+      {
+        "from_address": "0xROUTER00000000000000000000000000000001",
+        "to_address": "0xPOOL0000000000000000000000000000000001",
+        "token_symbol": "WBNB",
+        "token_decimals": "18",
+        "address": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+        "value_formatted": "0.0083"
+      },
+      {
+        "from_address": "0xPOOL0000000000000000000000000000000001",
+        "to_address": "0xROUTER00000000000000000000000000000001",
+        "token_symbol": "WBNB",
+        "token_decimals": "18",
+        "address": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+        "value_formatted": "0.0083"
+      },
+      {
+        "from_address": "0xROUTER00000000000000000000000000000001",
+        "to_address": "0xWALLET000000000000000000000000000000001",
+        "token_symbol": "GEM2",
+        "token_decimals": "9",
+        "address": "0x00000000000000000000000000000000000gem2",
+        "value_formatted": "999.0"
+      }
+    ]
+  },
+  "ambiguous_multi_leg": {
+    "hash": "0xccc3",
+    "category": "token swap",
+    "block_timestamp": "2026-07-15T10:10:00.000Z",
+    "summary": "Batch swapped 2 tokens",
+    "erc20_transfers": [
+      {
+        "from_address": "0xWALLET000000000000000000000000000000001",
+        "to_address": "0xROUTER00000000000000000000000000000001",
+        "token_symbol": "USDT",
+        "token_decimals": "18",
+        "address": "0x55d398326f99059fF775485246999027B3197955",
+        "value_formatted": "3.0"
+      },
+      {
+        "from_address": "0xWALLET000000000000000000000000000000001",
+        "to_address": "0xROUTER00000000000000000000000000000001",
+        "token_symbol": "GEM3",
+        "token_decimals": "9",
+        "address": "0x00000000000000000000000000000000000gem3",
+        "value_formatted": "40.0"
+      },
+      {
+        "from_address": "0xROUTER00000000000000000000000000000001",
+        "to_address": "0xWALLET000000000000000000000000000000001",
+        "token_symbol": "GEM4",
+        "token_decimals": "9",
+        "address": "0x00000000000000000000000000000000000gem4",
+        "value_formatted": "77.0"
+      }
+    ]
+  },
+  "not_a_swap": {
+    "hash": "0xddd4",
+    "category": "send",
+    "block_timestamp": "2026-07-15T10:15:00.000Z",
+    "summary": "Sent 1 USDT",
+    "erc20_transfers": []
+  }
+}
