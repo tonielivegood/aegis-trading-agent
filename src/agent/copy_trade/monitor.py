@@ -26,6 +26,15 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from dotenv import dotenv_values
 
+from ..email_notifier import EmailNotifier
+from ..execution.oneinch import OneInch
+from ..execution.openocean import OpenOcean
+from ..execution.pancakeswap import PancakeSwap
+from .budget import CopyTradeBudget
+from .executor import handle_alert
+from .positions import PositionStore
+from .swap_parser import parse_swap
+
 ROOT = Path(__file__).resolve().parents[3]
 ENV = dotenv_values(ROOT / ".env")
 API_KEY = ENV.get("MORALIS_API_KEY", "")
@@ -34,6 +43,23 @@ STATE_PATH = ROOT / "data" / "copy_trade" / "state.json"
 
 MORALIS = "https://deep-index.moralis.io/api/v2.2"
 HEADERS = {"X-API-Key": API_KEY, "accept": "application/json"}
+
+POSITIONS_PATH = ROOT / "data" / "copy_trade" / "positions.json"
+
+
+def _build_runtime():
+    """One-time construction of the shared budget tracker, position store, and
+    executor pool — called once from main(), passed down into the scan loop."""
+    config = _load_json(CONFIG_PATH)
+    settings_ = config.get("copy_settings", {})
+    budget = CopyTradeBudget(
+        total_usd=settings_.get("total_budget_usd", 15.39),
+        slice_usd=settings_.get("slice_usd", 1.5),
+    )
+    store = PositionStore(POSITIONS_PATH)
+    store.load()
+    executors = {"1inch": OneInch(), "openocean": OpenOcean(), "pancake": PancakeSwap()}
+    return budget, store, executors
 
 
 # ─────────────────────── helpers ───────────────────────
@@ -76,49 +102,6 @@ def fetch_recent_swaps(address: str, limit: int = 25) -> list[dict]:
         return []
 
 
-def parse_swap(tx: dict) -> dict | None:
-    """Parse một swap transaction thành format dễ đọc."""
-    try:
-        summary = tx.get("summary", "")
-        ts = tx.get("block_timestamp", "")
-        tx_hash = tx.get("hash", "")
-
-        # Parse erc20 transfers để tìm token in/out
-        transfers = tx.get("erc20_transfers", [])
-        token_in = None
-        token_out = None
-        for tr in transfers:
-            direction = tr.get("direction", "")
-            sym = tr.get("token_symbol", "???")
-            val = float(tr.get("value_formatted") or 0)
-            addr = tr.get("token_address", "")
-            if direction == "send":
-                token_in = {"symbol": sym, "amount": val, "address": addr}
-            elif direction == "receive":
-                token_out = {"symbol": sym, "amount": val, "address": addr}
-
-        # Parse native transfers (BNB in/out)
-        for nt in tx.get("native_transfers", []):
-            direction = nt.get("direction", "")
-            val = float(nt.get("value_formatted") or 0)
-            if direction == "send" and not token_in:
-                token_in = {"symbol": "BNB", "amount": val, "address": "native"}
-            elif direction == "receive" and not token_out:
-                token_out = {"symbol": "BNB", "amount": val, "address": "native"}
-
-        return {
-            "hash": tx_hash,
-            "timestamp": ts,
-            "summary": summary,
-            "token_in": token_in,
-            "token_out": token_out,
-            "block_number": tx.get("block_number", ""),
-        }
-    except Exception as e:
-        _log("WARN", f"Failed to parse swap", error=str(e))
-        return None
-
-
 def check_wallet(address: str, label: str, state: dict, config: dict) -> list[dict]:
     """Check một ví và trả về danh sách alert mới."""
     settings = config.get("copy_settings", {})
@@ -134,14 +117,14 @@ def check_wallet(address: str, label: str, state: dict, config: dict) -> list[di
         if tx_hash in processed:
             continue
 
-        parsed = parse_swap(tx)
+        parsed = parse_swap(tx, address)
         if not parsed:
+            processed.add(tx_hash)
             continue
 
-        # Skip ignored tokens
-        in_sym = (parsed.get("token_in") or {}).get("symbol", "")
-        out_sym = (parsed.get("token_out") or {}).get("symbol", "")
-        if in_sym in ignore_tokens or out_sym in ignore_tokens:
+        if parsed.token_symbol in ignore_tokens or parsed.token_address.lower() in {
+            t.lower() for t in ignore_tokens
+        }:
             processed.add(tx_hash)
             continue
 
@@ -149,74 +132,17 @@ def check_wallet(address: str, label: str, state: dict, config: dict) -> list[di
             "wallet": address,
             "wallet_label": label,
             "detected_at": _ts(),
-            **parsed,
+            "parsed": parsed,
         }
         new_alerts.append(alert)
         processed.add(tx_hash)
 
         _log("ALERT", f"NEW SWAP on [{label}]",
-             summary=parsed["summary"],
-             timestamp=parsed["timestamp"])
+             symbol=parsed.token_symbol, direction=parsed.direction)
 
     state["processed_txs"] = list(processed)
     state["last_checked"][address] = _ts()
     return new_alerts
-
-
-def send_email_alert(alert: dict):
-    """Gửi email thông báo alert tới người dùng qua SMTP Gmail."""
-    server_host = ENV.get("SMTP_SERVER", "smtp.gmail.com")
-    port_val = ENV.get("SMTP_PORT", "587")
-    user = ENV.get("SMTP_USER", "")
-    password = ENV.get("SMTP_PASSWORD", "")
-    to_email = ENV.get("NOTIFICATION_EMAIL", "")
-
-    if not user or not password:
-        _log("WARN", "SMTP credentials (SMTP_USER/SMTP_PASSWORD) missing in .env. Email notification skipped.")
-        return
-
-    try:
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-
-        port = int(port_val)
-        
-        # Soạn nội dung email
-        msg = MIMEMultipart()
-        msg["From"] = user
-        msg["To"] = to_email
-        msg["Subject"] = f"[AEGIS ALERT] New Swap on {alert.get('wallet_label')}"
-
-        body = f"""Hệ thống Aegis phát hiện giao dịch swap mới!
-
-- Ví nguồn: {alert.get('wallet_label')} ({alert.get('wallet')})
-- Thời gian: {alert.get('timestamp')}
-- Tóm tắt: {alert.get('summary')}
-
-Chi tiết giao dịch:
-"""
-        if alert.get("token_in"):
-            ti = alert["token_in"]
-            body += f"  * Bán (Sold): {ti['amount']:.6f} {ti['symbol']} ({ti['address']})\n"
-        if alert.get("token_out"):
-            to = alert["token_out"]
-            body += f"  * Mua (Bought): {to['amount']:.6f} {to['symbol']} ({to['address']})\n"
-
-        body += f"\nLink kiểm tra trên BscScan:\nhttps://bscscan.com/tx/{alert.get('hash')}\n"
-        body += f"\nHệ thống tự động Aegis Trading Bot."
-
-        msg.attach(MIMEText(body, "plain", "utf-8"))
-
-        # Gửi qua SMTP
-        server = smtplib.SMTP(server_host, port)
-        server.starttls()
-        server.login(user, password)
-        server.sendmail(user, to_email, msg.as_string())
-        server.quit()
-        _log("INFO", f"Email alert sent successfully to {to_email}")
-    except Exception as e:
-        _log("ERROR", "Failed to send email alert", error=str(e))
 
 
 def run_scan(once: bool = False):
@@ -225,6 +151,12 @@ def run_scan(once: bool = False):
     state = _load_json(STATE_PATH)
     settings = config.get("copy_settings", {})
     interval = settings.get("poll_interval_seconds", 30)
+    budget, store, executors = _build_runtime()
+    try:
+        notifier = EmailNotifier()
+    except ValueError:
+        notifier = None
+    consecutive_failures = 0
 
     wallets = [w for w in config.get("target_wallets", []) if w.get("monitor")]
     wallets.sort(key=lambda w: w.get("priority", 99))
@@ -245,34 +177,60 @@ def run_scan(once: bool = False):
             all_new_alerts.extend(alerts)
             time.sleep(0.2)  # Rate limit
 
+        # A wallet only lands in last_checked when fetch_recent_swaps didn't except —
+        # 401s inside fetch_recent_swaps are already caught there and logged, but the
+        # wallet's last_checked timestamp is still written by check_wallet() either
+        # way, so use a request-level probe instead: re-check the most recently seen
+        # HTTP status via a lightweight one-off call every 10 iterations.
+        if iteration % 10 == 0:
+            probe = requests.get(
+                f"{MORALIS}/wallets/{wallets[0]['address']}/history",
+                headers=HEADERS, params={"chain": "bsc", "limit": 1}, timeout=10,
+            )
+            if probe.status_code == 401:
+                consecutive_failures += 1
+            else:
+                consecutive_failures = 0
+            if consecutive_failures == 1 and notifier is not None:  # alert once, not every 10 iters
+                notifier.send_alert(
+                    "[AEGIS COPY-TRADE] Moralis auth failing",
+                    f"wallets/history returned 401 at iteration {iteration}. "
+                    f"MORALIS_API_KEY likely invalid/expired — copy-trade monitor is blind until fixed.",
+                )
+
         if all_new_alerts:
             state.setdefault("alerts", []).extend(all_new_alerts)
             _save_json(STATE_PATH, state)
             _log("INFO", f"SUCCESS: {len(all_new_alerts)} new swap(s) detected!")
 
             for a in all_new_alerts:
+                p = a["parsed"]
                 print(f"\n  {'='*60}")
                 print(f"  [SWAP ALERT] — [{a['wallet_label']}]")
-                print(f"  Time:    {a.get('timestamp', '?')}")
-                print(f"  Summary: {a.get('summary', '?')}")
-                if a.get("token_in"):
-                    ti = a["token_in"]
-                    print(f"  Sold:    {ti['amount']:.6f} {ti['symbol']} ({ti['address'][:16]}...)")
-                if a.get("token_out"):
-                    to = a["token_out"]
-                    print(f"  Bought:  {to['amount']:.6f} {to['symbol']} ({to['address'][:16]}...)")
-                print(f"  TX:      https://bscscan.com/tx/{a['hash']}")
+                print(f"  Time:      {p.timestamp}")
+                print(f"  Direction: {p.direction.upper()} {p.token_symbol}")
+                print(f"  Amount:    {p.token_amount:.6f} {p.token_symbol} ({p.token_address[:16]}...)")
+                print(f"  TX:        https://bscscan.com/tx/{p.hash}")
                 print(f"  {'='*60}")
 
-                # Gửi email thông báo
-                send_email_alert(a)
+                # ponytail: guard against notifier=None (set above when SMTP creds are
+                # missing) — without it, a missing-config gap crashes the scan loop with
+                # AttributeError instead of being swallowed like the brief intended.
+                if notifier is not None:
+                    try:
+                        notifier.send_alert(
+                            f"[AEGIS COPY-TRADE] {a['parsed'].direction.upper()} {a['parsed'].token_symbol}",
+                            f"Wallet: {a['wallet_label']} ({a['wallet']})\n"
+                            f"Direction: {a['parsed'].direction}\n"
+                            f"Token: {a['parsed'].token_symbol} ({a['parsed'].token_address})\n"
+                            f"Amount: {a['parsed'].token_amount}\n"
+                            f"TX: https://bscscan.com/tx/{a['parsed'].hash}\n",
+                        )
+                    except ValueError:
+                        pass  # SMTP not configured — alert still logged to console above
 
-                # Copy trade signal
                 if settings.get("auto_execute"):
-                    _log("EXEC", "Auto-execute enabled — would copy this swap")
-                    # TODO: integrate with best_execution.py
-                else:
-                    _log("INFO", "Alert-only mode — manual review required")
+                    handle_alert(a["parsed"], budget, store, executors)
         else:
             _log("INFO", "No new swaps detected")
             _save_json(STATE_PATH, state)
