@@ -52,15 +52,22 @@ stack), `pytest`, existing `src/agent/execution/best_execution.py` +
   (`data/copy_trade/positions.json`), fixes the `_discovered`-style orphan-position bug
   by persisting on every write and reloading on start.
 - `tests/test_copy_trade_positions.py`
-- `src/agent/copy_trade/safety.py` — `passes_safety_check()`, wraps
-  `binance_web3.quote()` the same way `agent_loop._w3w_safety_check` already does.
-- `tests/test_copy_trade_safety.py`
 - `src/agent/copy_trade/executor.py` — `handle_alert()`: the glue that turns a
-  `ParsedSwap` into a buy or a mirror-sell, using the four modules above plus
-  `best_execution` + `token_list.register_discovered`.
+  `ParsedSwap` into a buy or a mirror-sell, using the three modules above plus
+  `best_execution`, `token_list.register_discovered`, and the shared
+  `binance_web3.passes_safety_check` (see below — no separate `copy_trade/safety.py`).
 - `tests/test_copy_trade_executor.py`
 
 **Modified files:**
+- `src/agent/execution/binance_web3.py` — extract the honeypot/tax/price-impact/
+  holder/liquidity check currently inlined in `agent_loop._w3w_safety_check` into a
+  new `passes_safety_check(from_token: str, to_token: str, amount_wei: str) -> tuple[bool, int | None]`,
+  so both Aegis and copy-trade share one implementation instead of duplicating it
+  (user decision, 2026-07-15 pre-flight review — Aegis's `agent_loop.py` is being
+  retired but its code isn't deleted by this plan, so the shared check still needs a
+  home both callers can import).
+- `src/agent/agent_loop.py` — refactor `_w3w_safety_check`'s `check()` closure to call
+  the new shared `bw.passes_safety_check()` instead of inlining the checks.
 - `src/agent/copy_trade/monitor.py` — delete `parse_swap()` and `send_email_alert()`
   (replaced by `swap_parser.parse_swap()` and `src/agent/email_notifier.py`), wire the
   `# TODO: integrate with best_execution.py` stub to `executor.handle_alert()`, add the
@@ -69,8 +76,8 @@ stack), `pytest`, existing `src/agent/execution/best_execution.py` +
   `monitor: false`, add `total_budget_usd` / `slice_usd`, set `auto_execute: true`.
 
 **Not touched:** `deploy/copy-trade.service` (already correct — installed, not
-rewritten), `src/agent/execution/*` (reused as-is), `src/agent/data/token_list.py`
-(reused as-is).
+rewritten), `src/agent/execution/oneinch.py` / `openocean.py` / `pancakeswap.py`
+(reused as-is), `src/agent/data/token_list.py` (reused as-is).
 
 ---
 
@@ -685,133 +692,207 @@ git commit -m "feat(copy_trade): add disk-backed position store, fixes orphan-po
 
 ---
 
-### Task 4: Safety gate (honeypot/tax check before copy-buying)
+### Task 4: Extract a shared safety-check helper into `binance_web3.py`, refactor `agent_loop.py` to use it
 
 **Files:**
-- Create: `src/agent/copy_trade/safety.py`
-- Test: `tests/test_copy_trade_safety.py`
+- Modify: `src/agent/execution/binance_web3.py`
+- Modify: `src/agent/agent_loop.py:352-421` (the `_w3w_safety_check` function)
+- Test: `tests/test_binance_web3.py`
 
 **Interfaces:**
-- Consumes: `src.agent.execution.binance_web3.quote(from_token, to_token, amount_wei,
-  *, chain_id=...) -> dict` (existing, already used by `agent_loop._w3w_safety_check`
-  at `src/agent/agent_loop.py:352-390`). Returns a dict with a `routes` list, each route
-  has `toToken: {"isHoneyPot": bool, "taxRate": str}` and `priceImpactPercent`.
-- Produces: `passes_safety_check(token_contract: str, usd_size: float) -> bool`.
+- Consumes: `quote(from_token, to_token, amount_wei, *, chain_id=...) -> list[dict]`
+  (existing, module-level in `binance_web3.py` — returns the routes list directly,
+  confirmed at `src/agent/agent_loop.py:363`: `routes = bw.quote(...)`), `price_info
+  (contracts: list[str], *, chain_id=...) -> dict[str, dict]` (existing, same module).
+- Produces: `passes_safety_check(from_token: str, to_token: str, amount_wei: str) ->
+  tuple[bool, int | None]` — `(True, decimals)` when honeypot/tax/price-impact/
+  holders/liquidity all pass (decimals read from the quote's `toToken.decimal`),
+  `(False, None)` otherwise, fail-closed on any error.
 
-Mirrors the exact three checks `_w3w_safety_check` already applies for Aegis
-(honeypot, tax rate vs `settings.binance_w3w_max_tax_rate`, price impact vs
-`settings.binance_w3w_max_price_impact`) — same reasoning applies to copy-trade
-candidates: copying a wallet blindly with zero honeypot check hands real money to any
-scam token a source wallet happens to touch.
+User decision (pre-flight review, 2026-07-15): `agent_loop._w3w_safety_check`
+currently inlines these five checks. Rather than let `src/agent/copy_trade` duplicate
+that ~70-line block verbatim, extract the checks into `binance_web3.py` (the module
+that already owns `quote()`/`price_info()`) and have `agent_loop.py` call the shared
+function too — one implementation, two callers.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing tests** — append to the existing
+  `tests/test_binance_web3.py` (matches its established `mocker`-fixture style, see
+  lines 34-59 of that file — do not introduce `unittest.mock.patch` in this file):
 
 ```python
-from unittest.mock import patch
+# ----------------------------- passes_safety_check -----------------------------
 
-from src.agent.copy_trade.safety import passes_safety_check
-
-
-def _fake_quote(routes):
-    return {"routes": routes}
-
-
-def test_rejects_honeypot_token():
-    routes = [{"isBest": True, "toToken": {"isHoneyPot": True, "taxRate": "0"}, "priceImpactPercent": "1"}]
-    with patch("src.agent.copy_trade.safety.bw.quote", return_value=_fake_quote(routes)):
-        assert passes_safety_check("0xscam1", 1.5) is False
+def _quote_response(is_honeypot=False, tax="0", price_impact="1", decimal="9"):
+    return [{
+        "isBest": True,
+        "toToken": {"isHoneyPot": is_honeypot, "taxRate": tax, "decimal": decimal},
+        "priceImpactPercent": price_impact,
+    }]
 
 
-def test_rejects_tax_above_threshold():
-    routes = [{"isBest": True, "toToken": {"isHoneyPot": False, "taxRate": "50"}, "priceImpactPercent": "1"}]
-    with patch("src.agent.copy_trade.safety.bw.quote", return_value=_fake_quote(routes)):
-        assert passes_safety_check("0xhightax1", 1.5) is False
+def _price_info(holders=500, liquidity=50000.0):
+    return {"0xtoken1": {"holders": holders, "liquidity": liquidity}}
 
 
-def test_rejects_high_price_impact():
-    routes = [{"isBest": True, "toToken": {"isHoneyPot": False, "taxRate": "0"}, "priceImpactPercent": "90"}]
-    with patch("src.agent.copy_trade.safety.bw.quote", return_value=_fake_quote(routes)):
-        assert passes_safety_check("0xthinpool1", 1.5) is False
+def test_safety_check_rejects_honeypot(mocker):
+    mocker.patch.object(bw, "quote", return_value=_quote_response(is_honeypot=True))
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is False and decimals is None
 
 
-def test_passes_clean_token():
-    routes = [{"isBest": True, "toToken": {"isHoneyPot": False, "taxRate": "0"}, "priceImpactPercent": "1"}]
-    with patch("src.agent.copy_trade.safety.bw.quote", return_value=_fake_quote(routes)):
-        assert passes_safety_check("0xclean1", 1.5) is True
+def test_safety_check_rejects_tax_above_threshold(mocker):
+    mocker.patch.object(bw, "settings", mocker.Mock(binance_w3w_max_tax_rate=0.1,
+                                                      binance_w3w_max_price_impact=0.5,
+                                                      binance_w3w_min_holders=10,
+                                                      binance_w3w_min_liquidity_usd_check=1000))
+    mocker.patch.object(bw, "quote", return_value=_quote_response(tax="50"))
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is False and decimals is None
 
 
-def test_quote_failure_fails_closed():
-    with patch("src.agent.copy_trade.safety.bw.quote", side_effect=RuntimeError("timeout")):
-        assert passes_safety_check("0xflaky1", 1.5) is False
+def test_safety_check_rejects_low_liquidity(mocker):
+    mocker.patch.object(bw, "settings", mocker.Mock(binance_w3w_max_tax_rate=0.1,
+                                                      binance_w3w_max_price_impact=0.5,
+                                                      binance_w3w_min_holders=10,
+                                                      binance_w3w_min_liquidity_usd_check=1000))
+    mocker.patch.object(bw, "quote", return_value=_quote_response())
+    mocker.patch.object(bw, "price_info", return_value=_price_info(liquidity=1.0))
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is False and decimals is None
+
+
+def test_safety_check_passes_clean_token_and_returns_decimals(mocker):
+    mocker.patch.object(bw, "settings", mocker.Mock(binance_w3w_max_tax_rate=0.1,
+                                                      binance_w3w_max_price_impact=0.5,
+                                                      binance_w3w_min_holders=10,
+                                                      binance_w3w_min_liquidity_usd_check=1000))
+    mocker.patch.object(bw, "quote", return_value=_quote_response(decimal="9"))
+    mocker.patch.object(bw, "price_info", return_value=_price_info())
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is True and decimals == 9
+
+
+def test_safety_check_quote_failure_fails_closed(mocker):
+    mocker.patch.object(bw, "quote", side_effect=RuntimeError("timeout"))
+    ok, decimals = bw.passes_safety_check("0xusdt1", "0xtoken1", "1000")
+    assert ok is False and decimals is None
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/test_copy_trade_safety.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+Run: `pytest tests/test_binance_web3.py -v -k passes_safety_check`
+Expected: FAIL with `AttributeError: module ... has no attribute 'passes_safety_check'`
 
-- [ ] **Step 3: Implement `safety.py`**
+- [ ] **Step 3: Add `passes_safety_check` to `binance_web3.py`**
+
+Append at the end of `src/agent/execution/binance_web3.py` (after the existing
+`quote()` function):
 
 ```python
-"""Just-in-time honeypot/tax/price-impact gate for a copy-trade buy candidate — same
-three checks agent_loop._w3w_safety_check already applies for Aegis (see
-src/agent/agent_loop.py:352-390), reused here so a copy-trade buy can never skip them.
-Fails closed: any quote error is treated as unsafe, never as a pass."""
-from __future__ import annotations
-
-from ..config import settings
-from ..execution import binance_web3 as bw
-from ..monitor.logger import get_logger
-
-log = get_logger(__name__)
-
-_USDT_BSC = "0x55d398326f99059fF775485246999027B3197955"
-
-
-def passes_safety_check(token_contract: str, usd_size: float) -> bool:
-    amount_wei = str(int(usd_size * 10**18))  # USDT has 18 decimals on BSC
+def passes_safety_check(from_token: str, to_token: str, amount_wei: str) -> tuple[bool, int | None]:
+    """Honeypot/tax/price-impact/holder/liquidity gate for a buy candidate — shared
+    by Aegis (agent_loop._w3w_safety_check) and the copy-trade module so neither
+    duplicates the other's checks. Fails closed: any error or missing data returns
+    (False, None), never a pass. On success returns (True, decimals) using the
+    destination token's decimals from the quote response."""
     try:
-        data = bw.quote(_USDT_BSC, token_contract, amount_wei)
-        routes = data.get("routes", [])
-        if not routes:
-            log.warning("copy_trade_safety_no_route", token=token_contract)
-            return False
-        best = next((r for r in routes if r.get("isBest")), routes[0])
-        to_tok = best.get("toToken") or {}
-    except Exception as e:  # noqa: BLE001 — any failure fails closed
-        log.warning("copy_trade_safety_check_failed", token=token_contract, error=type(e).__name__)
-        return False
+        routes = quote(from_token, to_token, amount_wei)
+    except Exception as e:  # noqa: BLE001 — fail closed: no quote = no entry
+        log.warning("safety_check_quote_failed", to_token=to_token, error=type(e).__name__)
+        return False, None
+    if not routes:
+        return False, None
+    best = next((r for r in routes if r.get("isBest")), routes[0])
+    to_tok = best.get("toToken") or {}
 
     if to_tok.get("isHoneyPot"):
-        log.warning("copy_trade_honeypot_blocked", token=token_contract)
-        return False
+        log.warning("safety_check_honeypot_blocked", to_token=to_token)
+        return False, None
     try:
         tax = float(to_tok.get("taxRate") or 0)
     except (TypeError, ValueError):
         tax = 1.0
     if tax > settings.binance_w3w_max_tax_rate:
-        log.warning("copy_trade_tax_too_high", token=token_contract, tax=tax)
-        return False
+        log.warning("safety_check_tax_too_high", to_token=to_token, tax=tax)
+        return False, None
     try:
         impact = float(best.get("priceImpactPercent") or 0) / 100.0
     except (TypeError, ValueError):
         impact = 1.0
     if impact > settings.binance_w3w_max_price_impact:
-        log.warning("copy_trade_price_impact_too_high", token=token_contract, impact=impact)
-        return False
-    return True
+        log.warning("safety_check_price_impact_too_high", to_token=to_token, impact=impact)
+        return False, None
+
+    try:
+        info = price_info([to_token]).get(to_token.lower())
+    except Exception as e:  # noqa: BLE001 — fail closed
+        log.warning("safety_check_price_info_failed", to_token=to_token, error=type(e).__name__)
+        return False, None
+    if not info:
+        log.warning("safety_check_price_info_missing", to_token=to_token)
+        return False, None
+    try:
+        holders = int(info.get("holders") or 0)
+    except (TypeError, ValueError):
+        holders = 0
+    if holders < settings.binance_w3w_min_holders:
+        log.warning("safety_check_holders_too_low", to_token=to_token, holders=holders)
+        return False, None
+    try:
+        liquidity = float(info.get("liquidity") or 0)
+    except (TypeError, ValueError):
+        liquidity = 0.0
+    if liquidity < settings.binance_w3w_min_liquidity_usd_check:
+        log.warning("safety_check_liquidity_too_low", to_token=to_token, liquidity=liquidity)
+        return False, None
+
+    try:
+        decimals = int(to_tok.get("decimal") or 18)
+    except (TypeError, ValueError):
+        decimals = 18
+    return True, decimals
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/test_copy_trade_safety.py -v`
+Run: `pytest tests/test_binance_web3.py -v -k passes_safety_check`
 Expected: PASS (5 passed)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Refactor `agent_loop.py` to call the shared function**
+
+Replace the body of `_w3w_safety_check`'s `check()` closure
+(`src/agent/agent_loop.py:359-420`, from `def check(sig) -> bool:` through the line
+before `return check`) with:
+
+```python
+    def check(sig) -> bool:
+        ticket = sniper.meme_ticket_usd(equity_usd)
+        amount_wei = str(int(ticket * 10**18))   # USDT has 18 decimals on BSC
+        ok, decimals = bw.passes_safety_check(settings.usdt_address, sig.contract, amount_wei)
+        if not ok:
+            log.warning("w3w_safety_check_failed", symbol=sig.symbol, contract=sig.contract)
+            return False
+        token_list.register_discovered(sig.symbol, sig.contract, decimals or 18)
+        return True
+```
+
+The five inlined checks that used to fill this closure now live in
+`bw.passes_safety_check` (Step 3) — this replacement is a pure delegation, no behavior
+change. The `# Real-money incident (2/7)...` comment explaining the price-impact check
+moves with the logic into `binance_web3.py`'s new function (already present there from
+Step 3) rather than staying here.
+
+- [ ] **Step 6: Run the existing agent_loop test suite to confirm no regression**
+
+Run: `pytest tests/test_agent_loop.py -v`
+Expected: PASS, same pass count as before this task's changes (this task must not
+change `_w3w_safety_check`'s external behavior, only where the logic lives).
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/agent/copy_trade/safety.py tests/test_copy_trade_safety.py
-git commit -m "feat(copy_trade): add honeypot/tax safety gate for copy-buy candidates"
+git add src/agent/execution/binance_web3.py src/agent/agent_loop.py tests/test_binance_web3.py
+git commit -m "refactor: extract shared passes_safety_check from agent_loop into binance_web3, reused by copy_trade"
 ```
 
 ---
@@ -825,25 +906,26 @@ git commit -m "feat(copy_trade): add honeypot/tax safety gate for copy-buy candi
 **Interfaces:**
 - Consumes: `swap_parser.ParsedSwap` (Task 1), `budget.CopyTradeBudget` (Task 2),
   `positions.PositionStore` + `positions.CopyPosition` (Task 3),
-  `safety.passes_safety_check` (Task 4), `src.agent.data.token_list.register_discovered
-  (symbol, contract, decimals) -> Token` (existing), `src.agent.execution.best_execution
-  .rank_backends(executors: dict[str, object], token_in: str, token_out: str,
-  amount_in_human: float) -> list[str]` (existing), and each executor's
+  `src.agent.execution.binance_web3.passes_safety_check(from_token, to_token,
+  amount_wei) -> tuple[bool, int | None]` (Task 4), `src.agent.data.token_list
+  .register_discovered(symbol, contract, decimals) -> Token` (existing),
+  `src.agent.execution.best_execution.rank_backends(executors: dict[str, object],
+  token_in: str, token_out: str, amount_in_human: float) -> list[str]` (existing),
+  `settings.usdt_address` (existing config value), and each executor's
   `.swap(token_in: str, token_out: str, amount_in_human: float) -> SwapResult`
   (existing, same signature on `OneInch`/`OpenOcean`/`PancakeSwap`).
 - Produces: `handle_alert(alert: ParsedSwap, budget: CopyTradeBudget, store:
   PositionStore, executors: dict[str, object]) -> None`.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing tests** — use the `mocker` fixture (project
+  convention, see `tests/test_oneinch.py`), not `unittest.mock.patch`:
 
 ```python
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from src.agent.copy_trade.budget import CopyTradeBudget
 from src.agent.copy_trade.executor import handle_alert
-from src.agent.copy_trade.positions import PositionStore
+from src.agent.copy_trade.positions import CopyPosition, PositionStore
 from src.agent.copy_trade.swap_parser import ParsedSwap
 
 BUY = ParsedSwap(
@@ -858,19 +940,17 @@ SELL = ParsedSwap(
 )
 
 
-def _mock_executors():
-    winning = MagicMock()
-    winning.swap.return_value = MagicMock(simulated=False, tx_hash="0xexec1")
+def _mock_executors(mocker):
+    winning = mocker.MagicMock()
+    winning.swap.return_value = mocker.MagicMock(simulated=False, tx_hash="0xexec1")
     return {"1inch": winning}, winning
 
 
-@patch("src.agent.copy_trade.executor.passes_safety_check", return_value=True)
-@patch("src.agent.copy_trade.executor.register_discovered")
-@patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
-def test_buy_signal_allocates_budget_registers_token_and_executes(
-    mock_rank, mock_register, mock_safety, tmp_path
-):
-    executors, winning = _mock_executors()
+def test_buy_signal_allocates_budget_registers_token_and_executes(mocker, tmp_path):
+    executors, winning = _mock_executors(mocker)
+    mocker.patch("src.agent.copy_trade.executor.passes_safety_check", return_value=(True, 9))
+    mock_register = mocker.patch("src.agent.copy_trade.executor.register_discovered")
+    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
     budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
     store = PositionStore(tmp_path / "positions.json")
 
@@ -882,30 +962,27 @@ def test_buy_signal_allocates_budget_registers_token_and_executes(
     assert store.find("0xgem1", "0xshark1") is not None
 
 
-@patch("src.agent.copy_trade.executor.passes_safety_check", return_value=False)
-@patch("src.agent.copy_trade.executor.register_discovered")
-@patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
-def test_buy_signal_skipped_when_safety_check_fails(
-    mock_rank, mock_register, mock_safety, tmp_path
-):
-    executors, winning = _mock_executors()
+def test_buy_signal_skipped_when_safety_check_fails(mocker, tmp_path):
+    executors, winning = _mock_executors(mocker)
+    mocker.patch("src.agent.copy_trade.executor.passes_safety_check", return_value=(False, None))
+    mock_register = mocker.patch("src.agent.copy_trade.executor.register_discovered")
+    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
     budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
     store = PositionStore(tmp_path / "positions.json")
 
     handle_alert(BUY, budget, store, executors)
 
     winning.swap.assert_not_called()
+    mock_register.assert_not_called()
     assert budget.available_usd == pytest.approx(15.39)
     assert store.find("0xgem1", "0xshark1") is None
 
 
-@patch("src.agent.copy_trade.executor.passes_safety_check", return_value=True)
-@patch("src.agent.copy_trade.executor.register_discovered")
-@patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
-def test_buy_signal_skipped_when_budget_exhausted(
-    mock_rank, mock_register, mock_safety, tmp_path
-):
-    executors, winning = _mock_executors()
+def test_buy_signal_skipped_when_budget_exhausted(mocker, tmp_path):
+    executors, winning = _mock_executors(mocker)
+    mocker.patch("src.agent.copy_trade.executor.passes_safety_check", return_value=(True, 9))
+    mock_register = mocker.patch("src.agent.copy_trade.executor.register_discovered")
+    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
     budget = CopyTradeBudget(total_usd=1.0, slice_usd=1.5)  # already too small
     store = PositionStore(tmp_path / "positions.json")
 
@@ -915,12 +992,11 @@ def test_buy_signal_skipped_when_budget_exhausted(
     mock_register.assert_not_called()
 
 
-@patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
-def test_sell_signal_closes_matching_position_and_releases_budget(mock_rank, tmp_path):
-    executors, winning = _mock_executors()
+def test_sell_signal_closes_matching_position_and_releases_budget(mocker, tmp_path):
+    executors, winning = _mock_executors(mocker)
+    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
     budget = CopyTradeBudget(total_usd=13.89, slice_usd=1.5)  # 1 slice already spent
     store = PositionStore(tmp_path / "positions.json")
-    from src.agent.copy_trade.positions import CopyPosition
     store.open_position(CopyPosition(
         token_symbol="GEM", token_address="0xgem1", token_decimals=9,
         source_wallet="0xshark1", usd_size=1.5, token_amount=12345.0,
@@ -934,9 +1010,9 @@ def test_sell_signal_closes_matching_position_and_releases_budget(mock_rank, tmp
     assert budget.available_usd == pytest.approx(15.39)
 
 
-@patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
-def test_sell_signal_for_untracked_position_is_a_noop(mock_rank, tmp_path):
-    executors, winning = _mock_executors()
+def test_sell_signal_for_untracked_position_is_a_noop(mocker, tmp_path):
+    executors, winning = _mock_executors(mocker)
+    mocker.patch("src.agent.copy_trade.executor.rank_backends", return_value=["1inch"])
     budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
     store = PositionStore(tmp_path / "positions.json")
 
@@ -954,20 +1030,22 @@ Expected: FAIL with `ModuleNotFoundError`
 
 ```python
 """Turn a ParsedSwap alert into a real (or DRY_RUN-simulated) copy-buy or mirror-sell.
-Buy: only when budget allows AND the safety gate passes. Sell: only mirrors a position
-this module itself opened (matched by token_address + source_wallet) — never sells
-something it doesn't have a record of buying, and never applies any stop/take-profit
-rule of its own (spec §5 — exit strictly mirrors the source wallet)."""
+Buy: only when budget allows AND the shared safety gate (binance_web3
+.passes_safety_check) passes. Sell: only mirrors a position this module itself
+opened (matched by token_address + source_wallet) — never sells something it doesn't
+have a record of buying, and never applies any stop/take-profit rule of its own
+(spec §5 — exit strictly mirrors the source wallet)."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from ..config import settings
 from ..data.token_list import register_discovered
 from ..execution.best_execution import rank_backends
+from ..execution.binance_web3 import passes_safety_check
 from ..monitor.logger import get_logger
 from .budget import CopyTradeBudget
 from .positions import CopyPosition, PositionStore
-from .safety import passes_safety_check
 from .swap_parser import ParsedSwap
 
 log = get_logger(__name__)
@@ -992,11 +1070,14 @@ def _handle_buy(
     if not budget.can_open_new():
         log.info("copy_trade_buy_skipped_budget", token=alert.token_symbol)
         return
-    if not passes_safety_check(alert.token_address, budget.available_usd):
+
+    amount_wei = str(int(budget.available_usd * 10**18))  # USDT has 18 decimals on BSC
+    ok, decimals = passes_safety_check(settings.usdt_address, alert.token_address, amount_wei)
+    if not ok:
         log.warning("copy_trade_buy_skipped_safety", token=alert.token_symbol)
         return
 
-    register_discovered(alert.token_symbol, alert.token_address, alert.token_decimals)
+    register_discovered(alert.token_symbol, alert.token_address, decimals or alert.token_decimals)
     ranked = rank_backends(executors, "USDT", alert.token_symbol, budget.available_usd)
     if not ranked:
         log.warning("copy_trade_buy_no_route", token=alert.token_symbol)
@@ -1008,7 +1089,7 @@ def _handle_buy(
     store.open_position(CopyPosition(
         token_symbol=alert.token_symbol,
         token_address=alert.token_address,
-        token_decimals=alert.token_decimals,
+        token_decimals=decimals or alert.token_decimals,
         source_wallet=alert.wallet,
         usd_size=usd_size,
         token_amount=alert.token_amount,
@@ -1039,6 +1120,12 @@ def _handle_sell(
     log.info("copy_trade_sold", token=alert.token_symbol,
               simulated=getattr(result, "simulated", None))
 ```
+
+`register_discovered(alert.token_symbol, alert.token_address, decimals or
+alert.token_decimals)` prefers the safety check's on-chain-quote-sourced `decimals`
+but falls back to the Moralis-sourced `alert.token_decimals` from Task 1 if the quote
+didn't return one — the two sources should always agree since both read the same
+token contract, this is defense against either being momentarily absent.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1572,6 +1659,6 @@ smoke-test step (Tasks 6, 10). Run the full new suite together before Task 10's
 deploy:
 
 ```bash
-pytest tests/test_copy_trade_swap_parser.py tests/test_copy_trade_budget.py tests/test_copy_trade_positions.py tests/test_copy_trade_safety.py tests/test_copy_trade_executor.py tests/test_fetch_gmgn_smart_money.py -v
+pytest tests/test_copy_trade_swap_parser.py tests/test_copy_trade_budget.py tests/test_copy_trade_positions.py tests/test_binance_web3.py tests/test_copy_trade_executor.py tests/test_fetch_gmgn_smart_money.py tests/test_agent_loop.py -v
 ```
 Expected: all passed, 0 failed.
