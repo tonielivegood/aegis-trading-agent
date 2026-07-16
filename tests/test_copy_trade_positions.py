@@ -90,3 +90,54 @@ def test_save_uses_atomic_write(tmp_path):
     assert isinstance(parsed, list), "positions.json should contain a JSON array"
     assert len(parsed) == 1, "Should have exactly 1 position"
     assert parsed[0]["token_address"] == "0xgem1", "Position data should be complete and correct"
+
+
+def _cluster_pos(token="0x" + "c" * 40, simulated=True):
+    return CopyPosition(token_symbol="GEM", token_address=token, token_decimals=18,
+                        source_wallet="", usd_size=3.0, token_amount=100.0,
+                        opened_at="2026-07-16T00:00:00+00:00",
+                        cluster_wallets=["0x" + "1" * 40, "0x" + "2" * 40, "0x" + "3" * 40],
+                        entry_price_usd=0.03, simulated=simulated)
+
+
+def test_new_fields_default_for_legacy_json(tmp_path):
+    p = tmp_path / "positions.json"
+    p.write_text('[{"token_symbol": "OLD", "token_address": "0xabc", '
+                 '"token_decimals": 18, "source_wallet": "0xdef", "usd_size": 1.5, '
+                 '"token_amount": 10.0, "opened_at": "t"}]', encoding="utf-8")
+    store = PositionStore(p)
+    store.load()
+    pos = store.all()[0]
+    assert pos.cluster_wallets == [] and pos.exited_by == []
+    assert pos.entry_price_usd == 0.0 and pos.simulated is False
+
+
+def test_find_by_token_and_close_by_token(tmp_path):
+    store = PositionStore(tmp_path / "p.json")
+    store.load()
+    pos = _cluster_pos()
+    store.open_position(pos)
+    assert store.find_by_token(pos.token_address.upper()) is pos   # case-insensitive
+    assert store.find_by_token("0x" + "d" * 40) is None
+    closed = store.close_by_token(pos.token_address)
+    assert closed is pos and store.all() == []
+
+
+def test_update_persists_exited_by(tmp_path):
+    path = tmp_path / "p.json"
+    store = PositionStore(path)
+    store.load()
+    pos = _cluster_pos()
+    store.open_position(pos)
+    pos.exited_by.append(pos.cluster_wallets[0])
+    store.update(pos)
+    reloaded = PositionStore(path)
+    reloaded.load()
+    assert reloaded.all()[0].exited_by == [pos.cluster_wallets[0]]
+
+
+def test_update_unknown_position_raises(tmp_path):
+    store = PositionStore(tmp_path / "p.json")
+    store.load()
+    with pytest.raises(ValueError):
+        store.update(_cluster_pos())

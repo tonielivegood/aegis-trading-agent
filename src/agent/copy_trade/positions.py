@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
@@ -21,6 +21,11 @@ class CopyPosition:
     usd_size: float
     token_amount: float
     opened_at: str
+    # v2 cluster fields — defaults keep any pre-v2 positions.json loadable
+    cluster_wallets: list[str] = field(default_factory=list)
+    exited_by: list[str] = field(default_factory=list)
+    entry_price_usd: float = 0.0
+    simulated: bool = False
 
 
 class PositionStore:
@@ -67,3 +72,22 @@ class PositionStore:
 
     def all(self) -> list[CopyPosition]:
         return list(self._positions)
+
+    def find_by_token(self, token_address: str) -> CopyPosition | None:
+        for p in self._positions:
+            if p.token_address.lower() == token_address.lower():
+                return p
+        return None
+
+    def close_by_token(self, token_address: str) -> CopyPosition | None:
+        pos = self.find_by_token(token_address)
+        if pos is None:
+            return None
+        self._positions.remove(pos)
+        self._save()
+        return pos
+
+    def update(self, pos: CopyPosition) -> None:
+        if pos not in self._positions:
+            raise ValueError("position not in store")
+        self._save()
