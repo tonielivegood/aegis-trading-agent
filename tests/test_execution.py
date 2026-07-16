@@ -199,6 +199,9 @@ def test_live_swap_uses_exact_approval_and_minout(mocker):
     ps = _ps(mocker, dry_run=False)
     ps.account = mocker.Mock()
     ps.account.address = "0x0000000000000000000000000000000000000001"
+    # balanceOf(token_out) delta measurement (fee-on-transfer support): give it a
+    # concrete int so `after - before` doesn't try to subtract two Mocks.
+    ps.w3.eth.contract.return_value.functions.balanceOf.return_value.call.return_value = 0
     mocker.patch.object(ps, "get_amounts_out", return_value=[10**18, 2 * 10**18])
     mocker.patch.object(ps, "_clamp_to_balance", side_effect=lambda t, a: a)
     approve = mocker.patch.object(ps, "_approve")

@@ -46,6 +46,19 @@ ROUTER_ABI = [
         "stateMutability": "nonpayable",
         "type": "function",
     },
+    {
+        "inputs": [
+            {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+            {"internalType": "uint256", "name": "amountOutMin", "type": "uint256"},
+            {"internalType": "address[]", "name": "path", "type": "address[]"},
+            {"internalType": "address", "name": "to", "type": "address"},
+            {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+        ],
+        "name": "swapExactTokensForTokensSupportingFeeOnTransferTokens",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
 ]
 
 ERC20_ABI = [
@@ -105,17 +118,18 @@ class SwapResult:
     min_out_wei: int
     simulated: bool
     tx_hash: str | None = None
+    received_out_wei: int = 0
 
 
 class PancakeSwap:
-    def __init__(self, w3=None, account=None, dry_run: bool | None = None) -> None:
+    def __init__(self, w3=None, account=None, dry_run: bool | None = None, slippage_bps: int | None = None) -> None:
         if w3 is None:
             from ..data.rpc import get_web3
             w3 = get_web3()
         self.w3 = w3
         self.account = account
         self.dry_run = settings.dry_run if dry_run is None else dry_run
-        self.slippage_bps = settings.slippage_bps
+        self.slippage_bps = settings.slippage_bps if slippage_bps is None else slippage_bps
         self.router_addr = Web3.to_checksum_address(settings.pancake_router)
         self.router = self.w3.eth.contract(address=self.router_addr, abi=ROUTER_ABI)
 
@@ -177,6 +191,9 @@ class PancakeSwap:
         if self.account is None:
             raise RuntimeError("no signing account configured for a live swap")
 
+        out_tok = get_token(q.token_out)
+        out_erc20 = self.w3.eth.contract(address=out_tok.address, abi=ERC20_ABI)
+        bal_before = out_erc20.functions.balanceOf(self.account.address).call()
         self._approve(token_in, q.amount_in_wei)
         tx = self._build_swap_tx(q)
         tx_hash = self._sign_and_send(tx)
@@ -185,9 +202,11 @@ class PancakeSwap:
         if getattr(receipt, "status", 1) != 1:   # mined but reverted → treat as failure
             log.warning("swap_reverted", token_in=token_in, token_out=token_out, tx_hash=hash_str)
             raise RuntimeError(f"PancakeSwap swap reverted on-chain (status 0): {hash_str}")
+        received = out_erc20.functions.balanceOf(self.account.address).call() - bal_before
         log.info("swap_sent", token_in=token_in, token_out=token_out, tx_hash=hash_str)
         return SwapResult(q.token_in, q.token_out, q.amount_in_wei,
-                          q.expected_out_wei, q.min_out_wei, simulated=False, tx_hash=hash_str)
+                          q.expected_out_wei, q.min_out_wei, simulated=False,
+                          tx_hash=hash_str, received_out_wei=received)
 
     def _approve(self, token_in: str, amount_wei: int) -> None:
         """Approve the router for EXACTLY amount_wei (never unlimited).
@@ -214,7 +233,7 @@ class PancakeSwap:
 
     def _build_swap_tx(self, q: Quote) -> dict:
         deadline = tx_builder.swap_deadline(int(time.time()), seconds=120)
-        return self.router.functions.swapExactTokensForTokens(
+        return self.router.functions.swapExactTokensForTokensSupportingFeeOnTransferTokens(
             q.amount_in_wei, q.min_out_wei, q.path, self.account.address, deadline
         ).build_transaction({
             "from": self.account.address,
