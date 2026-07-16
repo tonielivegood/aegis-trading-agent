@@ -186,7 +186,13 @@ def run_scan(once: bool = False) -> None:
             events = []
         process_events(events, tracker, engine, store, notifier,
                        lambda a: _token_meta(pool, a))
+        open_before = {p.token_address for p in store.all()}
         engine.check_valve()
+        for token_address in open_before - {p.token_address for p in store.all()}:
+            _notify(notifier,
+                    f"[COPY-TRADE{' SHADOW' if engine._shadow else ''}] "
+                    f"VALVE STOP-LOSS {token_address[:10]}…",
+                    f"closed by -70% price valve\ntoken {token_address}")
         STATE_PATH.write_text(json.dumps({
             "last_scan_at": datetime.now(timezone.utc).isoformat(),
             "last_processed_block": source.last_processed}), encoding="utf-8")
