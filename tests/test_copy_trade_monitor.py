@@ -50,3 +50,25 @@ def test_reconcile_replays_budget_allocation_after_restart(tmp_path):
 
     # (b) budget reduced by exactly the one open position's slice — no double-spend past cap
     assert budget.available_usd == pytest.approx(15.39 - 1.5)
+
+
+def test_load_json_state_tolerates_missing_file(tmp_path):
+    """Finding 2: state.json is gitignored, so a fresh VPS checkout won't have one.
+    Loading it with a default must return an empty state instead of crashing run_scan
+    with FileNotFoundError before the bot ever ticks."""
+    missing = tmp_path / "state.json"  # never created
+    assert not missing.exists()
+
+    state = monitor._load_json(missing, default=monitor._default_state())
+
+    # Shape the rest of monitor.py relies on: check_wallet writes state["last_checked"][addr]
+    assert state["last_checked"] == {}
+    assert state.get("processed_txs") == []
+    assert state.get("alerts") == []
+
+
+def test_load_json_config_still_raises_on_missing_file(tmp_path):
+    """Finding 2 guard-rail: a MISSING config is a real error (no default passed), not a
+    fresh-deploy condition — it must still surface, not be swallowed."""
+    with pytest.raises(FileNotFoundError):
+        monitor._load_json(tmp_path / "config.json")

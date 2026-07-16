@@ -95,9 +95,20 @@ def _build_runtime():
 # ─────────────────────── helpers ───────────────────────
 
 
-def _load_json(path: Path) -> dict:
+def _load_json(path: Path, default: dict | None = None) -> dict:
+    # A missing file is a real error for CONFIG (called with no default), but a normal
+    # fresh-deploy condition for the gitignored state.json (called with default=...) —
+    # so run_scan/show_status don't crash on the very first tick of a new checkout.
+    if default is not None and not path.exists():
+        return default
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def _default_state() -> dict:
+    """Empty state matching the shape run_scan/check_wallet/show_status expect:
+    last_checked is indexed by address (check_wallet writes state["last_checked"][addr])."""
+    return {"last_checked": {}, "processed_txs": [], "alerts": []}
 
 
 def _save_json(path: Path, data: dict):
@@ -178,7 +189,7 @@ def check_wallet(address: str, label: str, state: dict, config: dict) -> list[di
 def run_scan(once: bool = False):
     """Chạy 1 vòng scan hoặc loop liên tục."""
     config = _load_json(CONFIG_PATH)
-    state = _load_json(STATE_PATH)
+    state = _load_json(STATE_PATH, default=_default_state())
     settings = config.get("copy_settings", {})
     interval = settings.get("poll_interval_seconds", 30)
     budget, store, executors = _build_runtime()
@@ -282,7 +293,7 @@ def run_scan(once: bool = False):
 def show_status():
     """Hiển thị trạng thái hiện tại của hệ thống."""
     config = _load_json(CONFIG_PATH)
-    state = _load_json(STATE_PATH)
+    state = _load_json(STATE_PATH, default=_default_state())
 
     print("\n" + "=" * 60)
     print("  COPY-TRADE MONITOR STATUS")
