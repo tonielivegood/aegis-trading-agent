@@ -22,14 +22,14 @@
       "label": "HACK_1",
       "role": "Hackathon #1 (Top 16 cuộc thi)",
       "priority": 3,
-      "monitor": true
+      "monitor": false
     },
     {
       "address": "0x6bcf0027f1d151d8cbc8d6ff07915b0ba9616b1e",
       "label": "HACK_2",
       "role": "Hackathon #2 (34 swap, ETH/LINK/AAVE)",
       "priority": 3,
-      "monitor": true
+      "monitor": false
     },
     {
       "address": "0x87e60c7f4b9e8991d62f4753538236607c8b91b0",
@@ -50,21 +50,21 @@
       "label": "TOP_2_HACK",
       "role": "Hackathon Top 2 (75 swap, USDT/H/BTCB)",
       "priority": 3,
-      "monitor": true
+      "monitor": false
     },
     {
       "address": "0x7053676258ef5bfb9b27fcf42092f13fb37b9989",
       "label": "TOP_3_HACK",
       "role": "Hackathon Top 3 (77 swap, AAVE/USDT)",
       "priority": 3,
-      "monitor": true
+      "monitor": false
     },
     {
       "address": "0xbc1cb36c8fe1538e2f19de468b0c3258df4d32a9",
       "label": "TOP_4_HACK",
       "role": "Hackathon Top 4 (42 swap, RAVE/TRX/ZAMA)",
       "priority": 3,
-      "monitor": true
+      "monitor": false
     },
     {
       "address": "0x51a43425e30a7e5826021f36f76045d7a5895ebe",
