@@ -41,3 +41,24 @@ def test_get_taxes_none_on_missing(monkeypatch):
     monkeypatch.setattr(prices.requests, "get",
                         lambda url, timeout=None: FakeResp({"result": {}}))
     assert prices.get_taxes(TOKEN) is None
+
+
+def test_get_taxes_none_on_empty_tax_fields(monkeypatch):
+    payload = {"result": {TOKEN: {"buy_tax": "", "sell_tax": ""}}}
+    monkeypatch.setattr(prices.requests, "get",
+                        lambda url, timeout=None: FakeResp(payload))
+    assert prices.get_taxes(TOKEN) is None
+
+
+def test_get_taxes_none_on_missing_tax_keys(monkeypatch):
+    payload = {"result": {TOKEN: {"is_honeypot": "0"}}}
+    monkeypatch.setattr(prices.requests, "get",
+                        lambda url, timeout=None: FakeResp(payload))
+    assert prices.get_taxes(TOKEN) is None
+
+
+def test_get_taxes_zero_is_legitimate(monkeypatch):
+    payload = {"result": {TOKEN: {"buy_tax": "0", "sell_tax": "0"}}}
+    monkeypatch.setattr(prices.requests, "get",
+                        lambda url, timeout=None: FakeResp(payload))
+    assert prices.get_taxes(TOKEN) == (0.0, 0.0)

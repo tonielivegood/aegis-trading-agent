@@ -37,7 +37,10 @@ def get_taxes(token_address: str) -> tuple[float, float] | None:
         info = result.get(token_address.lower()) or result.get(token_address)
         if not info:
             return None
-        return float(info.get("buy_tax") or 0), float(info.get("sell_tax") or 0)
+        buy_tax, sell_tax = info.get("buy_tax"), info.get("sell_tax")
+        if buy_tax in (None, "") or sell_tax in (None, ""):
+            return None
+        return float(buy_tax), float(sell_tax)
     except Exception as e:  # noqa: BLE001
         log.warning("goplus_taxes_failed", token=token_address, error=type(e).__name__)
         return None
