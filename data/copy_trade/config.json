@@ -1,155 +1,27 @@
 {
-  "version": "1.0",
-  "updated_at": "2026-07-04T06:03:00Z",
-  "description": "Copy-trade theo ví Top 1 BNB Hackathon 2026",
-  "target_wallets": [
-    {
-      "address": "0x7b59b32ced7dbb24d1bde0a63913a1c173c60d9b",
-      "label": "MAIN_TRADE",
-      "role": "Ví Trade cá nhân chính (65 swap, 186 nonce, ClipX $645)",
-      "priority": 1,
-      "monitor": false
-    },
-    {
-      "address": "0xd606fb0e384852c261e262e8f9d450b44f9861fc",
-      "label": "HUB",
-      "role": "Ví Hub phân phối vốn (nếu tạo ví mới, tiền sẽ qua đây)",
-      "priority": 2,
-      "monitor": false
-    },
-    {
-      "address": "0x8ec6ab4e0f4383ecb01f870fc70cb351a12c43af",
-      "label": "HACK_1",
-      "role": "Hackathon #1 (Top 16 cuộc thi)",
-      "priority": 3,
-      "monitor": false
-    },
-    {
-      "address": "0x6bcf0027f1d151d8cbc8d6ff07915b0ba9616b1e",
-      "label": "HACK_2",
-      "role": "Hackathon #2 (34 swap, ETH/LINK/AAVE)",
-      "priority": 3,
-      "monitor": false
-    },
-    {
-      "address": "0x87e60c7f4b9e8991d62f4753538236607c8b91b0",
-      "label": "BRIDGE",
-      "role": "Ví cầu nối Binance ($7,598)",
-      "priority": 4,
-      "monitor": false
-    },
-    {
-      "address": "0x9aac2ad40f05b77be6f69a7b84e609f7d3592926",
-      "label": "CLIPX_HOLD",
-      "role": "Ví tích trữ ClipX ($16,047)",
-      "priority": 4,
-      "monitor": false
-    },
-    {
-      "address": "0xab9af0e53c29850c225ec966dbe5fab5701d41b2",
-      "label": "TOP_2_HACK",
-      "role": "Hackathon Top 2 (75 swap, USDT/H/BTCB)",
-      "priority": 3,
-      "monitor": false
-    },
-    {
-      "address": "0x7053676258ef5bfb9b27fcf42092f13fb37b9989",
-      "label": "TOP_3_HACK",
-      "role": "Hackathon Top 3 (77 swap, AAVE/USDT)",
-      "priority": 3,
-      "monitor": false
-    },
-    {
-      "address": "0xbc1cb36c8fe1538e2f19de468b0c3258df4d32a9",
-      "label": "TOP_4_HACK",
-      "role": "Hackathon Top 4 (42 swap, RAVE/TRX/ZAMA)",
-      "priority": 3,
-      "monitor": false
-    },
-    {
-      "address": "0x51a43425e30a7e5826021f36f76045d7a5895ebe",
-      "label": "GMGN_SMART_1",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    },
-    {
-      "address": "0x3664654b5e27e9e3c29ccdf4395193b9d18811f0",
-      "label": "GMGN_SMART_2",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    },
-    {
-      "address": "0xf98ab9fe84bf564b3de827fc9e3bacddc3122679",
-      "label": "GMGN_SMART_3",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    },
-    {
-      "address": "0xdd4066bb7ad5dffbff46b4da4daa339b90974a93",
-      "label": "GMGN_SMART_4",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    },
-    {
-      "address": "0x73077cb82462201f7d3ac4e3ccbdac4b4ab981e4",
-      "label": "GMGN_SMART_5",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    },
-    {
-      "address": "0xaa4e9e8f1e9c03e6de9f5f78680a0f8ae5908709",
-      "label": "GMGN_SMART_6",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    },
-    {
-      "address": "0x3e61dc3d7864d7d79c62b137200b3eb709138f9e",
-      "label": "GMGN_SMART_7",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    },
-    {
-      "address": "0xdaa14f06c65fc048f7f60e551f1f9249e510e2f3",
-      "label": "GMGN_SMART_8",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    },
-    {
-      "address": "0x3a5c0083071e70623463fbbd96b698eafa9359f2",
-      "label": "GMGN_SMART_9",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    },
-    {
-      "address": "0xce9a4a7a7783e7a79f9905e5550f15c62734d68d",
-      "label": "GMGN_SMART_10",
-      "role": "GMGN smart-money (BSC, auto-sourced)",
-      "priority": 5,
-      "monitor": true
-    }
-  ],
+  "version": "2.0",
+  "updated_at": "2026-07-16T00:00:00Z",
+  "description": "Copy-trade v2: BSC smart-money wallet cluster + shadow-mode-first (wallets in wallets.json)",
   "copy_settings": {
-    "auto_execute": true,
-    "alert_only": false,
-    "min_swap_usd": 3.0,
-    "max_copy_usd": 50.0,
-    "total_budget_usd": 15.39,
-    "slice_usd": 1.5,
-    "ignore_tokens": [
-      "uBTC",
-      "YFIT",
-      "Web3",
-      "Web3Ai"
+    "shadow_mode": true,
+    "slice_usd": 3.0,
+    "total_budget_usd": 16.14,
+    "min_wallets": 3,
+    "exit_wallets": 2,
+    "window_minutes": 15,
+    "valve_drop_pct": 0.70,
+    "poll_interval_seconds": 45,
+    "exec_slippage_bps": 1500,
+    "rpc_endpoints": [
+      "https://bsc-dataseed.binance.org",
+      "https://bsc-dataseed1.defibit.io",
+      "https://rpc.ankr.com/bsc"
     ],
-    "poll_interval_seconds": 30
+    "ignore_tokens": [
+      "0x55d398326f99059ff775485246999027b3197955",
+      "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+      "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+      "0xe9e7cea3dedca5984780bafc599bd69add087d56"
+    ]
   }
 }

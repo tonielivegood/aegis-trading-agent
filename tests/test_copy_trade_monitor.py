@@ -1,74 +1,73 @@
-"""Restart-reconciliation tests for the copy-trade monitor (findings C2 + C3).
+# tests/test_copy_trade_monitor.py
+"""Integration-ish tests for the v2 scan pipeline: events → cluster → engine.
+The safety-critical assertions: 3 distinct-wallet buys open exactly ONE position;
+a 4th buy on the same token opens nothing; shadow mode performs zero real calls."""
+import time
+from unittest.mock import MagicMock, patch
 
-`_reconcile_after_restart` is the small extracted helper that `_build_runtime` runs
-after loading positions from disk. It must, for every open position: re-register its
-token in the RAM-only registry (so a mirror-sell can still resolve it after a restart)
-and re-consume its budget slice (so we never over-allocate past the $15.39 hard cap).
-"""
-import pytest
-
-from src.agent.copy_trade import monitor
 from src.agent.copy_trade.budget import CopyTradeBudget
-from src.agent.copy_trade.positions import CopyPosition, PositionStore
-from src.agent.data.token_list import get_token, is_discovered
+from src.agent.copy_trade.chain_events import WalletEvent
+from src.agent.copy_trade.cluster_signal import ClusterBuySignalTracker
+from src.agent.copy_trade.monitor import process_events
+from src.agent.copy_trade.positions import PositionStore
+from src.agent.copy_trade.trade_engine import TradeEngine
 
-# A discovered (non-static) token with a valid 40-hex contract so Token.address resolves.
-RECOVER_ADDR = "0x" + "de" * 20
-
-
-def _open_position_on_disk(tmp_path):
-    path = tmp_path / "positions.json"
-    store = PositionStore(path)
-    store.open_position(CopyPosition(
-        token_symbol="RECOVERGEM", token_address=RECOVER_ADDR, token_decimals=9,
-        source_wallet="0xshark1", usd_size=1.5, token_amount=42.0,
-        opened_at="2026-07-15T10:00:00Z",
-    ))
-    # Simulate a fresh process: brand-new store, empty RAM registry + fresh budget.
-    reloaded = PositionStore(path)
-    reloaded.load()
-    return reloaded
+T = "0x" + "a" * 40
+W1, W2, W3, W4 = ("0x" + c * 40 for c in "1234")
 
 
-def test_reconcile_reregisters_token_after_restart(tmp_path):
-    store = _open_position_on_disk(tmp_path)
-    budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
-
-    assert not is_discovered("RECOVERGEM")  # RAM registry empty before reconcile
-    monitor._reconcile_after_restart(budget, store)
-
-    # (a) token re-registered → get_token() resolves without raising (mirror-sell can exit)
-    assert is_discovered("RECOVERGEM")
-    assert get_token("RECOVERGEM").address is not None
+def _ev(wallet, direction="in", token=T, block=1):
+    return WalletEvent(wallet=wallet, token_address=token, direction=direction,
+                       amount_raw=10 ** 18, tx_hash="0x" + "f" * 64, block=block)
 
 
-def test_reconcile_replays_budget_allocation_after_restart(tmp_path):
-    store = _open_position_on_disk(tmp_path)
-    budget = CopyTradeBudget(total_usd=15.39, slice_usd=1.5)
-
-    monitor._reconcile_after_restart(budget, store)
-
-    # (b) budget reduced by exactly the one open position's slice — no double-spend past cap
-    assert budget.available_usd == pytest.approx(15.39 - 1.5)
-
-
-def test_load_json_state_tolerates_missing_file(tmp_path):
-    """Finding 2: state.json is gitignored, so a fresh VPS checkout won't have one.
-    Loading it with a default must return an empty state instead of crashing run_scan
-    with FileNotFoundError before the bot ever ticks."""
-    missing = tmp_path / "state.json"  # never created
-    assert not missing.exists()
-
-    state = monitor._load_json(missing, default=monitor._default_state())
-
-    # Shape the rest of monitor.py relies on: check_wallet writes state["last_checked"][addr]
-    assert state["last_checked"] == {}
-    assert state.get("processed_txs") == []
-    assert state.get("alerts") == []
+def _pipeline(tmp_path):
+    budget = CopyTradeBudget(total_usd=16.14, slice_usd=3.0)
+    store = PositionStore(tmp_path / "shadow_positions.json")
+    store.load()
+    engine = TradeEngine(budget=budget, store=store, executors=None,
+                         shadow_mode=True,
+                         journal_path=tmp_path / "closed.jsonl")
+    tracker = ClusterBuySignalTracker(min_wallets=3, window_minutes=15)
+    return tracker, engine, store
 
 
-def test_load_json_config_still_raises_on_missing_file(tmp_path):
-    """Finding 2 guard-rail: a MISSING config is a real error (no default passed), not a
-    fresh-deploy condition — it must still surface, not be swallowed."""
-    with pytest.raises(FileNotFoundError):
-        monitor._load_json(tmp_path / "config.json")
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.02, 0.02))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.monitor.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_three_buys_open_exactly_one_shadow_position(_s, _mp, _ep, _t, tmp_path):
+    tracker, engine, store = _pipeline(tmp_path)
+    meta = lambda addr: ("GEM", 18)
+    process_events([_ev(W1), _ev(W2)], tracker, engine, store, None, meta)
+    assert store.all() == []                       # 2 of 3 — no trade
+    process_events([_ev(W3)], tracker, engine, store, None, meta)
+    assert len(store.all()) == 1 and store.all()[0].simulated is True
+    process_events([_ev(W4)], tracker, engine, store, None, meta)
+    assert len(store.all()) == 1                   # dup-token guard
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.monitor.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_out_events_route_to_exit_logic(_s, _mp, _ep, _t, tmp_path):
+    tracker, engine, store = _pipeline(tmp_path)
+    meta = lambda addr: ("GEM", 18)
+    process_events([_ev(W1), _ev(W2), _ev(W3)], tracker, engine, store, None, meta)
+    assert len(store.all()) == 1
+    process_events([_ev(W1, "out"), _ev(W2, "out")],
+                   tracker, engine, store, None, meta)
+    assert store.all() == []                       # 2-of-cluster exit fired
+
+
+def test_wallets_json_required(tmp_path, monkeypatch):
+    import src.agent.copy_trade.monitor as mon
+    monkeypatch.setattr(mon, "WALLETS_PATH", tmp_path / "missing.json")
+    try:
+        mon._load_wallets()
+        assert False, "should raise"
+    except SystemExit:
+        pass

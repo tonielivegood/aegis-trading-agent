@@ -1,30 +1,31 @@
-"""Copy-Trade Monitor — Theo dõi real-time swap từ cluster ví Top 1 Hackathon.
+"""Copy-Trade Monitor v2 — cluster-gated, RPC-sourced, shadow-mode-first.
 
-Chạy:
-    python -m src.agent.copy_trade.monitor           # monitor loop
-    python -m src.agent.copy_trade.monitor --status   # check trạng thái
-    python -m src.agent.copy_trade.monitor --scan     # scan 1 lần rồi thoát
+    python -m src.agent.copy_trade.monitor            # scan loop
+    python -m src.agent.copy_trade.monitor --status
+    python -m src.agent.copy_trade.monitor --scan     # one pass
 
-Cách hoạt động:
-    1. Poll Moralis API mỗi 30s để lấy lịch sử giao dịch mới nhất
-    2. Lọc các "token swap" chưa xử lý
-    3. Ghi alert vào state.json + in ra console
-    4. Nếu auto_execute = true → gọi best_execution để thực hiện swap giống
-"""
+Pipeline per scan: ChainEventSource.poll() → buy events feed the
+ClusterBuySignalTracker (>=3 distinct wallets / 15 min); a firing cluster opens ONE
+position via TradeEngine (paper when shadow_mode, real otherwise); out events feed
+the 2-of-cluster exit rule; a -70% price valve runs every pass. Wallets come from
+data/copy_trade/wallets.json (built by scripts/build_bsc_smart_wallets.py).
+
+Replaces the old Moralis-polling monitor (single-wallet-mirror, swap_parser.py +
+executor.py) after the 2026-07-16 phantom-position incident: a fresh DRY_RUN
+instance replayed 25 historical txs from an empty state.json and "bought" 9 phantom
+positions in under a minute. ChainEventSource's start_block=pool.latest_block() is
+the fix — this monitor must never construct it with an earlier block."""
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import time
-import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
-import sys
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-from dotenv import dotenv_values
 
 from ..config import settings
 from ..data.token_list import register_discovered
@@ -32,312 +33,198 @@ from ..email_notifier import EmailNotifier
 from ..execution.oneinch import OneInch
 from ..execution.openocean import OpenOcean
 from ..execution.pancakeswap import PancakeSwap
+from ..monitor.logger import get_logger
 from .budget import CopyTradeBudget
-from .executor import handle_alert
+from .chain_events import ChainEventSource, WalletEvent
+from .cluster_signal import ClusterBuySignalTracker
 from .positions import PositionStore
-from .swap_parser import parse_swap
+from .prices import get_price_usd
+from .rpc_pool import RpcPool
+from .trade_engine import TradeEngine
 
+log = get_logger(__name__)
 ROOT = Path(__file__).resolve().parents[3]
-ENV = dotenv_values(ROOT / ".env")
-API_KEY = ENV.get("MORALIS_API_KEY", "")
 CONFIG_PATH = ROOT / "data" / "copy_trade" / "config.json"
+WALLETS_PATH = ROOT / "data" / "copy_trade" / "wallets.json"
 STATE_PATH = ROOT / "data" / "copy_trade" / "state.json"
-
-MORALIS = "https://deep-index.moralis.io/api/v2.2"
-HEADERS = {"X-API-Key": API_KEY, "accept": "application/json"}
-
 POSITIONS_PATH = ROOT / "data" / "copy_trade" / "positions.json"
+SHADOW_PATH = ROOT / "data" / "copy_trade" / "shadow_positions.json"
+JOURNAL_PATH = ROOT / "data" / "copy_trade" / "closed_trades.jsonl"
+FAILURE_ALERT_THRESHOLD = 5
 
 
-def _reconcile_after_restart(budget: CopyTradeBudget, store: PositionStore) -> None:
-    """Replay disk-persisted state into the fresh in-RAM runtime (C2 + C3).
+def _load_wallets() -> list[str]:
+    if not WALLETS_PATH.exists():
+        print(f"FATAL: {WALLETS_PATH} missing — run scripts/build_bsc_smart_wallets.py first")
+        raise SystemExit(1)
+    return [w["address"] for w in json.loads(WALLETS_PATH.read_text(encoding="utf-8"))]
 
-    The token registry (`register_discovered`) and the budget tracker are both
-    RAM-only and start empty on every process. After a restart while holding open
-    positions, we must (C2) re-register each position's token so a mirror-sell can
-    resolve it via `get_token()`, and (C3) re-consume its budget slice so we never
-    over-allocate past the $15.39 hard cap. Without this the exact orphan-position /
-    over-allocation bugs this branch exists to fix reappear on the next deploy."""
-    for p in store.all():
+
+def _token_meta(pool: RpcPool, token_address: str) -> tuple[str, int]:
+    """symbol()/decimals() via eth_call; graceful fallback for weird tokens."""
+    def call(sig: str) -> str | None:
+        try:
+            return pool.call("eth_call", [{"to": token_address, "data": sig}, "latest"])
+        except Exception:  # noqa: BLE001
+            return None
+    sym_raw = call("0x95d89b41")        # symbol()
+    dec_raw = call("0x313ce567")        # decimals()
+    symbol = token_address[:8]
+    if sym_raw and len(sym_raw) > 130:
+        try:
+            n = int(sym_raw[66:130], 16)
+            symbol = bytes.fromhex(sym_raw[130:130 + n * 2]).decode(
+                "utf-8", errors="replace") or symbol
+        except Exception:  # noqa: BLE001
+            pass
+    decimals = int(dec_raw, 16) if dec_raw and dec_raw != "0x" else 18
+    return symbol, decimals
+
+
+def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
+                   engine: TradeEngine, store: PositionStore,
+                   notifier: EmailNotifier | None,
+                   token_meta_fn) -> None:
+    for ev in events:
+        if ev.direction == "out":
+            was_open = store.find_by_token(ev.token_address) is not None
+            engine.on_exit_signal(ev.wallet, ev.token_address)
+            if was_open and store.find_by_token(ev.token_address) is None:
+                _notify(notifier, f"[COPY-TRADE] CLOSED {ev.token_address[:10]}…",
+                        f"closed by cluster exit rule; wallet {ev.wallet}\n"
+                        f"tx https://bscscan.com/tx/{ev.tx_hash}")
+            continue
+        # direction == "in"
+        if store.find_by_token(ev.token_address) is not None:
+            continue   # already holding — never double-buy one token (spec §3)
+        price = get_price_usd(ev.token_address)
+        cluster = tracker.record(ev.token_address, ev.wallet, time.time(), price)
+        if cluster is None:
+            continue   # sub-threshold: log only, no email (spec §2)
+        symbol, decimals = token_meta_fn(ev.token_address)
+        opened = engine.open_cluster_position(ev.token_address, symbol, decimals,
+                                              cluster)
+        if opened:
+            _notify(notifier,
+                    f"[COPY-TRADE{' SHADOW' if engine._shadow else ''}] CLUSTER BUY {symbol}",
+                    f"token {ev.token_address}\nwallets: {', '.join(cluster['wallets'])}\n"
+                    f"first buy price: {cluster['first_price_usd']}\n"
+                    f"trigger price: {price}\n"
+                    f"tx https://bscscan.com/tx/{ev.tx_hash}")
+
+
+def _notify(notifier, subject: str, body: str) -> None:
+    if notifier is None:
+        return
+    try:
+        notifier.send_alert(subject, body)
+    except Exception:  # noqa: BLE001 — email must never kill the loop
+        log.warning("notify_failed", subject=subject)
+
+
+def _build_runtime(cfg: dict):
+    shadow = cfg.get("shadow_mode", True)
+    budget = CopyTradeBudget(total_usd=cfg.get("total_budget_usd", 16.14),
+                             slice_usd=cfg.get("slice_usd", 3.0))
+    store = PositionStore(SHADOW_PATH if shadow else POSITIONS_PATH)
+    store.load()
+    for p in store.all():   # reconcile after restart (C2+C3, now incl. v2 fields)
         register_discovered(p.token_symbol, p.token_address, p.token_decimals)
-        # ponytail: guard so a hand-edited/over-full positions.json can't crash
-        # startup (allocate() raises when below one slice) into a systemd restart loop.
         if budget.can_open_new():
             budget.allocate()
-
-
-def _build_runtime():
-    """One-time construction of the shared budget tracker, position store, and
-    executor pool — called once from main(), passed down into the scan loop."""
-    config = _load_json(CONFIG_PATH)
-    settings_ = config.get("copy_settings", {})
-    budget = CopyTradeBudget(
-        total_usd=settings_.get("total_budget_usd", 15.39),
-        slice_usd=settings_.get("slice_usd", 1.5),
-    )
-    store = PositionStore(POSITIONS_PATH)
-    store.load()
-    _reconcile_after_restart(budget, store)
-    # C1: build executors with a real signing account (live) exactly like
-    # agent_loop._make_executor_for, so live swaps never crash on a missing account.
-    account = None
-    if not settings.dry_run:
-        from eth_account import Account
-        account = Account.from_key(settings.agent_private_key)
-    executors = {
-        "1inch": OneInch(account=account, dry_run=settings.dry_run),
-        "openocean": OpenOcean(account=account, dry_run=settings.dry_run),
-        "pancake": PancakeSwap(account=account, dry_run=settings.dry_run),
-    }
-    return budget, store, executors
-
-
-# ─────────────────────── helpers ───────────────────────
-
-
-def _load_json(path: Path, default: dict | None = None) -> dict:
-    # A missing file is a real error for CONFIG (called with no default), but a normal
-    # fresh-deploy condition for the gitignored state.json (called with default=...) —
-    # so run_scan/show_status don't crash on the very first tick of a new checkout.
-    if default is not None and not path.exists():
-        return default
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _default_state() -> dict:
-    """Empty state matching the shape run_scan/check_wallet/show_status expect:
-    last_checked is indexed by address (check_wallet writes state["last_checked"][addr])."""
-    return {"last_checked": {}, "processed_txs": [], "alerts": []}
-
-
-def _save_json(path: Path, data: dict):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False, default=str)
-
-
-def _ts() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
-def _log(level: str, msg: str, **kw):
-    extra = " | ".join(f"{k}={v}" for k, v in kw.items()) if kw else ""
-    ts = datetime.now().strftime("%H:%M:%S")
-    print(f"[{ts}] [{level}] {msg} {extra}")
-
-
-# ─────────────────────── core ───────────────────────
-
-
-def fetch_recent_swaps(address: str, limit: int = 25) -> list[dict]:
-    """Lấy danh sách swap gần đây từ Moralis wallet history."""
-    url = f"{MORALIS}/wallets/{address}/history"
-    params = {"chain": "bsc", "limit": limit}
-    try:
-        r = requests.get(url, headers=HEADERS, params=params, timeout=20)
-        r.raise_for_status()
-        results = r.json().get("result", [])
-        return [tx for tx in results if tx.get("category") == "token swap"]
-    except Exception as e:
-        _log("ERROR", f"Failed to fetch swaps for {address[:12]}...", error=str(e))
-        return []
-
-
-def check_wallet(address: str, label: str, state: dict, config: dict) -> list[dict]:
-    """Check một ví và trả về danh sách alert mới."""
-    settings = config.get("copy_settings", {})
-    min_usd = settings.get("min_swap_usd", 5.0)
-    ignore_tokens = set(settings.get("ignore_tokens", []))
-    processed = set(state.get("processed_txs", []))
-
-    swaps = fetch_recent_swaps(address)
-    new_alerts = []
-
-    for tx in swaps:
-        tx_hash = tx.get("hash", "")
-        if tx_hash in processed:
-            continue
-
-        parsed = parse_swap(tx, address)
-        if not parsed:
-            processed.add(tx_hash)
-            continue
-
-        if parsed.token_symbol in ignore_tokens or parsed.token_address.lower() in {
-            t.lower() for t in ignore_tokens
-        }:
-            processed.add(tx_hash)
-            continue
-
-        alert = {
-            "wallet": address,
-            "wallet_label": label,
-            "detected_at": _ts(),
-            "parsed": parsed,
+    executors = None
+    if not shadow:
+        account = None
+        if not settings.dry_run:
+            from eth_account import Account
+            account = Account.from_key(settings.agent_private_key)
+        executors = {
+            "1inch": OneInch(account=account, dry_run=settings.dry_run),
+            "openocean": OpenOcean(account=account, dry_run=settings.dry_run),
+            "pancake": PancakeSwap(account=account, dry_run=settings.dry_run,
+                                   slippage_bps=cfg.get("exec_slippage_bps", 1500)),
         }
-        new_alerts.append(alert)
-        processed.add(tx_hash)
-
-        _log("ALERT", f"NEW SWAP on [{label}]",
-             symbol=parsed.token_symbol, direction=parsed.direction)
-
-    state["processed_txs"] = list(processed)
-    state["last_checked"][address] = _ts()
-    return new_alerts
+    engine = TradeEngine(budget=budget, store=store, executors=executors,
+                         shadow_mode=shadow, journal_path=JOURNAL_PATH,
+                         exit_wallets=cfg.get("exit_wallets", 2),
+                         valve_drop_pct=cfg.get("valve_drop_pct", 0.70),
+                         slice_usd=cfg.get("slice_usd", 3.0))
+    return budget, store, engine
 
 
-def run_scan(once: bool = False):
-    """Chạy 1 vòng scan hoặc loop liên tục."""
-    config = _load_json(CONFIG_PATH)
-    state = _load_json(STATE_PATH, default=_default_state())
-    settings = config.get("copy_settings", {})
-    interval = settings.get("poll_interval_seconds", 30)
-    budget, store, executors = _build_runtime()
+def run_scan(once: bool = False) -> None:
+    cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))["copy_settings"]
+    wallets = _load_wallets()
+    pool = RpcPool(cfg["rpc_endpoints"])
+    source = ChainEventSource(pool, wallets, start_block=pool.latest_block(),
+                              ignore_tokens=set(cfg.get("ignore_tokens", [])))
+    budget, store, engine = _build_runtime(cfg)
+    tracker = ClusterBuySignalTracker(min_wallets=cfg.get("min_wallets", 3),
+                                      window_minutes=cfg.get("window_minutes", 15))
     try:
         notifier = EmailNotifier()
     except ValueError:
         notifier = None
-    consecutive_failures = 0
+    interval = cfg.get("poll_interval_seconds", 45)
+    consecutive_failures, outage_alerted = 0, False
+    mode = "SHADOW" if cfg.get("shadow_mode", True) else "LIVE"
+    log.info("copy_trade_monitor_v2_started", wallets=len(wallets), mode=mode,
+             start_block=source.last_processed)
 
-    wallets = [w for w in config.get("target_wallets", []) if w.get("monitor")]
-    wallets.sort(key=lambda w: w.get("priority", 99))
-
-    _log("INFO", f"Copy-Trade Monitor started", wallets=len(wallets), interval=f"{interval}s")
-    print(f"  Monitoring {len(wallets)} wallets:")
-    for w in wallets:
-        print(f"    [{w['label']}] {w['address'][:12]}... ({w['role'][:50]})")
-
-    iteration = 0
     while True:
-        iteration += 1
-        _log("INFO", f"=== Scan #{iteration} ===")
-
-        all_new_alerts = []
-        for w in wallets:
-            alerts = check_wallet(w["address"], w["label"], state, config)
-            all_new_alerts.extend(alerts)
-            time.sleep(0.2)  # Rate limit
-
-        # A wallet only lands in last_checked when fetch_recent_swaps didn't except —
-        # 401s inside fetch_recent_swaps are already caught there and logged, but the
-        # wallet's last_checked timestamp is still written by check_wallet() either
-        # way, so use a request-level probe instead: re-check the most recently seen
-        # HTTP status via a lightweight one-off call every 10 iterations.
-        if iteration % 10 == 0:
-            probe = requests.get(
-                f"{MORALIS}/wallets/{wallets[0]['address']}/history",
-                headers=HEADERS, params={"chain": "bsc", "limit": 1}, timeout=10,
-            )
-            if probe.status_code == 401:
-                consecutive_failures += 1
-            else:
-                consecutive_failures = 0
-            if consecutive_failures == 1 and notifier is not None:  # alert once, not every 10 iters
-                notifier.send_alert(
-                    "[AEGIS COPY-TRADE] Moralis auth failing",
-                    f"wallets/history returned 401 at iteration {iteration}. "
-                    f"MORALIS_API_KEY likely invalid/expired — copy-trade monitor is blind until fixed.",
-                )
-
-        if all_new_alerts:
-            state.setdefault("alerts", []).extend(all_new_alerts)
-            _save_json(STATE_PATH, state)
-            _log("INFO", f"SUCCESS: {len(all_new_alerts)} new swap(s) detected!")
-
-            for a in all_new_alerts:
-                p = a["parsed"]
-                print(f"\n  {'='*60}")
-                print(f"  [SWAP ALERT] — [{a['wallet_label']}]")
-                print(f"  Time:      {p.timestamp}")
-                print(f"  Direction: {p.direction.upper()} {p.token_symbol}")
-                print(f"  Amount:    {p.token_amount:.6f} {p.token_symbol} ({p.token_address[:16]}...)")
-                print(f"  TX:        https://bscscan.com/tx/{p.hash}")
-                print(f"  {'='*60}")
-
-                # ponytail: guard against notifier=None (set above when SMTP creds are
-                # missing) — without it, a missing-config gap crashes the scan loop with
-                # AttributeError instead of being swallowed like the brief intended.
-                if notifier is not None:
-                    try:
-                        notifier.send_alert(
-                            f"[AEGIS COPY-TRADE] {a['parsed'].direction.upper()} {a['parsed'].token_symbol}",
-                            f"Wallet: {a['wallet_label']} ({a['wallet']})\n"
-                            f"Direction: {a['parsed'].direction}\n"
-                            f"Token: {a['parsed'].token_symbol} ({a['parsed'].token_address})\n"
-                            f"Amount: {a['parsed'].token_amount}\n"
-                            f"TX: https://bscscan.com/tx/{a['parsed'].hash}\n",
-                        )
-                    except ValueError:
-                        pass  # SMTP not configured — alert still logged to console above
-
-                if settings.get("auto_execute"):
-                    # I2: a reverted swap (slippage/gas/honeypot) raises RuntimeError —
-                    # routine in live trading. Guard it so one bad alert never kills the
-                    # scan loop (which would crash-loop under systemd Restart=always).
-                    try:
-                        handle_alert(a["parsed"], budget, store, executors)
-                    except Exception as e:  # noqa: BLE001
-                        _log("ERROR", "handle_alert failed — skipping this alert",
-                             symbol=a["parsed"].token_symbol, error=str(e))
-        else:
-            _log("INFO", "No new swaps detected")
-            _save_json(STATE_PATH, state)
-
+        try:
+            events = source.poll()
+            consecutive_failures, outage_alerted = 0, False
+        except Exception as e:  # noqa: BLE001
+            consecutive_failures += 1
+            log.error("event_poll_failed", error=str(e), streak=consecutive_failures)
+            if consecutive_failures >= FAILURE_ALERT_THRESHOLD and not outage_alerted:
+                _notify(notifier, "[COPY-TRADE] data source DOWN",
+                        f"{consecutive_failures} consecutive poll failures — "
+                        f"monitor is blind until RPC recovers. Last error: {e}")
+                outage_alerted = True
+            events = []
+        process_events(events, tracker, engine, store, notifier,
+                       lambda a: _token_meta(pool, a))
+        engine.check_valve()
+        STATE_PATH.write_text(json.dumps({
+            "last_scan_at": datetime.now(timezone.utc).isoformat(),
+            "last_processed_block": source.last_processed}), encoding="utf-8")
         if once:
             break
-
-        _log("INFO", f"Sleeping {interval}s...")
         time.sleep(interval)
 
 
-def show_status():
-    """Hiển thị trạng thái hiện tại của hệ thống."""
-    config = _load_json(CONFIG_PATH)
-    state = _load_json(STATE_PATH, default=_default_state())
-
+def show_status() -> None:
+    cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))["copy_settings"]
+    state = json.loads(STATE_PATH.read_text(encoding="utf-8")) if STATE_PATH.exists() else {}
     print("\n" + "=" * 60)
-    print("  COPY-TRADE MONITOR STATUS")
+    print("  COPY-TRADE MONITOR STATUS (v2)")
     print("=" * 60)
-
-    wallets = config.get("target_wallets", [])
-    print(f"\n  Configured wallets: {len(wallets)}")
-    for w in wallets:
-        monitored = "[ON]" if w.get("monitor") else "[OFF]"
-        last = state.get("last_checked", {}).get(w["address"], "never")
-        print(f"    {monitored} [{w['label']:<12}] {w['address'][:16]}... | last: {last}")
-
-    alerts = state.get("alerts", [])
-    processed = state.get("processed_txs", [])
-    print(f"\n  Total alerts: {len(alerts)}")
-    print(f"  Processed txs: {len(processed)}")
-
-    settings = config.get("copy_settings", {})
-    print(f"\n  Settings:")
-    print(f"    Auto-execute: {settings.get('auto_execute', False)}")
-    print(f"    Alert-only:   {settings.get('alert_only', True)}")
-    print(f"    Min swap USD: ${settings.get('min_swap_usd', 5)}")
-    print(f"    Max copy USD: ${settings.get('max_copy_usd', 50)}")
-    print(f"    Poll interval: {settings.get('poll_interval_seconds', 30)}s")
-
-    if alerts:
-        print(f"\n  Recent alerts:")
-        for a in alerts[-5:]:
-            print(f"    [{a.get('wallet_label','')}] {a.get('detected_at','')} — {a.get('summary','')}")
-
+    wallets_count = "?"
+    if WALLETS_PATH.exists():
+        wallets_count = len(json.loads(WALLETS_PATH.read_text(encoding="utf-8")))
+    print(f"\n  wallets.json:  {wallets_count}"
+          f"{'' if WALLETS_PATH.exists() else ' (missing — see scripts/build_bsc_smart_wallets.py)'}")
+    for label, path in (("REAL", POSITIONS_PATH), ("SHADOW", SHADOW_PATH)):
+        store = PositionStore(path)
+        store.load()
+        print(f"  {label} positions: {len(store.all())}")
+        for p in store.all():
+            print(f"    {p.token_symbol} ${p.usd_size} entry={p.entry_price_usd} "
+                  f"exits={len(p.exited_by)}/{len(p.cluster_wallets)}")
+    print(f"\n  shadow_mode: {cfg.get('shadow_mode')}")
+    print(f"  budget:      ${cfg.get('total_budget_usd')} total / ${cfg.get('slice_usd')} per slice")
+    print(f"  last scan:   {state.get('last_scan_at', 'never')}")
+    print(f"  last block:  {state.get('last_processed_block', '-')}")
     print()
 
 
-# ─────────────────────── CLI ───────────────────────
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Copy-Trade Monitor — Theo dõi swap từ cluster ví Top 1 Hackathon"
-    )
-    parser.add_argument("--status", action="store_true", help="Hiển thị trạng thái hệ thống")
-    parser.add_argument("--scan", action="store_true", help="Scan 1 lần rồi thoát")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Copy-Trade Monitor v2 (cluster+shadow)")
+    parser.add_argument("--status", action="store_true")
+    parser.add_argument("--scan", action="store_true")
     args = parser.parse_args()
-
     if args.status:
         show_status()
     elif args.scan:
