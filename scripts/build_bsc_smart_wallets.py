@@ -74,7 +74,11 @@ def fetch_gmgn_trades(limit: int = 500) -> list[dict]:
     if proc.returncode != 0:
         print(f"gmgn-cli failed: {proc.stderr.strip()}", file=sys.stderr)
         return []
-    return json.loads(proc.stdout).get("list", [])
+    try:
+        return json.loads(proc.stdout).get("list", [])
+    except json.JSONDecodeError as e:
+        print(f"gmgn-cli returned malformed JSON: {e} — skipping", file=sys.stderr)
+        return []
 
 
 def dexscreener_pair(token_address: str) -> dict | None:
@@ -101,19 +105,23 @@ def block_at_timestamp(pool: RpcPool, ts: int) -> int:
 
 
 def scan_winner(pool: RpcPool, token_address: str) -> list[str]:
-    pair = dexscreener_pair(token_address)
-    if pair is None or not pair.get("pairCreatedAt"):
-        print(f"  !! no BSC pair found for {token_address} — skipping")
+    try:
+        pair = dexscreener_pair(token_address)
+        if pair is None or not pair.get("pairCreatedAt"):
+            print(f"  !! no BSC pair found for {token_address} — skipping")
+            return []
+        created_ts = int(pair["pairCreatedAt"]) // 1000
+        start = block_at_timestamp(pool, created_ts)
+        logs = pool.get_logs_chunked(start, start + EARLY_WINDOW_BLOCKS,
+                                     topics=[TRANSFER_TOPIC], address=token_address)
+        exclude = {pair["pairAddress"].lower(), token_address.lower(), ZERO}
+        buyers = early_buyers(logs, exclude=exclude)
+        print(f"  {pair['baseToken']['symbol']}: {len(logs)} transfers, "
+              f"{len(buyers)} early buyers")
+        return buyers
+    except Exception as e:
+        print(f"  !! error scanning {token_address}: {e} — skipping")
         return []
-    created_ts = int(pair["pairCreatedAt"]) // 1000
-    start = block_at_timestamp(pool, created_ts)
-    logs = pool.get_logs_chunked(start, start + EARLY_WINDOW_BLOCKS,
-                                 topics=[TRANSFER_TOPIC], address=token_address)
-    exclude = {pair["pairAddress"].lower(), token_address.lower(), ZERO}
-    buyers = early_buyers(logs, exclude=exclude)
-    print(f"  {pair['baseToken']['symbol']}: {len(logs)} transfers, "
-          f"{len(buyers)} early buyers")
-    return buyers
 
 
 def main() -> None:
@@ -147,6 +155,7 @@ def main() -> None:
         if len(kept) >= args.top:
             break
         act = wallet_activity(bscscan_key, c["address"], now)
+        time.sleep(0.25)   # BscScan free tier: 5 req/s
         if act is None:
             print(f"  skip {c['address'][:12]}… activity lookup failed")
             continue
@@ -155,7 +164,6 @@ def main() -> None:
             print(f"  drop {c['address'][:12]}… ({reason})")
             continue
         kept.append(c)
-        time.sleep(0.25)   # BscScan free tier: 5 req/s
 
     ranked = build_ranked_list(kept, top_n=args.top)
     added_at = datetime.now(timezone.utc).isoformat()
