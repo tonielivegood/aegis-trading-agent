@@ -68,3 +68,26 @@ def test_wallet_to_wallet_between_tracked_emits_out_only_for_sender():
     src, _ = _source([_log(TOKEN, W, W)], receipt_has_swap=False)
     # degenerate self-transfer: must not crash, must not emit "in" without swap
     assert all(e.direction == "out" for e in src.poll())
+
+
+def test_log_missing_address_is_skipped_not_crashed():
+    lg = _log(TOKEN, W, OTHER)
+    del lg["address"]
+    src, _ = _source([lg])
+    assert src.poll() == []   # malformed log skipped, poll() doesn't raise
+
+
+def test_log_missing_block_number_is_skipped_not_crashed():
+    lg = _log(TOKEN, W, OTHER)
+    del lg["blockNumber"]
+    src, _ = _source([lg])
+    assert src.poll() == []   # malformed log skipped, poll() doesn't raise
+
+
+def test_receipt_log_with_empty_topics_is_not_a_swap():
+    src, pool = _source([_log(TOKEN, OTHER, W)])
+    pool.get_receipt.return_value = {"logs": [{"topics": []}, {"topics": [V2_SWAP_TOPIC]}]}
+    events = src.poll()
+    # empty-topics log doesn't crash iteration; the other log in the same
+    # receipt is still checked and still finds the swap
+    assert [e.direction for e in events] == ["in"]

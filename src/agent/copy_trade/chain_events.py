@@ -66,7 +66,10 @@ class ChainEventSource:
         topics = lg.get("topics", [])
         if len(topics) < 3:
             return None
-        token = lg["address"].lower()
+        address, block_number = lg.get("address"), lg.get("blockNumber")
+        if address is None or block_number is None:
+            return None   # malformed log from a flaky public RPC — skip it
+        token = address.lower()
         if token in self._ignore:
             return None
         wallet = _topic_addr(topics[2] if direction == "in" else topics[1])
@@ -77,13 +80,13 @@ class ChainEventSource:
             return None   # airdrop / plain transfer — not a buy
         return WalletEvent(wallet=wallet, token_address=token, direction=direction,
                            amount_raw=int(lg.get("data", "0x0"), 16),
-                           tx_hash=tx_hash, block=int(lg["blockNumber"], 16))
+                           tx_hash=tx_hash, block=int(block_number, 16))
 
     def _tx_has_swap(self, tx_hash: str) -> bool:
         if tx_hash in self._receipt_swap_cache:
             return self._receipt_swap_cache[tx_hash]
         receipt = self._pool.get_receipt(tx_hash) or {}
-        has = any(l.get("topics", [""])[0] in (V2_SWAP_TOPIC, V3_SWAP_TOPIC)
+        has = any(l.get("topics") and l["topics"][0] in (V2_SWAP_TOPIC, V3_SWAP_TOPIC)
                   for l in receipt.get("logs", []))
         self._receipt_swap_cache[tx_hash] = has
         if len(self._receipt_swap_cache) > 2000:   # ponytail: crude cap, fine for 50 wallets
