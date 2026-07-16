@@ -107,9 +107,25 @@ def _handle_sell(
         log.warning("copy_trade_sell_no_route", token=alert.token_symbol)
         return
 
-    executor = executors[ranked[0]]
-    result = executor.swap(alert.token_symbol, "USDT", pos.token_amount)
-    store.close_position(alert.token_address, alert.wallet)
-    budget.release(pos.usd_size)
-    log.info("copy_trade_sold", token=alert.token_symbol,
-              simulated=getattr(result, "simulated", None))
+    # EXIT is non-negotiable: fail over through the FULL ranked list (matches
+    # agent_loop._execute). The source wallet already sold and won't re-signal, so a
+    # single reverted swap on the top backend would strand the position and leak its
+    # budget slice forever — the orphan/stuck-position class this branch exists to kill.
+    last_err = None
+    for backend in ranked:
+        try:
+            result = executors[backend].swap(alert.token_symbol, "USDT", pos.token_amount)
+            store.close_position(alert.token_address, alert.wallet)
+            budget.release(pos.usd_size)
+            log.info("copy_trade_sold", token=alert.token_symbol, backend=backend,
+                      simulated=getattr(result, "simulated", None))
+            return
+        except Exception as e:  # noqa: BLE001 — try the next backend before giving up
+            last_err = e
+            log.warning("copy_trade_sell_failed", token=alert.token_symbol,
+                         backend=backend, error=str(e))
+    # Every backend failed: keep the position OPEN (no close, no release) so a future
+    # sell signal or manual intervention can still exit it. Don't propagate — the scan
+    # loop must keep ticking.
+    log.error("copy_trade_sell_all_backends_failed", token=alert.token_symbol,
+               error=str(last_err))

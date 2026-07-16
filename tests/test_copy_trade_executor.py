@@ -160,6 +160,59 @@ def test_buy_dry_run_falls_back_to_source_amount(mocker, tmp_path):
     assert pos.token_amount == pytest.approx(12345.0)
 
 
+def _open_gem_position(store):
+    store.open_position(CopyPosition(
+        token_symbol="GEM", token_address="0xgem1", token_decimals=9,
+        source_wallet="0xshark1", usd_size=1.5, token_amount=12345.0,
+        opened_at="2026-07-15T10:00:00Z",
+    ))
+
+
+def test_sell_fails_over_to_second_backend_when_first_reverts(mocker, tmp_path):
+    """Finding 1: the top-ranked backend's swap reverts, but the sell must still complete
+    via the next backend in the ranked list (position closed + budget released)."""
+    first = mocker.MagicMock()
+    first.swap.side_effect = RuntimeError("on-chain revert (slippage)")
+    second = mocker.MagicMock()
+    second.swap.return_value = mocker.MagicMock(simulated=False, tx_hash="0xsell2")
+    executors = {"1inch": first, "openocean": second}
+    mocker.patch("src.agent.copy_trade.executor.rank_backends",
+                 return_value=["1inch", "openocean"])
+    budget = CopyTradeBudget(total_usd=13.89, slice_usd=1.5)  # 1 slice already spent
+    store = PositionStore(tmp_path / "positions.json")
+    _open_gem_position(store)
+
+    handle_alert(SELL, budget, store, executors)
+
+    first.swap.assert_called_once_with("GEM", "USDT", 12345.0)
+    second.swap.assert_called_once_with("GEM", "USDT", 12345.0)  # failover attempted
+    assert store.find("0xgem1", "0xshark1") is None             # closed via 2nd backend
+    assert budget.available_usd == pytest.approx(15.39)         # slice released
+
+
+def test_sell_all_backends_fail_keeps_position_open_and_holds_budget(mocker, tmp_path):
+    """Finding 1: if EVERY ranked backend reverts, the position must stay open and its
+    budget slice must NOT be released — so a future sell signal / manual exit can still
+    act on it — and handle_alert must not raise (scan loop keeps ticking)."""
+    first = mocker.MagicMock()
+    first.swap.side_effect = RuntimeError("revert 1")
+    second = mocker.MagicMock()
+    second.swap.side_effect = RuntimeError("revert 2")
+    executors = {"1inch": first, "openocean": second}
+    mocker.patch("src.agent.copy_trade.executor.rank_backends",
+                 return_value=["1inch", "openocean"])
+    budget = CopyTradeBudget(total_usd=13.89, slice_usd=1.5)  # 1 slice already spent
+    store = PositionStore(tmp_path / "positions.json")
+    _open_gem_position(store)
+
+    handle_alert(SELL, budget, store, executors)  # must NOT raise
+
+    first.swap.assert_called_once_with("GEM", "USDT", 12345.0)
+    second.swap.assert_called_once_with("GEM", "USDT", 12345.0)  # both tried
+    assert store.find("0xgem1", "0xshark1") is not None          # still open
+    assert budget.available_usd == pytest.approx(13.89)          # slice NOT released
+
+
 def test_buy_releases_budget_when_swap_raises(mocker, tmp_path):
     """I2: a swap that reverts after budget.allocate() must return the slice to the
     pool (and propagate) so the allocated budget is never leaked."""
