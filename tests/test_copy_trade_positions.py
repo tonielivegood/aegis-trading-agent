@@ -112,6 +112,16 @@ def test_new_fields_default_for_legacy_json(tmp_path):
     assert pos.entry_price_usd == 0.0 and pos.simulated is False
 
 
+def test_first_price_usd_defaults_for_legacy_json(tmp_path):
+    p = tmp_path / "positions.json"
+    p.write_text('[{"token_symbol": "OLD", "token_address": "0xabc", '
+                 '"token_decimals": 18, "source_wallet": "0xdef", "usd_size": 1.5, '
+                 '"token_amount": 10.0, "opened_at": "t"}]', encoding="utf-8")
+    store = PositionStore(p)
+    store.load()
+    assert store.all()[0].first_price_usd == 0.0
+
+
 def test_find_by_token_and_close_by_token(tmp_path):
     store = PositionStore(tmp_path / "p.json")
     store.load()

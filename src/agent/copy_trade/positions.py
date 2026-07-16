@@ -26,6 +26,7 @@ class CopyPosition:
     exited_by: list[str] = field(default_factory=list)
     entry_price_usd: float = 0.0
     simulated: bool = False
+    first_price_usd: float = 0.0
 
 
 class PositionStore:

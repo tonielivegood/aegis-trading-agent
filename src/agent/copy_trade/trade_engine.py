@@ -91,7 +91,8 @@ class TradeEngine:
             token_amount=usd_size / entry,
             opened_at=datetime.now(timezone.utc).isoformat(),
             cluster_wallets=cluster["wallets"], entry_price_usd=entry,
-            simulated=True)
+            simulated=True,
+            first_price_usd=cluster.get("first_price_usd") or 0.0)
 
     def _live_fill(self, token_address, token_symbol, decimals, usd_size,
                    cluster) -> CopyPosition | None:
@@ -113,7 +114,8 @@ class TradeEngine:
             token_amount=token_amount,
             opened_at=datetime.now(timezone.utc).isoformat(),
             cluster_wallets=cluster["wallets"],
-            entry_price_usd=usd_size / token_amount, simulated=False)
+            entry_price_usd=usd_size / token_amount, simulated=False,
+            first_price_usd=cluster.get("first_price_usd") or 0.0)
 
     # ---------- exits ----------
 
@@ -160,6 +162,7 @@ class TradeEngine:
             "token_address": pos.token_address, "token_symbol": pos.token_symbol,
             "simulated": pos.simulated, "usd_size": pos.usd_size,
             "entry_price_usd": pos.entry_price_usd, "exit_price_usd": effective_exit,
+            "first_price_usd": pos.first_price_usd,
             "pnl_usd": round(pnl_usd, 4),
             "pnl_pct": round((effective_exit / pos.entry_price_usd - 1), 4)
             if pos.entry_price_usd else None,

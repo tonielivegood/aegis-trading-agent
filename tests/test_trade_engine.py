@@ -31,9 +31,24 @@ def test_shadow_open_never_touches_executors(_g, _p, _t, tmp_path):
     assert pos.simulated is True
     assert pos.entry_price_usd == 2.0 * (1 + 0.04 + 0.01)
     assert pos.cluster_wallets == [W1, W2, W3]
+    assert pos.first_price_usd == 1.0                     # from CLUSTER fixture
     assert budget.available_usd == 16.14 - 3.0
     executors.assert_not_called()
     assert not executors.method_calls        # zero interaction, ever
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.04, 0.04))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=2.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_first_price_usd_none_in_cluster_defaults_to_zero(_g, _p, _t, tmp_path):
+    """cluster_signal.record() can report first_price_usd=None (no price at
+    observation time) — that must not crash the fill or leak a None into the
+    journal used by the shadow-mode entry-lateness report."""
+    eng, _budget, store = _engine(tmp_path)
+    cluster = {"wallets": [W1, W2, W3], "first_ts": 0.0, "first_price_usd": None}
+    assert eng.open_cluster_position(T, "GEM", 18, cluster) is True
+    assert store.find_by_token(T).first_price_usd == 0.0
 
 
 @patch("src.agent.copy_trade.trade_engine.passes_safety_check",
@@ -83,6 +98,7 @@ def test_valve_closes_at_70pct_drawdown(_s, price_mock, _t, tmp_path):
     row = json.loads((tmp_path / "closed.jsonl").read_text().splitlines()[-1])
     assert row["reason"] == "valve" and row["simulated"] is True
     assert row["pnl_pct"] < -0.5
+    assert row["first_price_usd"] == 10.0                 # ties entry to ví-1 buy price
 
 
 @patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
