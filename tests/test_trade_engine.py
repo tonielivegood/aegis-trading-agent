@@ -1,8 +1,9 @@
 import json
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from src.agent.copy_trade.budget import CopyTradeBudget
-from src.agent.copy_trade.positions import PositionStore
+from src.agent.copy_trade.positions import CopyPosition, PositionStore
 from src.agent.copy_trade.trade_engine import TradeEngine
 
 T = "0x" + "a" * 40
@@ -112,3 +113,138 @@ def test_valve_holds_when_price_unavailable(_s, _p, _t, tmp_path):
         eng.open_cluster_position(T, "GEM", 18, CLUSTER)
     eng.check_valve()                                    # price None — do nothing
     assert store.find_by_token(T) is not None
+
+
+# ---------- live-money path (Finding 1) ----------
+
+@patch("src.agent.copy_trade.trade_engine.rank_backends")
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_live_buy_success_opens_real_position(_s, rank_mock, tmp_path):
+    buy_result = MagicMock(received_out_wei=5 * 10 ** 18, expected_out_wei=0)
+    pancake = MagicMock()
+    pancake.swap.return_value = buy_result
+    executors = {"pancake": pancake}
+    rank_mock.return_value = ["pancake"]
+    eng, budget, store = _engine(tmp_path, shadow=False, executors=executors)
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is True
+    pos = store.find_by_token(T)
+    assert pos.simulated is False
+    assert pos.token_amount == 5.0                        # 5e18 wei / 10**18
+    assert pos.entry_price_usd == 3.0 / 5.0                # usd_size / token_amount
+    pancake.swap.assert_called_once_with("USDT", "GEM", 3.0)
+    assert budget.available_usd == 16.14 - 3.0
+
+
+@patch("src.agent.copy_trade.trade_engine.rank_backends", return_value=[])
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_live_buy_no_route_releases_budget(_s, _r, tmp_path):
+    executors = {"pancake": MagicMock()}
+    eng, budget, store = _engine(tmp_path, shadow=False, executors=executors)
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is False
+    assert budget.available_usd == 16.14                  # slice released, not leaked
+    assert store.all() == []
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.rank_backends")
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_live_sell_succeeds_on_first_ranked_backend(_s, rank_mock, _p, _t, tmp_path):
+    pancake = MagicMock()
+    pancake.swap.return_value = MagicMock(received_out_wei=5 * 10 ** 18,
+                                          expected_out_wei=0)
+    executors = {"pancake": pancake}
+    rank_mock.return_value = ["pancake"]                  # used for buy AND sell
+    eng, budget, store = _engine(tmp_path, shadow=False, executors=executors)
+    eng.open_cluster_position(T, "GEM", 18, CLUSTER)
+    pancake.swap.reset_mock()
+
+    eng.on_exit_signal(W1, T)
+    eng.on_exit_signal(W2, T)                             # 2 of 3 — triggers close
+    assert store.find_by_token(T) is None
+    pancake.swap.assert_called_once_with("GEM", "USDT", 5.0)
+    assert budget.available_usd == 16.14                  # slice released on close
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.rank_backends")
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_live_sell_fails_over_to_second_backend(_s, rank_mock, _p, _t, tmp_path):
+    def _swap_a(token_in, token_out, amount):
+        if token_in == "USDT":                            # the buy leg
+            return MagicMock(received_out_wei=5 * 10 ** 18, expected_out_wei=0)
+        raise RuntimeError("route dried up")                # the sell leg fails
+
+    backend_a = MagicMock()
+    backend_a.swap.side_effect = _swap_a
+    backend_b = MagicMock()
+    backend_b.swap.return_value = MagicMock()
+    executors = {"a": backend_a, "b": backend_b}
+    rank_mock.return_value = ["a", "b"]
+    eng, budget, store = _engine(tmp_path, shadow=False, executors=executors)
+    eng.open_cluster_position(T, "GEM", 18, CLUSTER)
+
+    eng.on_exit_signal(W1, T)
+    eng.on_exit_signal(W2, T)                             # triggers close: a fails, b wins
+    assert store.find_by_token(T) is None                  # closed despite first failure
+    backend_b.swap.assert_called_once_with("GEM", "USDT", 5.0)
+    assert budget.available_usd == 16.14
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.rank_backends")
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_live_sell_all_backends_fail_keeps_position_open(_s, rank_mock, _p, _t,
+                                                         tmp_path):
+    def _swap(token_in, token_out, amount):
+        if token_in == "USDT":                            # the buy leg
+            return MagicMock(received_out_wei=5 * 10 ** 18, expected_out_wei=0)
+        raise RuntimeError("no route")                      # every sell leg fails
+
+    backend_a = MagicMock()
+    backend_a.swap.side_effect = _swap
+    backend_b = MagicMock()
+    backend_b.swap.side_effect = _swap
+    executors = {"a": backend_a, "b": backend_b}
+    rank_mock.return_value = ["a", "b"]
+    eng, budget, store = _engine(tmp_path, shadow=False, executors=executors)
+    eng.open_cluster_position(T, "GEM", 18, CLUSTER)
+    assert budget.available_usd == 16.14 - 3.0
+
+    eng.on_exit_signal(W1, T)
+    eng.on_exit_signal(W2, T)                             # all backends fail
+    assert store.find_by_token(T) is not None              # position stays open
+    assert store.find_by_token(T).exited_by == [W1, W2]    # votes recorded, not lost
+    assert budget.available_usd == 16.14 - 3.0              # NOT released — not leaked
+
+
+# ---------- Finding 2: shadow/real wiring-bug guard ----------
+
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=0.1)
+def test_shadow_engine_refuses_to_close_a_real_position(_p, tmp_path):
+    """Defense-in-depth: if a shadow-mode engine ever ends up holding a
+    simulated=False position (a hypothetical future wiring bug), _close() must
+    refuse to call _sell_live — never touching self._executors — rather than
+    crash (executors may be None) or risk a real swap during shadow mode."""
+    executors = MagicMock()
+    eng, budget, store = _engine(tmp_path, shadow=True, executors=executors)
+    bad_pos = CopyPosition(
+        token_symbol="GEM", token_address=T, token_decimals=18,
+        source_wallet="", usd_size=3.0, token_amount=5.0,
+        opened_at=datetime.now(timezone.utc).isoformat(),
+        cluster_wallets=[W1, W2, W3], entry_price_usd=1.0,
+        simulated=False, first_price_usd=1.0)
+    store.open_position(bad_pos)                          # bypass _paper_fill
+
+    eng.check_valve()                                     # price 0.1 vs entry 1.0 → -90%
+
+    assert store.find_by_token(T) is not None              # NOT removed — fail safe
+    executors.assert_not_called()
+    assert not executors.method_calls                      # zero interaction, ever

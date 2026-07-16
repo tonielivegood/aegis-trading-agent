@@ -147,6 +147,13 @@ class TradeEngine:
 
     def _close(self, pos: CopyPosition, reason: str) -> None:
         exit_price = get_price_usd(pos.token_address) or 0.0
+        if not pos.simulated and self._shadow:
+            # Invariant violation: a shadow-mode engine should never hold a real
+            # position. Fail safe — don't touch executors/budget/store; leave the
+            # position for manual investigation rather than risk a crash (executors
+            # may be None here) or, worse, an unintended real swap.
+            log.error("shadow_engine_has_real_position", token=pos.token_symbol)
+            return
         if not pos.simulated:
             if not self._sell_live(pos):
                 return   # keep position open; a later signal/valve tick retries
