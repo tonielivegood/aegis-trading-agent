@@ -63,6 +63,33 @@ def test_out_events_route_to_exit_logic(_s, _mp, _ep, _t, tmp_path):
     assert store.all() == []                       # 2-of-cluster exit fired
 
 
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.monitor.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_close_clears_tracker_so_stale_wallet_cannot_immediately_reopen(
+        _s, _mp, _ep, _t, tmp_path):
+    """Finding I1 regression: once a cluster-exit close happens, the wallets that
+    formed the original cluster must NOT still be sitting in the tracker's buffer
+    — otherwise a single stale "in" event from one of them re-satisfies the old
+    >=3-wallet buffer and immediately re-opens a new position, inflating the
+    shadow-mode cluster-event count with re-entry churn."""
+    tracker, engine, store = _pipeline(tmp_path)
+    meta = lambda addr: ("GEM", 18)
+    process_events([_ev(W1), _ev(W2), _ev(W3)], tracker, engine, store, None, meta)
+    assert len(store.all()) == 1
+    process_events([_ev(W1, "out"), _ev(W2, "out")],
+                   tracker, engine, store, None, meta)
+    assert store.all() == []                       # 2-of-cluster exit fired
+    # W3 was part of the original cluster and is still within the 15-min window.
+    # Without clearing the tracker's buffer on close, this single "in" event
+    # would immediately re-fire (the buffer already held >=3 wallets) and
+    # re-open a position on stale/crashed-price data.
+    process_events([_ev(W3)], tracker, engine, store, None, meta)
+    assert store.all() == []                       # must NOT reopen from stale buffer
+
+
 def test_wallets_json_required(tmp_path, monkeypatch):
     import src.agent.copy_trade.monitor as mon
     monkeypatch.setattr(mon, "WALLETS_PATH", tmp_path / "missing.json")

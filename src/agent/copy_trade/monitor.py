@@ -90,7 +90,10 @@ def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
             was_open = store.find_by_token(ev.token_address) is not None
             engine.on_exit_signal(ev.wallet, ev.token_address)
             if was_open and store.find_by_token(ev.token_address) is None:
-                _notify(notifier, f"[COPY-TRADE] CLOSED {ev.token_address[:10]}…",
+                tracker.clear(ev.token_address)   # fresh convergence required to re-fire
+                _notify(notifier,
+                        f"[COPY-TRADE{' SHADOW' if engine._shadow else ''}] "
+                        f"CLOSED {ev.token_address[:10]}…",
                         f"closed by cluster exit rule; wallet {ev.wallet}\n"
                         f"tx https://bscscan.com/tx/{ev.tx_hash}")
             continue
@@ -128,10 +131,13 @@ def _build_runtime(cfg: dict):
                              slice_usd=cfg.get("slice_usd", 3.0))
     store = PositionStore(SHADOW_PATH if shadow else POSITIONS_PATH)
     store.load()
-    for p in store.all():   # reconcile after restart (C2+C3, now incl. v2 fields)
+    positions = store.all()
+    for p in positions:   # reconcile after restart (C2+C3, now incl. v2 fields)
         register_discovered(p.token_symbol, p.token_address, p.token_decimals)
-        if budget.can_open_new():
-            budget.allocate()
+    # Reconcile from the positions' actual stored usd_size, not a replayed
+    # slice-count — the two diverge if slice_usd/total_budget_usd is edited
+    # (live config edits) while positions are open (Finding I2).
+    budget.reconcile(sum(p.usd_size for p in positions))
     executors = None
     if not shadow:
         account = None
@@ -189,6 +195,7 @@ def run_scan(once: bool = False) -> None:
         open_before = {p.token_address for p in store.all()}
         engine.check_valve()
         for token_address in open_before - {p.token_address for p in store.all()}:
+            tracker.clear(token_address)   # fresh convergence required to re-fire
             _notify(notifier,
                     f"[COPY-TRADE{' SHADOW' if engine._shadow else ''}] "
                     f"VALVE STOP-LOSS {token_address[:10]}…",

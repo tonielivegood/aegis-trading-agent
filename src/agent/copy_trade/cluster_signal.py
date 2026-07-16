@@ -33,3 +33,11 @@ class ClusterBuySignalTracker:
         first_ts, first_price = ordered[0][1]
         return {"wallets": [w for w, _ in ordered],
                 "first_ts": first_ts, "first_price_usd": first_price}
+
+    def clear(self, token_address: str) -> None:
+        """Drop all buffered observations for a token. Call this whenever a
+        position for the token closes — otherwise the wallets that formed the
+        original cluster stay in the buffer and can immediately re-fire a new
+        cluster event (and a new position) at a crashed/exited price, corrupting
+        the shadow-mode go-live metric with re-entry churn."""
+        self._obs.pop(token_address.lower(), None)
