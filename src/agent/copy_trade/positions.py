@@ -88,6 +88,6 @@ class PositionStore:
         return pos
 
     def update(self, pos: CopyPosition) -> None:
-        if pos not in self._positions:
+        if not any(p is pos for p in self._positions):
             raise ValueError("position not in store")
         self._save()
