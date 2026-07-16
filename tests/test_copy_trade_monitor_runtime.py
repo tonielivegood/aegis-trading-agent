@@ -21,6 +21,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import src.agent.copy_trade.monitor as mon
 from src.agent.copy_trade.positions import CopyPosition, PositionStore
 
@@ -89,6 +91,35 @@ def test_build_runtime_live_mode_builds_all_backends(tmp_path, monkeypatch):
     m_1inch.assert_called_once()
     m_oo.assert_called_once()
     m_pcs.assert_called_once()
+
+
+# ---------- Finding I2: budget reconciliation must use actual usd_size, not a
+# ---------- replayed slice-count ----------
+
+def test_build_runtime_reconciles_budget_from_actual_position_sizes(tmp_path, monkeypatch):
+    """Positions were opened back when slice_usd was 1.5 (2 positions => $3.0 spent).
+    The CURRENT config (loaded here) has since been edited to slice_usd=3.0 — a
+    documented live-config-edit practice on the VPS. Reconciliation must use the
+    positions' own stored usd_size ($1.5 each, $3.0 total), NOT replay
+    can_open_new()/allocate() at the new slice_usd (which would allocate 1 slice
+    of $3.0 for 2 loaded positions and leave available_usd wrong)."""
+    shadow_path = tmp_path / "shadow_positions.json"
+    monkeypatch.setattr(mon, "SHADOW_PATH", shadow_path)
+    monkeypatch.setattr(mon, "POSITIONS_PATH", tmp_path / "positions.json")
+
+    store = PositionStore(shadow_path)
+    for i in range(2):
+        store.open_position(CopyPosition(
+            token_symbol=f"GEM{i}", token_address="0x" + str(i) * 40, token_decimals=18,
+            source_wallet="", usd_size=1.5, token_amount=1.5,
+            opened_at="2026-07-16T00:00:00Z",
+            cluster_wallets=[W], entry_price_usd=1.0, simulated=True,
+            first_price_usd=1.0))
+
+    budget, _, _ = mon._build_runtime({
+        "shadow_mode": True, "total_budget_usd": 16.14, "slice_usd": 3.0})
+
+    assert budget.available_usd == pytest.approx(16.14 - 3.0)   # 16.14 - sum(usd_size)
 
 
 # ---------- Finding 1b: run_scan backlog-replay guard ----------
