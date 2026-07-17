@@ -54,7 +54,16 @@ class ChainEventSource:
         for position, direction in ((2, "in"), (1, "out")):
             topics: list = [TRANSFER_TOPIC, None, None]
             topics[position] = self._wallet_topics
-            for lg in self._pool.get_logs_chunked(frm, to, topics=topics):
+            # chunk=40: free public endpoints cap eth_getLogs ranges hard
+            # (1rpc.io/bnb at 50 blocks, nodies.app at 250 — confirmed live
+            # 2026-07-17). Without this, any poll gap over the cap (a slow
+            # scan, a brief outage, a burst of confirmed events needing extra
+            # receipt lookups) raises here BEFORE last_processed advances —
+            # and since it never advances on failure, the gap only grows on
+            # every subsequent tick, permanently blinding the bot with no
+            # self-recovery. Small chunking makes get_logs_chunked's own
+            # splitting loop absorb any gap size instead.
+            for lg in self._pool.get_logs_chunked(frm, to, topics=topics, chunk=40):
                 ev = self._to_event(lg, direction)
                 if ev is not None:
                     events.append(ev)

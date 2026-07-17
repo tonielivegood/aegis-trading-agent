@@ -47,6 +47,18 @@ def test_ignore_tokens_filtered():
     assert src.poll() == []
 
 
+def test_poll_uses_small_chunk_so_a_large_gap_never_gets_permanently_stuck():
+    # Real incident, 2026-07-17: get_logs_chunked's 2000-block default sent
+    # a whole poll gap as ONE eth_getLogs call, and free RPC endpoints cap
+    # ranges at 50-250 blocks — any gap over that raised before last_processed
+    # ever advanced, so the bot went permanently blind after one slow tick.
+    # chunk=40 makes get_logs_chunked's own splitting loop absorb any gap.
+    src, pool = _source([], latest=100_000)  # a huge gap from start_block=100
+    src.poll()
+    for call in pool.get_logs_chunked.call_args_list:
+        assert call.kwargs.get("chunk") == 40
+
+
 def test_poll_advances_and_never_rescans():
     src, pool = _source([_log(TOKEN, OTHER, W)])
     src.poll()
