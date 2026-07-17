@@ -2,7 +2,15 @@
 we dropped Moralis: 10 wallets x 30s polling exhausted its free daily quota mid-day,
 leaving the bot blind; see the v2 spec). Rotates through fallback endpoints because
 public nodes have no SLA, and chunks eth_getLogs ranges because public nodes cap
-the block span per call."""
+the block span per call.
+
+DEFAULT_ENDPOINTS verified 2026-07-16 to support address-less, topic-only
+eth_getLogs (what ChainEventSource needs — it watches wallets across ANY token,
+so it can't scope queries to a single contract address). The obvious default
+choices do NOT work for this: bsc-dataseed.binance.org/defibit.io reject every
+topic-only eth_getLogs call with "limit exceeded" regardless of range size, and
+rpc.ankr.com/bsc now requires a paid API key. bsc.publicnode.com also rejects
+address-less queries outright. Re-verify before swapping in a new default."""
 from __future__ import annotations
 
 import requests
@@ -18,9 +26,8 @@ V2_SWAP_TOPIC = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d
 V3_SWAP_TOPIC = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67"
 
 DEFAULT_ENDPOINTS = [
-    "https://bsc-dataseed.binance.org",
-    "https://bsc-dataseed1.defibit.io",
-    "https://rpc.ankr.com/bsc",
+    "https://bsc-pokt.nodies.app",
+    "https://1rpc.io/bnb",
 ]
 
 
@@ -41,6 +48,7 @@ class RpcPool:
 
     def call(self, method: str, params: list) -> object:
         last_err: Exception | None = None
+        null_result_seen = False
         for url in self._endpoints:
             try:
                 r = requests.post(url, json={"jsonrpc": "2.0", "id": 1,
@@ -50,11 +58,25 @@ class RpcPool:
                 payload = r.json()
                 if "error" in payload:
                     raise RpcError(f"{method} on {url}: {payload['error']}")
-                return payload.get("result")
+                result = payload.get("result")
+                if result is None:
+                    # Some public gateways (seen live on 1rpc.io/bnb) answer with a
+                    # bare null "result" instead of a JSON-RPC error when they lack
+                    # archive data for an old block/tx — try the next endpoint
+                    # rather than trusting this as the real answer. If every
+                    # endpoint agrees on null, that's returned below as the
+                    # legitimate final answer (e.g. a receipt that truly
+                    # doesn't exist yet).
+                    null_result_seen = True
+                    log.debug("rpc_endpoint_null_result", url=url, method=method)
+                    continue
+                return result
             except Exception as e:  # noqa: BLE001 — any endpoint failure → try next
                 last_err = e
                 log.debug("rpc_endpoint_failed", url=url, method=method,
                           error=type(e).__name__)
+        if null_result_seen:
+            return None
         raise RpcError(f"all RPC endpoints failed for {method}: {last_err}")
 
     def latest_block(self) -> int:

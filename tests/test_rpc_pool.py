@@ -57,6 +57,29 @@ def test_call_raises_rpc_error_on_error_payload(monkeypatch):
         RpcPool(["http://a"]).call("eth_getLogs", [{}])
 
 
+def test_call_skips_null_result_and_tries_next_endpoint(monkeypatch):
+    # Real-world case (1rpc.io/bnb, 2026-07-16): a gateway with no archive data
+    # for an old block answers {"result": null} instead of a JSON-RPC error.
+    calls = []
+    def fake_post(url, json=None, timeout=None):
+        calls.append(url)
+        if url == "http://no-archive":
+            return FakeResponse({"jsonrpc": "2.0", "id": 1, "result": None})
+        return FakeResponse({"jsonrpc": "2.0", "id": 1, "result": {"timestamp": "0x1"}})
+    monkeypatch.setattr("src.agent.copy_trade.rpc_pool.requests.post", fake_post)
+    pool = RpcPool(["http://no-archive", "http://has-archive"])
+    assert pool.call("eth_getBlockByNumber", ["0x1", False]) == {"timestamp": "0x1"}
+    assert calls == ["http://no-archive", "http://has-archive"]
+
+
+def test_call_returns_none_when_every_endpoint_gives_null_result(monkeypatch):
+    def fake_post(url, json=None, timeout=None):
+        return FakeResponse({"jsonrpc": "2.0", "id": 1, "result": None})
+    monkeypatch.setattr("src.agent.copy_trade.rpc_pool.requests.post", fake_post)
+    pool = RpcPool(["http://a", "http://b"])
+    assert pool.call("eth_getTransactionReceipt", ["0xnonexistent"]) is None
+
+
 def test_latest_block_parses_hex(monkeypatch):
     monkeypatch.setattr(RpcPool, "call", lambda self, m, p: "0x2a")
     assert RpcPool(["x"]).latest_block() == 42

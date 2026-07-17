@@ -27,7 +27,7 @@ from dotenv import dotenv_values
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.agent.copy_trade.rpc_pool import (  # noqa: E402
-    DEFAULT_ENDPOINTS, TRANSFER_TOPIC, RpcPool,
+    DEFAULT_ENDPOINTS, TRANSFER_TOPIC, RpcError, RpcPool,
 )
 from src.agent.copy_trade.wallet_discovery import (  # noqa: E402
     build_ranked_list, cross_winner_candidates, early_buyers, passes_filters,
@@ -82,21 +82,51 @@ def fetch_gmgn_trades(limit: int = 500) -> list[dict]:
 
 
 def dexscreener_pair(token_address: str) -> dict | None:
+    """Highest-liquidity BSC pair that actually has a pairCreatedAt timestamp —
+    some DexScreener pairs (seen for real on 2026-07-16, e.g. an older LAB pool)
+    are missing this field on the metadata even though other pairs for the same
+    token have it, so the single highest-liquidity pair isn't always usable."""
     r = requests.get(f"https://api.dexscreener.com/latest/dex/tokens/{token_address}",
                      timeout=20)
     r.raise_for_status()
     pairs = [p for p in (r.json().get("pairs") or []) if p.get("chainId") == "bsc"]
-    if not pairs:
-        return None
-    return max(pairs, key=lambda p: (p.get("liquidity") or {}).get("usd") or 0)
+    pairs.sort(key=lambda p: (p.get("liquidity") or {}).get("usd") or 0, reverse=True)
+    for p in pairs:
+        if p.get("pairCreatedAt"):
+            return p
+    return None
+
+
+AVG_BLOCK_TIME_S = 3  # BSC's stable post-Luban block time; only used to anchor an
+                       # estimate for RECENT history (our winner tokens are all
+                       # <2 years old) — never used to search all the way to genesis.
 
 
 def block_at_timestamp(pool: RpcPool, ts: int) -> int:
-    """Binary-search the first block at/after unix ts (public RPC has no direct API)."""
-    lo, hi = 1, pool.latest_block()
+    """First block at/after unix ts (public RPC has no direct timestamp->block API).
+
+    Anchors on the current tip and BSC's average block time to estimate a starting
+    point, then refines with a narrow local binary search — rather than bisecting
+    the full [1, latest] range. A plain full-range binary search probes deep into
+    chain history (back to 2020) on its first few iterations regardless of how
+    recent the target timestamp is, and free public RPC endpoints don't reliably
+    have archive data that far back (confirmed live 2026-07-16: both configured
+    endpoints returned a bare null for an old block, crashing the naive version of
+    this function). Anchoring avoids ever probing that deep for our real use case."""
+    latest = pool.latest_block()
+    latest_blk = pool.call("eth_getBlockByNumber", [hex(latest), False])
+    if latest_blk is None:
+        raise RpcError(f"no data for the latest block ({latest}) from any endpoint")
+    latest_ts = int(latest_blk["timestamp"], 16)
+    est_blocks_back = max(0, (latest_ts - ts) // AVG_BLOCK_TIME_S)
+    window = max(2000, est_blocks_back // 10)  # covers block-time estimate drift
+    lo = max(1, latest - est_blocks_back - window)
+    hi = min(latest, latest - est_blocks_back + window)
     while lo < hi:
         mid = (lo + hi) // 2
         blk = pool.call("eth_getBlockByNumber", [hex(mid), False])
+        if blk is None:
+            raise RpcError(f"no data for block {mid} from any endpoint")
         if int(blk["timestamp"], 16) < ts:
             lo = mid + 1
         else:
@@ -112,8 +142,14 @@ def scan_winner(pool: RpcPool, token_address: str) -> list[str]:
             return []
         created_ts = int(pair["pairCreatedAt"]) // 1000
         start = block_at_timestamp(pool, created_ts)
+        # chunk=40: free public endpoints cap eth_getLogs ranges hard (1rpc.io/bnb
+        # at 50 blocks, nodies.app at 250 — confirmed live 2026-07-16), well under
+        # get_logs_chunked's 2000-block default used elsewhere for small polling
+        # ranges. This call spans a full ~4h window in one go, so it must respect
+        # the tightest known limit across the configured endpoints.
         logs = pool.get_logs_chunked(start, start + EARLY_WINDOW_BLOCKS,
-                                     topics=[TRANSFER_TOPIC], address=token_address)
+                                     topics=[TRANSFER_TOPIC], address=token_address,
+                                     chunk=40)
         exclude = {pair["pairAddress"].lower(), token_address.lower(), ZERO}
         buyers = early_buyers(logs, exclude=exclude)
         print(f"  {pair['baseToken']['symbol']}: {len(logs)} transfers, "
@@ -149,20 +185,27 @@ def main() -> None:
     candidates = assemble_candidates(gmgn_counts, early_counts)
     candidates.sort(key=lambda c: c["score"], reverse=True)
 
-    print(f"== filtering top candidates (contract/bot/cold checks, need {args.top}) ==")
+    print(f"== filtering top candidates (contract check + activity if available, need {args.top}) ==")
     kept: list[dict] = []
     for c in candidates:
         if len(kept) >= args.top:
             break
+        code = pool.get_code(c["address"])
+        if code != "0x":
+            print(f"  drop {c['address'][:12]}… (contract)")
+            continue
+        # BscScan's free tier stopped serving BSC data (2026-07-16) — both the v1
+        # and v2 endpoints reject it. When activity data is unavailable we skip
+        # the bot/cold-wallet checks rather than reject every candidate; the
+        # final list is manually reviewed by the user before wallets.json is
+        # trusted, so an unfiltered-for-activity candidate is an acceptable risk.
         act = wallet_activity(bscscan_key, c["address"], now)
-        time.sleep(0.25)   # BscScan free tier: 5 req/s
-        if act is None:
-            print(f"  skip {c['address'][:12]}… activity lookup failed")
-            continue
-        ok, reason = passes_filters(act, pool.get_code(c["address"]))
-        if not ok:
-            print(f"  drop {c['address'][:12]}… ({reason})")
-            continue
+        time.sleep(0.25)   # BscScan free tier: 5 req/s (when it's working)
+        if act is not None:
+            ok, reason = passes_filters(act, code)
+            if not ok:
+                print(f"  drop {c['address'][:12]}… ({reason})")
+                continue
         kept.append(c)
 
     ranked = build_ranked_list(kept, top_n=args.top)
