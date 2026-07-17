@@ -39,7 +39,9 @@ class TradeEngine:
                  max_token_age_days: float | None = None,
                  max_market_cap_usd: float | None = None,
                  min_liquidity_usd: float | None = None,
-                 signals_path: Path | None = None) -> None:
+                 signals_path: Path | None = None,
+                 trail_pct: float | None = None,
+                 partial_fraction: float | None = None) -> None:
         self._budget = budget
         self._store = store
         self._executors = executors
@@ -53,6 +55,8 @@ class TradeEngine:
         self._max_mcap_usd = max_market_cap_usd
         self._min_liq_usd = min_liquidity_usd
         self._signals_path = signals_path
+        self._trail_pct = trail_pct
+        self._partial_fraction = partial_fraction
         # token -> epoch until which re-entry is refused. Seeded from the journal
         # so a restart right after a close can't bypass the cooldown (AKE was
         # churned 3x/20min live — this is that fix).
@@ -177,7 +181,8 @@ class TradeEngine:
             opened_at=datetime.now(timezone.utc).isoformat(),
             cluster_wallets=cluster["wallets"], entry_price_usd=entry,
             simulated=True,
-            first_price_usd=cluster.get("first_price_usd") or 0.0)
+            first_price_usd=cluster.get("first_price_usd") or 0.0,
+            high_water_usd=entry)
 
     def _live_fill(self, token_address, token_symbol, decimals, usd_size,
                    cluster) -> CopyPosition | None:
@@ -200,7 +205,8 @@ class TradeEngine:
             opened_at=datetime.now(timezone.utc).isoformat(),
             cluster_wallets=cluster["wallets"],
             entry_price_usd=usd_size / token_amount, simulated=False,
-            first_price_usd=cluster.get("first_price_usd") or 0.0)
+            first_price_usd=cluster.get("first_price_usd") or 0.0,
+            high_water_usd=usd_size / token_amount)
 
     # ---------- exits ----------
 
@@ -218,17 +224,31 @@ class TradeEngine:
             log.info("cluster_exit_vote", token=pos.token_symbol,
                      votes=len(pos.exited_by), need=self._exit_wallets)
         if len(pos.exited_by) >= self._exit_wallets:
-            self._close(pos, reason="cluster_sell")
+            if self._partial_fraction is None:
+                self._close(pos, reason="cluster_sell")
+            elif not pos.cluster_partial_done:
+                self._close_partial(pos, reason="cluster_partial")
 
-    def check_valve(self) -> None:
+    def check_exits(self) -> None:
+        """Valve (catastrophe backstop) + HWM trailing stop, one price fetch per
+        position per tick. HWM granularity is the ~60s tick — intra-minute wicks
+        are invisible by design (we hold hours-days, not seconds)."""
         for pos in self._store.all():
             price = get_price_usd(pos.token_address)
             if price is None or pos.entry_price_usd <= 0:
                 continue   # no price → hold state, never guess (spec)
+            hwm = max(pos.high_water_usd, pos.entry_price_usd, price)
+            if hwm != pos.high_water_usd:
+                pos.high_water_usd = hwm             # entry-baseline also fixes
+                self._store.update(pos)              # legacy rows loaded with 0.0
             if price <= pos.entry_price_usd * (1 - self._valve_drop):
                 log.warning("valve_triggered", token=pos.token_symbol,
                             entry=pos.entry_price_usd, price=price)
                 self._close(pos, reason="valve")
+            elif self._trail_pct is not None and price <= hwm * (1 - self._trail_pct):
+                log.info("trail_triggered", token=pos.token_symbol,
+                         hwm=hwm, price=price)
+                self._close(pos, reason="trail")
 
     def _close(self, pos: CopyPosition, reason: str) -> None:
         exit_price = get_price_usd(pos.token_address) or 0.0
@@ -267,14 +287,49 @@ class TradeEngine:
         log.info("cluster_position_closed", token=pos.token_symbol, reason=reason,
                  simulated=pos.simulated, pnl_usd=round(pnl_usd, 4))
 
-    def _sell_live(self, pos: CopyPosition) -> bool:
+    def _close_partial(self, pos: CopyPosition, reason: str) -> None:
+        """Sell partial_fraction once; the remainder rides the trailing stop.
+        This is what lets a 5x run instead of exiting at the first profit-taker."""
+        exit_price = get_price_usd(pos.token_address) or 0.0
+        if not pos.simulated and self._shadow:
+            log.error("shadow_engine_has_real_position", token=pos.token_symbol)
+            return
+        sell_amount = pos.token_amount * self._partial_fraction
+        sell_usd = pos.usd_size * self._partial_fraction
+        if not pos.simulated:
+            if not self._sell_live(pos, amount=sell_amount):
+                return   # votes stay recorded; valve/trail still guard the whole
+        _, sell_tax = get_taxes(pos.token_address) or DEFAULT_TAXES
+        effective_exit = exit_price * (1 - sell_tax - IMPACT_PER_LEG)
+        pnl_usd = (effective_exit - pos.entry_price_usd) * sell_amount
+        pos.token_amount -= sell_amount
+        pos.usd_size -= sell_usd
+        pos.cluster_partial_done = True
+        self._store.update(pos)
+        self._budget.release(sell_usd)
+        self._journal({
+            "token_address": pos.token_address, "token_symbol": pos.token_symbol,
+            "simulated": pos.simulated, "usd_size": sell_usd,
+            "entry_price_usd": pos.entry_price_usd, "exit_price_usd": effective_exit,
+            "first_price_usd": pos.first_price_usd,
+            "pnl_usd": round(pnl_usd, 4),
+            "pnl_pct": round((effective_exit / pos.entry_price_usd - 1), 4)
+            if pos.entry_price_usd else None,
+            "opened_at": pos.opened_at,
+            "closed_at": datetime.now(timezone.utc).isoformat(),
+            "reason": reason, "cluster_wallets": pos.cluster_wallets,
+            "exited_by": pos.exited_by, "fees_model_usd": None})
+        log.info("cluster_partial_closed", token=pos.token_symbol,
+                 sold_usd=sell_usd, remaining_usd=pos.usd_size,
+                 pnl_usd=round(pnl_usd, 4))
+
+    def _sell_live(self, pos: CopyPosition, amount: float | None = None) -> bool:
         """Full-failover live sell (mirrors the old executor.py exit path)."""
-        ranked = rank_backends(self._executors, pos.token_symbol, "USDT",
-                               pos.token_amount)
+        amount = pos.token_amount if amount is None else amount
+        ranked = rank_backends(self._executors, pos.token_symbol, "USDT", amount)
         for backend in ranked:
             try:
-                self._executors[backend].swap(pos.token_symbol, "USDT",
-                                              pos.token_amount)
+                self._executors[backend].swap(pos.token_symbol, "USDT", amount)
                 return True
             except Exception as e:  # noqa: BLE001 — try every backend
                 log.warning("live_sell_failed", token=pos.token_symbol,

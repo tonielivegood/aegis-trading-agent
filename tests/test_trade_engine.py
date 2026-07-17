@@ -91,10 +91,10 @@ def test_valve_closes_at_70pct_drawdown(_s, price_mock, _t, tmp_path):
                                "first_price_usd": 10.0})
     entry = store.find_by_token(T).entry_price_usd
     price_mock.return_value = entry * 0.31               # -69% — hold
-    eng.check_valve()
+    eng.check_exits()
     assert store.find_by_token(T) is not None
     price_mock.return_value = entry * 0.29               # -71% — dump
-    eng.check_valve()
+    eng.check_exits()
     assert store.find_by_token(T) is None
     row = json.loads((tmp_path / "closed.jsonl").read_text().splitlines()[-1])
     assert row["reason"] == "valve" and row["simulated"] is True
@@ -111,7 +111,7 @@ def test_valve_holds_when_price_unavailable(_s, _p, _t, tmp_path):
     # open with a known price first
     with patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=5.0):
         eng.open_cluster_position(T, "GEM", 18, CLUSTER)
-    eng.check_valve()                                    # price None — do nothing
+    eng.check_exits()                                    # price None — do nothing
     assert store.find_by_token(T) is not None
 
 
@@ -243,7 +243,7 @@ def test_shadow_engine_refuses_to_close_a_real_position(_p, tmp_path):
         simulated=False, first_price_usd=1.0)
     store.open_position(bad_pos)                          # bypass _paper_fill
 
-    eng.check_valve()                                     # price 0.1 vs entry 1.0 → -90%
+    eng.check_exits()                                     # price 0.1 vs entry 1.0 → -90%
 
     assert store.find_by_token(T) is not None              # NOT removed — fail safe
     executors.assert_not_called()
@@ -342,3 +342,113 @@ def test_gem_filter_age_mcap_liquidity(stats_mock, _s, _p, _t, tmp_path):
     eng2, _b2, _s2 = _engine_v3(tmp_path)
     eng2.open_cluster_position("0x" + "d" * 40, "GEM2", 18, CLUSTER)
     stats_mock.assert_not_called()
+
+
+# ---------- v3 exits: trailing stop + cluster partial ----------
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd")
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_trailing_stop_lets_winner_run_then_closes(_s, price_mock, _t, tmp_path):
+    price_mock.return_value = 1.0
+    eng, budget, store = _engine_v3(tmp_path, trail_pct=0.30)
+    eng.open_cluster_position(T, "GEM", 18, CLUSTER)
+    entry = store.find_by_token(T).entry_price_usd       # 1.0 * 1.01 impact
+    price_mock.return_value = 5.0                        # 5x run
+    eng.check_exits()
+    assert store.find_by_token(T) is not None            # still riding
+    assert store.find_by_token(T).high_water_usd == 5.0  # HWM persisted
+    price_mock.return_value = 5.0 * 0.71                 # -29% from top — hold
+    eng.check_exits()
+    assert store.find_by_token(T) is not None
+    price_mock.return_value = 5.0 * 0.69                 # -31% from top — out
+    eng.check_exits()
+    assert store.find_by_token(T) is None
+    row = json.loads((tmp_path / "closed.jsonl").read_text().splitlines()[-1])
+    assert row["reason"] == "trail"
+    assert row["pnl_usd"] > 0                            # exited far above entry
+    assert budget.available_usd == 16.14
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd")
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_trailing_stop_cuts_dud_at_trail_not_valve(_s, price_mock, _t, tmp_path):
+    price_mock.return_value = 1.0
+    eng, _b, store = _engine_v3(tmp_path, trail_pct=0.30)
+    eng.open_cluster_position(T, "GEM", 18, CLUSTER)
+    entry = store.find_by_token(T).entry_price_usd
+    price_mock.return_value = entry * 0.68               # never pumped, -32%
+    eng.check_exits()
+    assert store.find_by_token(T) is None                # trail cut it (not -70% valve)
+    row = json.loads((tmp_path / "closed.jsonl").read_text().splitlines()[-1])
+    assert row["reason"] == "trail"
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_cluster_sell_closes_half_once_rest_rides(_s, _p, _t, tmp_path):
+    eng, budget, store = _engine_v3(tmp_path, trail_pct=0.30, partial_fraction=0.5)
+    eng.open_cluster_position(T, "GEM", 18, CLUSTER)
+    full_amount = store.find_by_token(T).token_amount
+    eng.on_exit_signal(W1, T)
+    eng.on_exit_signal(W2, T)                            # 2-of-3 → HALF close
+    pos = store.find_by_token(T)
+    assert pos is not None                               # still open!
+    assert pos.token_amount == full_amount / 2
+    assert pos.usd_size == 1.5
+    assert pos.cluster_partial_done is True
+    assert budget.available_usd == 16.14 - 1.5           # half released
+    row = json.loads((tmp_path / "closed.jsonl").read_text().splitlines()[-1])
+    assert row["reason"] == "cluster_partial" and row["usd_size"] == 1.5
+    eng.on_exit_signal(W3, T)                            # 3rd vote — no double partial
+    assert store.find_by_token(T).token_amount == full_amount / 2
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.rank_backends")
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_live_partial_sells_half_amount(_s, rank_mock, _p, _t, tmp_path):
+    pancake = MagicMock()
+    pancake.swap.return_value = MagicMock(received_out_wei=6 * 10 ** 18,
+                                          expected_out_wei=0)
+    budget = CopyTradeBudget(total_usd=16.14, slice_usd=3.0)
+    store = PositionStore(tmp_path / "positions.json")
+    store.load()
+    rank_mock.return_value = ["pancake"]
+    eng = TradeEngine(budget=budget, store=store, executors={"pancake": pancake},
+                      shadow_mode=False, journal_path=tmp_path / "closed.jsonl",
+                      trail_pct=0.30, partial_fraction=0.5)
+    eng.open_cluster_position(T, "GEM", 18, CLUSTER)
+    pancake.swap.reset_mock()
+    eng.on_exit_signal(W1, T)
+    eng.on_exit_signal(W2, T)
+    pancake.swap.assert_called_once_with("GEM", "USDT", 3.0)   # half of 6.0
+    assert store.find_by_token(T).token_amount == 3.0
+    # live sell failure on partial: nothing mutates
+    pancake.swap.reset_mock()
+    pancake.swap.side_effect = RuntimeError("no route")
+    rank_mock.return_value = ["pancake"]
+    store.find_by_token(T).cluster_partial_done = False        # force retry path
+    eng.on_exit_signal(W3, T)
+    assert store.find_by_token(T).token_amount == 3.0          # unchanged
+    assert store.find_by_token(T).cluster_partial_done is False
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_partial_off_keeps_v2_full_close(_s, _p, _t, tmp_path):
+    eng, budget, store = _engine_v3(tmp_path)              # partial_fraction=None
+    eng.open_cluster_position(T, "GEM", 18, CLUSTER)
+    eng.on_exit_signal(W1, T)
+    eng.on_exit_signal(W2, T)
+    assert store.find_by_token(T) is None                  # v2: full close
+    assert budget.available_usd == 16.14

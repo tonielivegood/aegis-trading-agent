@@ -194,7 +194,7 @@ def run_scan(once: bool = False) -> None:
         process_events(events, tracker, engine, store, notifier,
                        lambda a: _token_meta(pool, a))
         open_before = {p.token_address for p in store.all()}
-        engine.check_valve()
+        engine.check_exits()
         for token_address in open_before - {p.token_address for p in store.all()}:
             tracker.clear(token_address)   # fresh convergence required to re-fire
             _notify(notifier,
