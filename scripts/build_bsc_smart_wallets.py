@@ -1,14 +1,21 @@
-"""Build data/copy_trade/wallets.json — the self-built 50-wallet BSC smart-money list
+"""Build data/copy_trade/wallet_candidates.json — staged BSC smart-money candidates
 (Part 1 of docs/superpowers/specs/2026-07-16-cluster-signal-filter-design.md).
 
 Manual, LOCAL run (gmgn-cli is only configured on the dev machine, never the VPS):
 
-    python scripts/build_bsc_smart_wallets.py --winners 0xtokA 0xtokB ... [--dry-run]
+    python scripts/build_bsc_smart_wallets.py --winners-file data/copy_trade/recent_winners.json [--dry-run]
+    python scripts/build_bsc_smart_wallets.py --winners 0xtokA 0xtokB ... --with-gmgn
 
 Two candidate sources, merged and scored by wallet_discovery:
-  1. gmgn-cli recent smart-money trades (maker frequency = BSC activity signal)
-  2. early buyers shared across >=2 of the hand-picked winner tokens (our own edge)
-Prints the scored table for user review; --dry-run skips writing the file.
+  1. gmgn-cli recent smart-money trades (maker frequency = BSC activity signal) —
+     opt-in via --with-gmgn only; this source produced the 2026-07 scalper
+     contamination and stays out of the default run.
+  2. early buyers shared across >=2 of the winner tokens (our own edge), sourced
+     either from --winners-file (scripts/find_recent_winners.py output) or
+     --winners (hand-picked addresses)
+Prints the scored table for user review; writes to --out (a staging file, NOT
+wallets.json — deploy to the live list happens after manual review); --dry-run
+skips writing entirely.
 """
 from __future__ import annotations
 
@@ -35,9 +42,32 @@ from src.agent.copy_trade.wallet_discovery import (  # noqa: E402
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT_PATH = ROOT / "data" / "copy_trade" / "wallets.json"
 ZERO = "0x0000000000000000000000000000000000000000"
 EARLY_WINDOW_BLOCKS = 4 * 60 * 60 // 3   # ~4h of BSC blocks after pair creation
+
+
+def load_winners_file(path: str) -> list[str]:
+    """Token addresses from find_recent_winners.py output (Task 1 shape)."""
+    rows = json.loads(Path(path).read_text(encoding="utf-8"))
+    return [r["token_address"] for r in rows if r.get("token_address")]
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    ap = argparse.ArgumentParser()
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--winners", nargs="+",
+                     help="winner token addresses given directly")
+    src.add_argument("--winners-file",
+                     help="JSON from scripts/find_recent_winners.py")
+    ap.add_argument("--with-gmgn", action="store_true",
+                    help="ALSO mine gmgn-cli smart-money makers (OFF by default: "
+                         "this source produced the 2026-07 scalper contamination)")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--top", type=int, default=26)
+    ap.add_argument("--out", default=str(ROOT / "data" / "copy_trade"
+                                         / "wallet_candidates.json"),
+                    help="staging output (NOT wallets.json — audition first)")
+    return ap.parse_args(argv)
 
 
 def gmgn_maker_counts(trades: list[dict]) -> dict[str, int]:
@@ -161,24 +191,28 @@ def scan_winner(pool: RpcPool, token_address: str) -> list[str]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--winners", nargs="+", required=True,
-                    help="5-10 hand-picked recent BSC winner token addresses")
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--top", type=int, default=50)
-    args = ap.parse_args()
+    args = parse_args()
+    winners = (load_winners_file(args.winners_file) if args.winners_file
+               else args.winners)
+    if not winners:
+        print("winners list is empty — nothing to scan")
+        raise SystemExit(1)
 
     env = dotenv_values(ROOT / ".env")
     bscscan_key = env.get("BSCSCAN_API_KEY", "")
     pool = RpcPool(DEFAULT_ENDPOINTS, logs_endpoints=DEFAULT_LOGS_ENDPOINTS)
     now = int(time.time())
 
-    print("== source 1: gmgn-cli recent smart-money trades ==")
-    gmgn_counts = gmgn_maker_counts(fetch_gmgn_trades())
-    print(f"  {len(gmgn_counts)} distinct makers")
+    gmgn_counts: dict[str, int] = {}
+    if args.with_gmgn:
+        print("== source 1: gmgn-cli recent smart-money trades (EXPLICITLY enabled) ==")
+        gmgn_counts = gmgn_maker_counts(fetch_gmgn_trades())
+        print(f"  {len(gmgn_counts)} distinct makers")
+    else:
+        print("== gmgn source: SKIPPED (opt-in via --with-gmgn) ==")
 
-    print("== source 2: early buyers across winner tokens ==")
-    buyers_by_token = {t: scan_winner(pool, t) for t in args.winners}
+    print("== early buyers across winner tokens ==")
+    buyers_by_token = {t: scan_winner(pool, t) for t in winners}
     early_counts = cross_winner_candidates(buyers_by_token, min_tokens=2)
     print(f"  {len(early_counts)} wallets early in >=2 winners")
 
@@ -220,11 +254,12 @@ def main() -> None:
         print(f"{w['label']:<14}{w['score']:>7}  {','.join(w['sources']):<16} {w['address']}")
 
     if args.dry_run:
-        print("\n--dry-run: not writing wallets.json")
+        print(f"\n--dry-run: not writing {args.out}")
         return
-    OUT_PATH.write_text(json.dumps(wallets, indent=2, ensure_ascii=False),
+    out_path = Path(args.out)
+    out_path.write_text(json.dumps(wallets, indent=2, ensure_ascii=False),
                         encoding="utf-8")
-    print(f"\nWrote {len(wallets)} wallets to {OUT_PATH}")
+    print(f"\nWrote {len(wallets)} candidates to {out_path}")
 
 
 if __name__ == "__main__":

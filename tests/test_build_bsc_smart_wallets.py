@@ -1,7 +1,10 @@
+import json
+
 import pytest
 
 from scripts.build_bsc_smart_wallets import (
     assemble_candidates, block_at_timestamp, dexscreener_pair, gmgn_maker_counts,
+    load_winners_file, parse_args,
 )
 from src.agent.copy_trade.rpc_pool import RpcError
 
@@ -99,3 +102,27 @@ def test_block_at_timestamp_raises_when_a_probed_block_has_no_data():
     pool = _FakePool(latest_block=10_000_000, missing_blocks={9_800_000})
     with pytest.raises(RpcError):
         block_at_timestamp(pool, 9_800_000 * 3)
+
+
+def test_load_winners_file_extracts_token_addresses(tmp_path):
+    f = tmp_path / "recent_winners.json"
+    f.write_text(json.dumps([
+        {"token_address": "0x" + "a" * 40, "symbol": "AAA", "follower_multiple": 5.0},
+        {"token_address": "0x" + "b" * 40, "symbol": "BBB", "follower_multiple": 4.2},
+    ]))
+    assert load_winners_file(str(f)) == ["0x" + "a" * 40, "0x" + "b" * 40]
+
+
+def test_parse_args_winners_file_and_defaults(tmp_path):
+    f = tmp_path / "w.json"
+    f.write_text("[]")
+    args = parse_args(["--winners-file", str(f)])
+    assert args.winners_file == str(f)
+    assert args.with_gmgn is False                    # gmgn is opt-in now
+    assert args.out.endswith("wallet_candidates.json")
+
+
+def test_parse_args_requires_some_winner_source():
+    import pytest
+    with pytest.raises(SystemExit):
+        parse_args([])                                # neither --winners nor --winners-file
