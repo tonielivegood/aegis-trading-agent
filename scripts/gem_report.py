@@ -80,15 +80,20 @@ def classify(median_s: float) -> str:
     return "HOLDER"
 
 
+def _max_high_since(ohlcv: list[list], since_ts: float) -> float | None:
+    """Max candle-high after since_ts.
+    ohlcv rows: [ts, open, high, low, close, volume] (GeckoTerminal shape)."""
+    highs = [row[2] for row in ohlcv if row[0] >= since_ts]
+    return max(highs) if highs else None
+
+
 def max_multiple(ohlcv: list[list], since_ts: float, base_price: float) -> float | None:
     """Max candle-high after since_ts, as a multiple of base_price.
     ohlcv rows: [ts, open, high, low, close, volume] (GeckoTerminal shape)."""
     if not base_price:
         return None
-    highs = [row[2] for row in ohlcv if row[0] >= since_ts]
-    if not highs:
-        return None
-    return max(highs) / base_price
+    mx = _max_high_since(ohlcv, since_ts)
+    return mx / base_price if mx else None
 
 
 # ---------- thin network layer ----------
@@ -105,8 +110,7 @@ def fetch_max_price_since(token_address: str, since_ts: float) -> float | None:
         ohlcv = r.json()["data"]["attributes"]["ohlcv_list"]
     except Exception:  # noqa: BLE001
         return None
-    highs = [row[2] for row in ohlcv if row[0] >= since_ts]
-    return max(highs) if highs else None
+    return _max_high_since(ohlcv, since_ts)
 
 
 # ---------- report ----------
