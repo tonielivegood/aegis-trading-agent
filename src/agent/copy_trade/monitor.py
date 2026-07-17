@@ -50,14 +50,52 @@ STATE_PATH = ROOT / "data" / "copy_trade" / "state.json"
 POSITIONS_PATH = ROOT / "data" / "copy_trade" / "positions.json"
 SHADOW_PATH = ROOT / "data" / "copy_trade" / "shadow_positions.json"
 JOURNAL_PATH = ROOT / "data" / "copy_trade" / "closed_trades.jsonl"
+SIGNALS_PATH = ROOT / "data" / "copy_trade" / "signals.jsonl"
+WALLET_EVENTS_PATH = ROOT / "data" / "copy_trade" / "wallet_events.jsonl"
 FAILURE_ALERT_THRESHOLD = 5
 
 
-def _load_wallets() -> list[str]:
+def _load_wallets() -> tuple[list[str], set[str]]:
+    """All addresses are WATCHED (hold-time data collection); entries flagged
+    "observe_only": true never count toward clusters — the scalper-quarantine
+    mechanism that still keeps collecting evidence on the quarantined wallet."""
     if not WALLETS_PATH.exists():
         print(f"FATAL: {WALLETS_PATH} missing — run scripts/build_bsc_smart_wallets.py first")
         raise SystemExit(1)
-    return [w["address"] for w in json.loads(WALLETS_PATH.read_text(encoding="utf-8"))]
+    entries = json.loads(WALLETS_PATH.read_text(encoding="utf-8"))
+    watch = [w["address"] for w in entries]
+    voting = {w["address"].lower() for w in entries if not w.get("observe_only")}
+    return watch, voting
+
+
+def _append_wallet_events(events: list[WalletEvent]) -> None:
+    if not events:
+        return
+    WALLET_EVENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc).isoformat()   # obs time; block kept for precision
+    with open(WALLET_EVENTS_PATH, "a", encoding="utf-8") as f:
+        for ev in events:
+            f.write(json.dumps({"ts": now, "wallet": ev.wallet,
+                                "token_address": ev.token_address,
+                                "direction": ev.direction, "block": ev.block,
+                                "tx_hash": ev.tx_hash}) + "\n")
+
+
+def _last_close_reason(token_address: str) -> str:
+    """Read JOURNAL_PATH backwards for the most recent close row matching this
+    token — TradeEngine._close/_close_partial already journal a "reason" field
+    per token, so this is cheaper than teaching TradeEngine a new public API
+    just for a notification's wording."""
+    if not JOURNAL_PATH.exists():
+        return "unknown"
+    for line in reversed(JOURNAL_PATH.read_text(encoding="utf-8").splitlines()):
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get("token_address") == token_address:
+            return row.get("reason", "unknown")
+    return "unknown"
 
 
 def _token_meta(pool: RpcPool, token_address: str) -> tuple[str, int]:
@@ -84,7 +122,18 @@ def _token_meta(pool: RpcPool, token_address: str) -> tuple[str, int]:
 def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
                    engine: TradeEngine, store: PositionStore,
                    notifier: EmailNotifier | None,
-                   token_meta_fn) -> None:
+                   token_meta_fn, voting: set[str] | None = None) -> None:
+    # Pre-scan: sellers per token in THIS batch. At 60s poll lag a cluster can
+    # be born and die inside one batch (seen live: 9-13s round-trips) — the
+    # engine skips the open when >=exit_wallets of the cluster already sold.
+    # This gate runs unconditionally (no config knob) — it's strictly
+    # safety-positive, so it's intentionally always-on. A config.json-only
+    # rollback will NOT restore this piece of v2 behavior; that needs a
+    # full code revert of this branch.
+    batch_sellers: dict[str, set[str]] = {}
+    for ev in events:
+        if ev.direction == "out":
+            batch_sellers.setdefault(ev.token_address, set()).add(ev.wallet)
     for ev in events:
         if ev.direction == "out":
             was_open = store.find_by_token(ev.token_address) is not None
@@ -98,6 +147,8 @@ def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
                         f"tx https://bscscan.com/tx/{ev.tx_hash}")
             continue
         # direction == "in"
+        if voting is not None and ev.wallet not in voting:
+            continue   # observe-only wallet: watched for data, never votes
         if store.find_by_token(ev.token_address) is not None:
             continue   # already holding — never double-buy one token (spec §3)
         price = get_price_usd(ev.token_address)
@@ -105,8 +156,9 @@ def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
         if cluster is None:
             continue   # sub-threshold: log only, no email (spec §2)
         symbol, decimals = token_meta_fn(ev.token_address)
-        opened = engine.open_cluster_position(ev.token_address, symbol, decimals,
-                                              cluster)
+        opened = engine.open_cluster_position(
+            ev.token_address, symbol, decimals, cluster,
+            batch_sellers=batch_sellers.get(ev.token_address))
         if opened:
             _notify(notifier,
                     f"[COPY-TRADE{' SHADOW' if engine._shadow else ''}] CLUSTER BUY {symbol}",
@@ -154,13 +206,20 @@ def _build_runtime(cfg: dict):
                          shadow_mode=shadow, journal_path=JOURNAL_PATH,
                          exit_wallets=cfg.get("exit_wallets", 2),
                          valve_drop_pct=cfg.get("valve_drop_pct", 0.70),
-                         slice_usd=cfg.get("slice_usd", 3.0))
+                         slice_usd=cfg.get("slice_usd", 3.0),
+                         trail_pct=cfg.get("trail_pct"),
+                         partial_fraction=cfg.get("cluster_partial_fraction"),
+                         cooldown_minutes=cfg.get("token_cooldown_minutes", 0),
+                         max_token_age_days=cfg.get("max_token_age_days"),
+                         max_market_cap_usd=cfg.get("max_market_cap_usd"),
+                         min_liquidity_usd=cfg.get("min_liquidity_usd"),
+                         signals_path=SIGNALS_PATH)
     return budget, store, engine
 
 
 def run_scan(once: bool = False) -> None:
     cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))["copy_settings"]
-    wallets = _load_wallets()
+    wallets, voting = _load_wallets()
     pool = RpcPool(cfg["rpc_endpoints"],
                    logs_endpoints=cfg.get("rpc_logs_endpoints"))
     source = ChainEventSource(pool, wallets, start_block=pool.latest_block(),
@@ -175,12 +234,13 @@ def run_scan(once: bool = False) -> None:
     interval = cfg.get("poll_interval_seconds", 45)
     consecutive_failures, outage_alerted = 0, False
     mode = "SHADOW" if cfg.get("shadow_mode", True) else "LIVE"
-    log.info("copy_trade_monitor_v2_started", wallets=len(wallets), mode=mode,
-             start_block=source.last_processed)
+    log.info("copy_trade_monitor_v2_started", wallets=len(wallets), voting=len(voting),
+             mode=mode, start_block=source.last_processed)
 
     while True:
         try:
             events = source.poll()
+            _append_wallet_events(events)
             consecutive_failures, outage_alerted = 0, False
         except Exception as e:  # noqa: BLE001
             consecutive_failures += 1
@@ -192,15 +252,16 @@ def run_scan(once: bool = False) -> None:
                 outage_alerted = True
             events = []
         process_events(events, tracker, engine, store, notifier,
-                       lambda a: _token_meta(pool, a))
+                       lambda a: _token_meta(pool, a), voting=voting)
         open_before = {p.token_address for p in store.all()}
-        engine.check_valve()
+        engine.check_exits()
         for token_address in open_before - {p.token_address for p in store.all()}:
             tracker.clear(token_address)   # fresh convergence required to re-fire
+            reason = _last_close_reason(token_address)   # "valve" or "trail"
             _notify(notifier,
                     f"[COPY-TRADE{' SHADOW' if engine._shadow else ''}] "
-                    f"VALVE STOP-LOSS {token_address[:10]}…",
-                    f"closed by -70% price valve\ntoken {token_address}")
+                    f"{reason.upper()} CLOSE {token_address[:10]}…",
+                    f"closed by {reason}\ntoken {token_address}")
         STATE_PATH.write_text(json.dumps({
             "last_scan_at": datetime.now(timezone.utc).isoformat(),
             "last_processed_block": source.last_processed}), encoding="utf-8")

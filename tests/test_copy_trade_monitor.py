@@ -98,3 +98,131 @@ def test_wallets_json_required(tmp_path, monkeypatch):
         assert False, "should raise"
     except SystemExit:
         pass
+
+
+# ---------- v3 wiring ----------
+import json as _json
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.monitor.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_same_batch_sell_kills_stale_cluster(_s, _mp, _ep, _t, tmp_path):
+    """The 9-second-round-trip fix: 3 buys AND 2 sells of the same cluster arrive
+    in ONE poll batch → the signal is already dead, no position may open."""
+    tracker, engine, store = _pipeline(tmp_path)
+    meta = lambda addr: ("GEM", 18)
+    batch = [_ev(W1), _ev(W2), _ev(W3),
+             _ev(W1, direction="out"), _ev(W2, direction="out")]
+    process_events(batch, tracker, engine, store, None, meta)
+    assert store.all() == []                       # signal dead-on-arrival — skipped
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.monitor.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_observe_only_wallet_never_votes(_s, _mp, _ep, _t, tmp_path):
+    tracker, engine, store = _pipeline(tmp_path)
+    meta = lambda addr: ("GEM", 18)
+    voting = {W1.lower(), W2.lower()}              # W3 is observe-only
+    process_events([_ev(W1), _ev(W2), _ev(W3)], tracker, engine, store, None,
+                   meta, voting=voting)
+    assert store.all() == []                       # 2 votes only — no cluster
+    process_events([_ev(W4)], tracker, engine, store, None, meta,
+                   voting={W1.lower(), W2.lower(), W4.lower()})
+    assert len(store.all()) == 1                   # 3rd real vote fires it
+
+
+def test_load_wallets_splits_watch_and_voting(tmp_path, monkeypatch):
+    import src.agent.copy_trade.monitor as mon
+    wf = tmp_path / "wallets.json"
+    wf.write_text(_json.dumps([
+        {"address": "0x" + "1" * 40},
+        {"address": "0x" + "2" * 40, "observe_only": True},
+        {"address": "0x" + "3" * 40, "observe_only": False},
+    ]))
+    monkeypatch.setattr(mon, "WALLETS_PATH", wf)
+    watch, voting = mon._load_wallets()
+    assert len(watch) == 3                         # all watched (data collection)
+    assert voting == {"0x" + "1" * 40, "0x" + "3" * 40}
+
+
+def test_append_wallet_events_writes_jsonl(tmp_path, monkeypatch):
+    import src.agent.copy_trade.monitor as mon
+    out = tmp_path / "wallet_events.jsonl"
+    monkeypatch.setattr(mon, "WALLET_EVENTS_PATH", out)
+    mon._append_wallet_events([_ev(W1), _ev(W2, direction="out")])
+    rows = [_json.loads(l) for l in out.read_text().splitlines()]
+    assert len(rows) == 2
+    assert rows[0]["wallet"] == W1 and rows[0]["direction"] == "in"
+    assert rows[1]["direction"] == "out" and "ts" in rows[1] and "block" in rows[1]
+    mon._append_wallet_events([])                  # empty batch: no crash, no write
+    assert len(out.read_text().splitlines()) == 2
+
+
+# ---------- notification reason must reflect the real close cause (Task 3 review
+# finding: check_exits() can now close for reason="trail", not just "valve") ----------
+
+def test_trail_close_notification_says_trail_not_valve(tmp_path, monkeypatch):
+    import json as jsonlib
+    from unittest.mock import MagicMock
+    import src.agent.copy_trade.monitor as mon
+    from src.agent.copy_trade.positions import CopyPosition, PositionStore
+
+    W = "0x" + "1" * 40
+    config_path = tmp_path / "config.json"
+    config_path.write_text(jsonlib.dumps({"copy_settings": {
+        "shadow_mode": True, "slice_usd": 3.0, "total_budget_usd": 16.14,
+        "min_wallets": 3, "exit_wallets": 2, "window_minutes": 15,
+        "valve_drop_pct": 0.70, "trail_pct": 0.2, "poll_interval_seconds": 0,
+        "rpc_endpoints": ["https://example-rpc.invalid"],
+    }}), encoding="utf-8")
+    wallets_path = tmp_path / "wallets.json"
+    wallets_path.write_text(jsonlib.dumps([{"address": W}]), encoding="utf-8")
+    shadow_path = tmp_path / "shadow_positions.json"
+    monkeypatch.setattr(mon, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(mon, "WALLETS_PATH", wallets_path)
+    monkeypatch.setattr(mon, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(mon, "SHADOW_PATH", shadow_path)
+    monkeypatch.setattr(mon, "POSITIONS_PATH", tmp_path / "positions.json")
+    monkeypatch.setattr(mon, "JOURNAL_PATH", tmp_path / "closed.jsonl")
+
+    # HWM=2.0, entry=1.0: a price of 1.5 stays well above the valve floor (0.3)
+    # but trips the 20% trail off the high-water mark (1.6).
+    pos = CopyPosition(
+        token_symbol="GEM", token_address="0x" + "b" * 40, token_decimals=18,
+        source_wallet="", usd_size=3.0, token_amount=3.0,
+        opened_at="2026-07-16T00:00:00Z",
+        cluster_wallets=[W, "0x" + "2" * 40, "0x" + "3" * 40],
+        entry_price_usd=1.0, simulated=True, first_price_usd=1.0,
+        high_water_usd=2.0)
+    PositionStore(shadow_path).open_position(pos)
+
+    pool_instance = MagicMock()
+    pool_instance.latest_block.return_value = 999
+    source_instance = MagicMock()
+    source_instance.poll.return_value = []
+    source_instance.last_processed = 999
+    mock_notifier = MagicMock()
+
+    with patch("src.agent.copy_trade.monitor.RpcPool", return_value=pool_instance), \
+         patch("src.agent.copy_trade.monitor.ChainEventSource",
+               return_value=source_instance), \
+         patch("src.agent.copy_trade.monitor.EmailNotifier",
+               return_value=mock_notifier), \
+         patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.5), \
+         patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0)):
+        mon.run_scan(once=True)   # trail fires, valve does not
+
+    reloaded = PositionStore(shadow_path)
+    reloaded.load()
+    assert reloaded.all() == []                     # trail actually closed it
+    assert mock_notifier.send_alert.called
+    subject = mock_notifier.send_alert.call_args.args[0]
+    body = mock_notifier.send_alert.call_args.args[1]
+    assert "TRAIL" in subject.upper() and "VALVE" not in subject.upper()
+    assert "trail" in body.lower() and "valve" not in body.lower()

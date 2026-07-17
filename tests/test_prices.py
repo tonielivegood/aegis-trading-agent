@@ -7,7 +7,7 @@ TOKEN = "0x" + "a" * 40
 
 @pytest.fixture(autouse=True)
 def _clear_price_cache():
-    prices._price_cache.clear()
+    prices._pairs_cache.clear()
 
 
 class FakeResp:
@@ -43,8 +43,8 @@ def test_get_price_refetches_after_ttl_expiry(monkeypatch):
         return FakeResp(_bsc_payload(price=str(len(calls))))
     monkeypatch.setattr(prices.requests, "get", counting_get)
     assert prices.get_price_usd(TOKEN) == 1.0
-    fetched_at, price = prices._price_cache[TOKEN]
-    prices._price_cache[TOKEN] = (fetched_at - prices._PRICE_TTL_S - 1, price)
+    fetched_at, pairs = prices._pairs_cache[TOKEN.lower()]
+    prices._pairs_cache[TOKEN.lower()] = (fetched_at - prices._PRICE_TTL_S - 1, pairs)
     assert prices.get_price_usd(TOKEN) == 2.0   # stale entry refetched
     assert len(calls) == 2
 

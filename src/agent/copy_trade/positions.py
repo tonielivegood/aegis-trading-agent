@@ -27,6 +27,9 @@ class CopyPosition:
     entry_price_usd: float = 0.0
     simulated: bool = False
     first_price_usd: float = 0.0
+    # v3 exit fields — defaults keep the live v2 positions.json loadable
+    high_water_usd: float = 0.0
+    cluster_partial_done: bool = False
 
 
 class PositionStore:

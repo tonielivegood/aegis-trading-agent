@@ -14,21 +14,20 @@ log = get_logger(__name__)
 _DEXSCREENER = "https://api.dexscreener.com/latest/dex/tokens/"
 _GOPLUS = "https://api.gopluslabs.io/api/v1/token_security/56?contract_addresses="
 
-# Short TTL cache: the monitor calls get_price_usd once per buy event, and live
-# scans routinely carry bursts of events for the SAME token (seen 2026-07-17:
-# 5+ same-token events in one batch) — plus the valve re-prices every open
-# position each ~45s tick. 60s of staleness is irrelevant to both users (the
-# tracker only needs the price near observation time; the valve is a -70%
-# catastrophe backstop), but the dedup keeps us far from DexScreener's rate
-# limit. Failures are never cached. ponytail: whole-dict expiry-on-read, no
-# eviction policy — bounded by distinct tokens seen per hour, fine at this scale.
 _PRICE_TTL_S = 60
-_price_cache: dict[str, tuple[float, float]] = {}   # addr -> (fetched_at, price)
+# Shared cache feeds both get_price_usd (valve/tracker) and get_pair_stats
+# (gem filter) — the gem filter must not double DexScreener traffic. Live
+# monitoring shows bursts of 5+ same-token buy events in one batch (2026-07-17),
+# and the valve re-prices every ~45s tick. 60s TTL deduplicates these without
+# stale data risk (tracker needs price near observation, valve is a -70%
+# backstop). Failures never cached. ponytail: no eviction policy, bounded by
+# distinct tokens per hour — fine at this scale.
+_pairs_cache: dict[str, tuple[float, list]] = {}
 
 
-def get_price_usd(token_address: str) -> float | None:
+def _fetch_pairs(token_address: str) -> list | None:
     key = token_address.lower()
-    hit = _price_cache.get(key)
+    hit = _pairs_cache.get(key)
     if hit is not None and time.time() - hit[0] < _PRICE_TTL_S:
         return hit[1]
     try:
@@ -38,14 +37,42 @@ def get_price_usd(token_address: str) -> float | None:
                  if p.get("chainId") == "bsc" and p.get("priceUsd")]
         if not pairs:
             return None
-        best = max(pairs, key=lambda p: (p.get("liquidity") or {}).get("usd") or 0)
-        price = float(best["priceUsd"])
-        _price_cache[key] = (time.time(), price)
-        return price
+        _pairs_cache[key] = (time.time(), pairs)
+        return pairs
     except Exception as e:  # noqa: BLE001
-        log.warning("dexscreener_price_failed", token=token_address,
+        log.warning("dexscreener_fetch_failed", token=token_address,
                     error=type(e).__name__)
         return None
+
+
+def _best_pair(pairs: list) -> dict:
+    return max(pairs, key=lambda p: (p.get("liquidity") or {}).get("usd") or 0)
+
+
+def get_price_usd(token_address: str) -> float | None:
+    pairs = _fetch_pairs(token_address)
+    if not pairs:
+        return None
+    return float(_best_pair(pairs)["priceUsd"])
+
+
+def get_pair_stats(token_address: str) -> dict | None:
+    """Gem-filter facts for a token. price/liquidity/mcap come from the
+    highest-liquidity BSC pair; age is the EARLIEST pairCreatedAt across all
+    pairs (DexScreener sometimes omits it on the best pair — seen live 17/7)."""
+    pairs = _fetch_pairs(token_address)
+    if not pairs:
+        return None
+    best = _best_pair(pairs)
+    created = [p["pairCreatedAt"] for p in pairs if p.get("pairCreatedAt")]
+    mcap = best.get("marketCap") or best.get("fdv")
+    return {
+        "price_usd": float(best["priceUsd"]),
+        "liquidity_usd": float((best.get("liquidity") or {}).get("usd") or 0.0),
+        "market_cap_usd": float(mcap) if mcap else None,
+        "pair_created_at_ms": min(created) if created else None,
+        "pair_address": best.get("pairAddress"),
+    }
 
 
 def get_taxes(token_address: str) -> tuple[float, float] | None:
