@@ -3,7 +3,7 @@
   "updated_at": "2026-07-16T00:00:00Z",
   "description": "Copy-trade v2: BSC smart-money wallet cluster + shadow-mode-first (wallets in wallets.json)",
   "copy_settings": {
-    "shadow_mode": true,
+    "shadow_mode": false,
     "slice_usd": 3.0,
     "total_budget_usd": 16.14,
     "min_wallets": 3,
