@@ -836,6 +836,29 @@ Back up first: `cp wallets.json wallets.json.bak.pre-promotion` (as user `agent`
 
 - [ ] **Step 5: Update the memory handoff** — the session executing this updates `copy-trade-gem-hunt-v3-deployed.md` (or writes a successor memory): audition results table summary, final wallet count, what to watch next (first `opened` signal under the new list; `gem_report.py --days 7` weekly).
 
+## Operating cadence after promotion (the wallet list is PERISHABLE — user insight 18/7)
+
+Smart-money wallets rotate: once a wallet gets publicly tagged (GMGN etc.) its alpha
+decays under copier pressure, and serious players move to fresh wallets (often funded
+via CEX, breaking the on-chain trail). Our convergence method structurally captures only
+the stable stratum (a per-play rotator never appears in 2 winners), and mining raw chain
+data — not leaderboards — means we catch wallets in the FRESHEST phase of their alpha,
+before public tagging. But it follows that the list has a shelf life. Two standing rules:
+
+1. **Re-mine weekly-ish**: re-run `find_recent_winners.py` → `build_bsc_smart_wallets.py`
+   → merge new candidates as observe_only (Task 4 Steps 3-6 verbatim) roughly every 7-10
+   days. Cheap — fully scripted.
+2. **Demotion rule**: at each weekly `wallet_audition.py` run, any PROMOTED (voting)
+   wallet with ZERO gem-band buys in the last 7 days goes back to observe_only
+   ("gone quiet" = likely rotated away or tagged; its votes are stale risk). It can
+   re-earn promotion at a later audition.
+3. **Kill-criterion for the whole wallet-copying approach**: if two consecutive audition
+   cycles show even PROMOTED wallets' signals dying fast (promoted → quiet within days,
+   repeatedly), wallet rotation is outrunning our loop and wallet-centric copying is
+   structurally dead at this latency — switch design work to plan-C (token-centric
+   discovery: watch new pairs directly with the existing safety gate + gem band, no
+   wallet dependence, intrinsically immune to rotation). Do not keep tuning a dead layer.
+
 ---
 
 ## Self-Review (done at write time)
