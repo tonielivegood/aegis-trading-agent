@@ -61,11 +61,22 @@ class RpcPool:
         self._endpoints = list(endpoints)
         self._logs_endpoints = list(logs_endpoints) if logs_endpoints else self._endpoints
         self._timeout = timeout
+        self._logs_rotation = 0
 
     def call(self, method: str, params: list) -> object:
         last_err: Exception | None = None
         null_result_seen = False
-        endpoints = self._logs_endpoints if method == "eth_getLogs" else self._endpoints
+        if method == "eth_getLogs":
+            # Round-robin the starting endpoint so the getLogs load spreads
+            # evenly instead of hammering the first provider until it
+            # rate-limits (which is how 1rpc.io's daily quota got burned within
+            # the first live hour, 2026-07-17). Failover order still covers
+            # every endpoint on error.
+            i = self._logs_rotation % len(self._logs_endpoints)
+            self._logs_rotation += 1
+            endpoints = self._logs_endpoints[i:] + self._logs_endpoints[:i]
+        else:
+            endpoints = self._endpoints
         for url in endpoints:
             try:
                 r = requests.post(url, json={"jsonrpc": "2.0", "id": 1,

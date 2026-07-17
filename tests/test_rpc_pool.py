@@ -95,6 +95,32 @@ def test_get_logs_routes_to_logs_endpoints_other_methods_to_general(monkeypatch)
                      ("eth_getLogs", "http://logs-only")]
 
 
+def test_get_logs_round_robins_across_logs_endpoints(monkeypatch):
+    calls = []
+    def fake_post(url, json=None, timeout=None):
+        calls.append(url)
+        return FakeResponse({"jsonrpc": "2.0", "id": 1, "result": []})
+    monkeypatch.setattr("src.agent.copy_trade.rpc_pool.requests.post", fake_post)
+    pool = RpcPool(["http://general"], logs_endpoints=["http://a", "http://b"])
+    pool.call("eth_getLogs", [{}])
+    pool.call("eth_getLogs", [{}])
+    pool.call("eth_getLogs", [{}])
+    assert calls == ["http://a", "http://b", "http://a"]
+
+
+def test_get_logs_rotation_still_fails_over_on_error(monkeypatch):
+    calls = []
+    def fake_post(url, json=None, timeout=None):
+        calls.append(url)
+        if url == "http://a":
+            raise ConnectionError("down")
+        return FakeResponse({"jsonrpc": "2.0", "id": 1, "result": []})
+    monkeypatch.setattr("src.agent.copy_trade.rpc_pool.requests.post", fake_post)
+    pool = RpcPool(["http://general"], logs_endpoints=["http://a", "http://b"])
+    assert pool.call("eth_getLogs", [{}]) == []   # a fails -> b serves
+    assert calls == ["http://a", "http://b"]
+
+
 def test_logs_endpoints_default_to_general_when_not_given(monkeypatch):
     calls = []
     def fake_post(url, json=None, timeout=None):

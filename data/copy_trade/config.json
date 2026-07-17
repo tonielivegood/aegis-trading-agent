@@ -10,7 +10,7 @@
     "exit_wallets": 2,
     "window_minutes": 15,
     "valve_drop_pct": 0.70,
-    "poll_interval_seconds": 45,
+    "poll_interval_seconds": 60,
     "exec_slippage_bps": 1500,
     "rpc_endpoints": [
       "https://bsc-dataseed.binance.org",
