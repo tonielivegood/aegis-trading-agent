@@ -15,9 +15,13 @@ _DEXSCREENER = "https://api.dexscreener.com/latest/dex/tokens/"
 _GOPLUS = "https://api.gopluslabs.io/api/v1/token_security/56?contract_addresses="
 
 _PRICE_TTL_S = 60
-# addr -> (fetched_at, bsc_pairs_list). One cached HTTP fetch feeds BOTH
-# get_price_usd (valve/tracker) and get_pair_stats (gem filter) — the gem
-# filter must not double DexScreener traffic. Failures are never cached.
+# Shared cache feeds both get_price_usd (valve/tracker) and get_pair_stats
+# (gem filter) — the gem filter must not double DexScreener traffic. Live
+# monitoring shows bursts of 5+ same-token buy events in one batch (2026-07-17),
+# and the valve re-prices every ~45s tick. 60s TTL deduplicates these without
+# stale data risk (tracker needs price near observation, valve is a -70%
+# backstop). Failures never cached. ponytail: no eviction policy, bounded by
+# distinct tokens per hour — fine at this scale.
 _pairs_cache: dict[str, tuple[float, list]] = {}
 
 
