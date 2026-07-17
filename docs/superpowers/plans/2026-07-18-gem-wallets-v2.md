@@ -796,6 +796,7 @@ ssh ... root@187.127.188.62 "cd /home/agent/Track1-trade-onchain && sudo -u agen
   1. Promote the `PROMOTE` wallets (expected: if fewer than 5 pass, recommend re-running Task 4 Steps 3-6 with `--max-age-days 30` for a second candidate batch rather than trading with a too-thin voting pool).
   2. Drop all 24 old wallets (plan's default — they are proven non-gem-hunters; only override if the audition table itself shows an old wallet passing the bar).
   3. `window_minutes` 15 → 30 IF the convergence stats show gem-token convergence happens at 30m but not 15m (config-only edit).
+  4. Which `INSUFFICIENT` wallets keep observing another 48-72h cycle (default: keep ALL of them as observe_only, watched-cap permitting — gems don't launch hourly, so a patient genuine gem hunter can easily show <3 gem buys in one short window; dropping INSUFFICIENT wallets would systematically bias the list toward hyperactive wallets, the exact failure mode this rebuild exists to fix). Only `REJECT` (enough data, failed the bar) is dropped by default.
 
 - [ ] **Step 3: Apply the approved promotion on the VPS** (adjust the keep-list to EXACTLY what the human approved):
 
@@ -807,6 +808,9 @@ wallets = json.load(open(base + 'wallets.json'))
 promoted = {  # EXACT addresses the human approved, lowercase
     # '0x...',
 }
+keep_observing = {  # INSUFFICIENT wallets the human kept for another cycle, lowercase
+    # '0x...',      # (default: ALL wallets the audition table marked INSUFFICIENT)
+}
 new = []
 for w in wallets:
     a = w['address'].lower()
@@ -814,13 +818,15 @@ for w in wallets:
         w['observe_only'] = False
         w['note'] = 'promoted 2026-07 gem-wallets-v2 audition'
         new.append(w)
-    elif w.get('observe_only'):
-        pass                      # unpromoted candidate: drop
-    else:
-        pass                      # old voting wallet: drop (plan default)
+    elif a in keep_observing:
+        w['observe_only'] = True   # stays under observation, still no vote
+        w['note'] = 'audition extended (INSUFFICIENT data, not rejected)'
+        new.append(w)
+    # else: dropped — REJECT candidates and old voting wallets (plan default)
 json.dump(new, open(base + 'wallets.json', 'w'), indent=2)
 print(f'final list: {len(new)} wallets, voting '
-      f'{sum(1 for w in new if not w.get(\"observe_only\"))}')
+      f'{sum(1 for w in new if not w.get(\"observe_only\"))}, observing '
+      f'{sum(1 for w in new if w.get(\"observe_only\"))}')
 PYEOF"
 ```
 
