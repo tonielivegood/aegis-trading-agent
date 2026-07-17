@@ -66,10 +66,11 @@ class TradeEngine:
                 try:
                     row = json.loads(line)
                     closed = datetime.fromisoformat(row["closed_at"]).timestamp()
+                    token_address = row["token_address"]
                 except (ValueError, KeyError):
                     continue
                 if closed + self._cooldown_s > time.time():
-                    self._cooldown_until[row["token_address"]] = closed + self._cooldown_s
+                    self._cooldown_until[token_address] = closed + self._cooldown_s
 
     # ---------- open ----------
 

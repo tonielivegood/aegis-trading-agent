@@ -305,6 +305,22 @@ def test_cooldown_blocks_reopen_and_seeds_from_journal(_s, _p, _t, tmp_path):
     assert eng3.open_cluster_position(T, "GEM", 18, CLUSTER) is True
 
 
+def test_cooldown_seed_skips_malformed_row_missing_token_address(tmp_path):
+    """A journal row with valid JSON + valid closed_at but no token_address
+    (hand-edit, truncated concurrent write) must be skipped like any other
+    malformed row, never crash TradeEngine() construction."""
+    journal = tmp_path / "closed.jsonl"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    journal.write_text(json.dumps({"closed_at": now_iso}) + "\n", encoding="utf-8")
+    budget = CopyTradeBudget(total_usd=16.14, slice_usd=3.0)
+    store = PositionStore(tmp_path / "shadow_positions.json")
+    store.load()
+    eng = TradeEngine(budget=budget, store=store, executors=None,
+                      shadow_mode=True, journal_path=journal,
+                      cooldown_minutes=60)
+    assert eng._cooldown_until == {}
+
+
 @patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
 @patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
 @patch("src.agent.copy_trade.trade_engine.passes_safety_check",

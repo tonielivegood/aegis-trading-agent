@@ -126,6 +126,10 @@ def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
     # Pre-scan: sellers per token in THIS batch. At 60s poll lag a cluster can
     # be born and die inside one batch (seen live: 9-13s round-trips) — the
     # engine skips the open when >=exit_wallets of the cluster already sold.
+    # This gate runs unconditionally (no config knob) — it's strictly
+    # safety-positive, so it's intentionally always-on. A config.json-only
+    # rollback will NOT restore this piece of v2 behavior; that needs a
+    # full code revert of this branch.
     batch_sellers: dict[str, set[str]] = {}
     for ev in events:
         if ev.direction == "out":
