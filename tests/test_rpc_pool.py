@@ -80,6 +80,31 @@ def test_call_returns_none_when_every_endpoint_gives_null_result(monkeypatch):
     assert pool.call("eth_getTransactionReceipt", ["0xnonexistent"]) is None
 
 
+def test_get_logs_routes_to_logs_endpoints_other_methods_to_general(monkeypatch):
+    # Real incident, 2026-07-17: funneling receipts/blocks through the only two
+    # getLogs-capable free endpoints rate-limited them within minutes of go-live.
+    calls = []
+    def fake_post(url, json=None, timeout=None):
+        calls.append((json["method"], url))
+        return FakeResponse({"jsonrpc": "2.0", "id": 1, "result": "0x1"})
+    monkeypatch.setattr("src.agent.copy_trade.rpc_pool.requests.post", fake_post)
+    pool = RpcPool(["http://general"], logs_endpoints=["http://logs-only"])
+    pool.call("eth_getTransactionReceipt", ["0xabc"])
+    pool.call("eth_getLogs", [{}])
+    assert calls == [("eth_getTransactionReceipt", "http://general"),
+                     ("eth_getLogs", "http://logs-only")]
+
+
+def test_logs_endpoints_default_to_general_when_not_given(monkeypatch):
+    calls = []
+    def fake_post(url, json=None, timeout=None):
+        calls.append(url)
+        return FakeResponse({"jsonrpc": "2.0", "id": 1, "result": []})
+    monkeypatch.setattr("src.agent.copy_trade.rpc_pool.requests.post", fake_post)
+    RpcPool(["http://only"]).call("eth_getLogs", [{}])
+    assert calls == ["http://only"]
+
+
 def test_latest_block_parses_hex(monkeypatch):
     monkeypatch.setattr(RpcPool, "call", lambda self, m, p: "0x2a")
     assert RpcPool(["x"]).latest_block() == 42

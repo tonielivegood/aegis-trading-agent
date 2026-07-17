@@ -161,7 +161,8 @@ def _build_runtime(cfg: dict):
 def run_scan(once: bool = False) -> None:
     cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))["copy_settings"]
     wallets = _load_wallets()
-    pool = RpcPool(cfg["rpc_endpoints"])
+    pool = RpcPool(cfg["rpc_endpoints"],
+                   logs_endpoints=cfg.get("rpc_logs_endpoints"))
     source = ChainEventSource(pool, wallets, start_block=pool.latest_block(),
                               ignore_tokens=set(cfg.get("ignore_tokens", [])))
     budget, store, engine = _build_runtime(cfg)

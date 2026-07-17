@@ -13,6 +13,12 @@
     "poll_interval_seconds": 45,
     "exec_slippage_bps": 1500,
     "rpc_endpoints": [
+      "https://bsc-dataseed.binance.org",
+      "https://bsc-dataseed1.defibit.io",
+      "https://bsc-pokt.nodies.app",
+      "https://1rpc.io/bnb"
+    ],
+    "rpc_logs_endpoints": [
       "https://bsc-pokt.nodies.app",
       "https://1rpc.io/bnb"
     ],

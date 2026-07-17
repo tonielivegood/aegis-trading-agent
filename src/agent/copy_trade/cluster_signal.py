@@ -22,12 +22,14 @@ class ClusterBuySignalTracker:
         token, wallet = token_address.lower(), wallet.lower()
         per_token = self._obs.setdefault(token, {})
         per_token = {w: v for w, v in per_token.items() if ts - v[0] <= self._window_s}
-        if wallet not in per_token:
+        newly_added = wallet not in per_token
+        if newly_added:
             per_token[wallet] = (ts, price_usd)
         self._obs[token] = per_token
         if len(per_token) < self._min:
-            log.info("cluster_pending", token=token, wallets=len(per_token),
-                     need=self._min)
+            if newly_added:   # repeat buys from a counted wallet would just spam
+                log.info("cluster_pending", token=token, wallets=len(per_token),
+                         need=self._min)
             return None
         ordered = sorted(per_token.items(), key=lambda kv: kv[1][0])
         first_ts, first_price = ordered[0][1]

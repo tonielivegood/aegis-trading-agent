@@ -4,13 +4,16 @@ leaving the bot blind; see the v2 spec). Rotates through fallback endpoints beca
 public nodes have no SLA, and chunks eth_getLogs ranges because public nodes cap
 the block span per call.
 
-DEFAULT_ENDPOINTS verified 2026-07-16 to support address-less, topic-only
-eth_getLogs (what ChainEventSource needs — it watches wallets across ANY token,
-so it can't scope queries to a single contract address). The obvious default
-choices do NOT work for this: bsc-dataseed.binance.org/defibit.io reject every
-topic-only eth_getLogs call with "limit exceeded" regardless of range size, and
-rpc.ankr.com/bsc now requires a paid API key. bsc.publicnode.com also rejects
-address-less queries outright. Re-verify before swapping in a new default."""
+Two endpoint tiers (split 2026-07-17 after live 429s/timeouts): only
+eth_getLogs is restricted-per-provider — bsc-dataseed.binance.org/defibit.io
+reject topic-only getLogs outright ("limit exceeded" at any range),
+rpc.ankr.com/bsc needs a paid key, bsc.publicnode.com requires an address
+filter — but every OTHER method (receipts, blocks, eth_call, nonce) works fine
+on the high-capacity dataseed nodes. Funneling ALL calls through the two
+getLogs-capable free endpoints rate-limited them within minutes of going live.
+So: DEFAULT_LOGS_ENDPOINTS carries only eth_getLogs; DEFAULT_ENDPOINTS
+(dataseed first) carries everything else. Re-verify per-provider getLogs
+support before swapping in new defaults."""
 from __future__ import annotations
 
 import requests
@@ -25,7 +28,18 @@ V2_SWAP_TOPIC = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d
 # Uniswap/Pancake V3 pool Swap(address,address,int256,int256,uint160,uint128,int24)
 V3_SWAP_TOPIC = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67"
 
+# General-purpose calls (receipts, blocks, eth_call, nonce…) — dataseed nodes
+# are fast and don't rate-limit these; the getLogs-capable pair sits last as
+# emergency fallback.
 DEFAULT_ENDPOINTS = [
+    "https://bsc-dataseed.binance.org",
+    "https://bsc-dataseed1.defibit.io",
+    "https://bsc-pokt.nodies.app",
+    "https://1rpc.io/bnb",
+]
+# eth_getLogs only — the sole two free providers verified to accept address-less,
+# topic-only queries (nodies caps ranges at 250 blocks, 1rpc at 50).
+DEFAULT_LOGS_ENDPOINTS = [
     "https://bsc-pokt.nodies.app",
     "https://1rpc.io/bnb",
 ]
@@ -40,16 +54,19 @@ def addr_topic(address: str) -> str:
 
 
 class RpcPool:
-    def __init__(self, endpoints: list[str], timeout: int = 15) -> None:
+    def __init__(self, endpoints: list[str], timeout: int = 15,
+                 logs_endpoints: list[str] | None = None) -> None:
         if not endpoints:
             raise ValueError("need at least one RPC endpoint")
         self._endpoints = list(endpoints)
+        self._logs_endpoints = list(logs_endpoints) if logs_endpoints else self._endpoints
         self._timeout = timeout
 
     def call(self, method: str, params: list) -> object:
         last_err: Exception | None = None
         null_result_seen = False
-        for url in self._endpoints:
+        endpoints = self._logs_endpoints if method == "eth_getLogs" else self._endpoints
+        for url in endpoints:
             try:
                 r = requests.post(url, json={"jsonrpc": "2.0", "id": 1,
                                              "method": method, "params": params},

@@ -27,7 +27,7 @@ from dotenv import dotenv_values
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.agent.copy_trade.rpc_pool import (  # noqa: E402
-    DEFAULT_ENDPOINTS, TRANSFER_TOPIC, RpcError, RpcPool,
+    DEFAULT_ENDPOINTS, DEFAULT_LOGS_ENDPOINTS, TRANSFER_TOPIC, RpcError, RpcPool,
 )
 from src.agent.copy_trade.wallet_discovery import (  # noqa: E402
     build_ranked_list, cross_winner_candidates, early_buyers, passes_filters,
@@ -170,7 +170,7 @@ def main() -> None:
 
     env = dotenv_values(ROOT / ".env")
     bscscan_key = env.get("BSCSCAN_API_KEY", "")
-    pool = RpcPool(DEFAULT_ENDPOINTS)
+    pool = RpcPool(DEFAULT_ENDPOINTS, logs_endpoints=DEFAULT_LOGS_ENDPOINTS)
     now = int(time.time())
 
     print("== source 1: gmgn-cli recent smart-money trades ==")
