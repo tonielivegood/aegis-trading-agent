@@ -248,3 +248,97 @@ def test_shadow_engine_refuses_to_close_a_real_position(_p, tmp_path):
     assert store.find_by_token(T) is not None              # NOT removed — fail safe
     executors.assert_not_called()
     assert not executors.method_calls                      # zero interaction, ever
+
+
+# ---------- v3 entry gates ----------
+import time as _time
+
+
+def _engine_v3(tmp_path, **kw):
+    budget = CopyTradeBudget(total_usd=16.14, slice_usd=3.0)
+    store = PositionStore(tmp_path / "shadow_positions.json")
+    store.load()
+    eng = TradeEngine(budget=budget, store=store, executors=None,
+                      shadow_mode=True, journal_path=tmp_path / "closed.jsonl",
+                      signals_path=tmp_path / "signals.jsonl", **kw)
+    return eng, budget, store
+
+
+def _signals(tmp_path):
+    p = tmp_path / "signals.jsonl"
+    return [json.loads(l) for l in p.read_text().splitlines()] if p.exists() else []
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_staleness_gate_skips_when_cluster_already_sold_in_batch(_s, _p, _t, tmp_path):
+    eng, budget, store = _engine_v3(tmp_path)
+    ok = eng.open_cluster_position(T, "GEM", 18, CLUSTER,
+                                   batch_sellers={W1.lower(), W2.lower()})
+    assert ok is False and store.all() == []
+    assert budget.available_usd == 16.14                  # nothing allocated
+    assert _signals(tmp_path)[-1]["decision"] == "skipped_stale"
+    # only 1 cluster wallet selling is NOT stale (need >= exit_wallets=2)
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER,
+                                     batch_sellers={W1.lower()}) is True
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_cooldown_blocks_reopen_and_seeds_from_journal(_s, _p, _t, tmp_path):
+    eng, _b, store = _engine_v3(tmp_path, cooldown_minutes=60)
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is True
+    eng.on_exit_signal(W1, T)
+    eng.on_exit_signal(W2, T)                             # full close (partial off)
+    assert store.find_by_token(T) is None
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is False   # cooling down
+    assert _signals(tmp_path)[-1]["decision"] == "skipped_cooldown"
+    # a NEW engine on the same journal (simulates restart) still refuses
+    eng2, _b2, _s2 = _engine_v3(tmp_path, cooldown_minutes=60)
+    assert eng2.open_cluster_position(T, "GEM", 18, CLUSTER) is False
+    # zero-cooldown engine (v2 behavior) is unaffected
+    eng3, _b3, _s3 = _engine_v3(tmp_path)
+    assert eng3.open_cluster_position(T, "GEM", 18, CLUSTER) is True
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+@patch("src.agent.copy_trade.trade_engine.get_pair_stats")
+def test_gem_filter_age_mcap_liquidity(stats_mock, _s, _p, _t, tmp_path):
+    young = _time.time() * 1000 - 2 * 86400_000           # 2 days old
+    old = _time.time() * 1000 - 40 * 86400_000            # 40 days old
+    gates = dict(max_token_age_days=14, max_market_cap_usd=5_000_000,
+                 min_liquidity_usd=20_000)
+    good = {"price_usd": 1.0, "liquidity_usd": 50_000.0,
+            "market_cap_usd": 800_000.0, "pair_created_at_ms": young,
+            "pair_address": "0x" + "c" * 40}
+
+    for bad, expect in [
+        (dict(good, market_cap_usd=95_000_000.0), "mcap"),       # the O trade
+        (dict(good, pair_created_at_ms=old), "age"),
+        (dict(good, liquidity_usd=3_000.0), "liquidity"),
+        (dict(good, pair_created_at_ms=None), "age"),            # unknown age = skip
+        (None, "no_pair_stats"),                                 # API down = skip
+    ]:
+        stats_mock.return_value = bad
+        eng, budget, store = _engine_v3(tmp_path, **gates)
+        assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is False
+        assert store.all() == [] and budget.available_usd == 16.14
+        assert expect in (_signals(tmp_path)[-1]["decision"]
+                          + _signals(tmp_path)[-1]["detail"])
+
+    stats_mock.return_value = good
+    eng, _b, store = _engine_v3(tmp_path, **gates)
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is True
+    assert _signals(tmp_path)[-1]["decision"] == "opened"
+    # engine with all gates None never calls get_pair_stats (v2 behavior)
+    stats_mock.reset_mock()
+    eng2, _b2, _s2 = _engine_v3(tmp_path)
+    eng2.open_cluster_position("0x" + "d" * 40, "GEM2", 18, CLUSTER)
+    stats_mock.assert_not_called()
