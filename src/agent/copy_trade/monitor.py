@@ -38,9 +38,10 @@ from .budget import CopyTradeBudget
 from .chain_events import ChainEventSource, WalletEvent
 from .cluster_signal import ClusterBuySignalTracker
 from .positions import PositionStore
-from .prices import get_price_usd
+from .prices import get_price_usd, get_pair_stats, get_holder_stats
 from .rpc_pool import RpcPool
 from .trade_engine import TradeEngine
+from .watchlist import Watchlist
 
 log = get_logger(__name__)
 ROOT = Path(__file__).resolve().parents[3]
@@ -52,6 +53,7 @@ SHADOW_PATH = ROOT / "data" / "copy_trade" / "shadow_positions.json"
 JOURNAL_PATH = ROOT / "data" / "copy_trade" / "closed_trades.jsonl"
 SIGNALS_PATH = ROOT / "data" / "copy_trade" / "signals.jsonl"
 WALLET_EVENTS_PATH = ROOT / "data" / "copy_trade" / "wallet_events.jsonl"
+FILMS_PATH = ROOT / "data" / "copy_trade" / "watchlist_films.jsonl"
 FAILURE_ALERT_THRESHOLD = 5
 
 
@@ -119,10 +121,26 @@ def _token_meta(pool: RpcPool, token_address: str) -> tuple[str, int]:
     return symbol, decimals
 
 
+def _is_gem_band_stats(stats: dict | None, cfg: dict) -> bool:
+    """Same three rules as the engine's gem filter — used to decide which
+    tokens deserve a film. Unknowns = not gem band."""
+    if stats is None or stats.get("pair_created_at_ms") is None:
+        return False
+    age_d = (time.time() - stats["pair_created_at_ms"] / 1000) / 86400
+    if age_d > cfg.get("max_token_age_days", 14):
+        return False
+    mcap = stats.get("market_cap_usd")
+    if mcap is None or mcap > cfg.get("max_market_cap_usd", 5_000_000):
+        return False
+    return (stats.get("liquidity_usd") or 0) >= cfg.get("min_liquidity_usd", 20_000)
+
+
 def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
                    engine: TradeEngine, store: PositionStore,
                    notifier: EmailNotifier | None,
-                   token_meta_fn, voting: set[str] | None = None) -> None:
+                   token_meta_fn, voting: set[str] | None = None,
+                   watchlist: Watchlist | None = None,
+                   gem_cfg: dict | None = None) -> None:
     # Pre-scan: sellers per token in THIS batch. At 60s poll lag a cluster can
     # be born and die inside one batch (seen live: 9-13s round-trips) — the
     # engine skips the open when >=exit_wallets of the cluster already sold.
@@ -136,6 +154,8 @@ def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
             batch_sellers.setdefault(ev.token_address, set()).add(ev.wallet)
     for ev in events:
         if ev.direction == "out":
+            if watchlist is not None:
+                watchlist.note_sell(ev.token_address, ev.wallet)
             was_open = store.find_by_token(ev.token_address) is not None
             engine.on_exit_signal(ev.wallet, ev.token_address)
             if was_open and store.find_by_token(ev.token_address) is None:
@@ -147,6 +167,17 @@ def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
                         f"tx https://bscscan.com/tx/{ev.tx_hash}")
             continue
         # direction == "in"
+        if watchlist is not None and gem_cfg is not None:
+            if watchlist.get(ev.token_address) is not None:
+                watchlist.note_buy(ev.token_address, ev.wallet)
+            else:
+                stats = get_pair_stats(ev.token_address)
+                if _is_gem_band_stats(stats, gem_cfg):
+                    watchlist.arm(ev.token_address, ev.wallet,
+                                  price=stats["price_usd"],
+                                  liquidity=stats["liquidity_usd"])
+                    log.info("stakeout_armed", token=ev.token_address,
+                             wallet=ev.wallet)
         if voting is not None and ev.wallet not in voting:
             continue   # observe-only wallet: watched for data, never votes
         if store.find_by_token(ev.token_address) is not None:
@@ -227,6 +258,10 @@ def run_scan(once: bool = False) -> None:
     budget, store, engine = _build_runtime(cfg)
     tracker = ClusterBuySignalTracker(min_wallets=cfg.get("min_wallets", 3),
                                       window_minutes=cfg.get("window_minutes", 15))
+    watchlist = Watchlist(
+        FILMS_PATH, max_dossiers=cfg.get("watchlist_max_dossiers", 8),
+        max_age_s=cfg.get("watchlist_max_hours", 6) * 3600
+    ) if cfg.get("watchlist_enabled", True) else None
     try:
         notifier = EmailNotifier()
     except ValueError:
@@ -252,7 +287,8 @@ def run_scan(once: bool = False) -> None:
                 outage_alerted = True
             events = []
         process_events(events, tracker, engine, store, notifier,
-                       lambda a: _token_meta(pool, a), voting=voting)
+                       lambda a: _token_meta(pool, a), voting=voting,
+                       watchlist=watchlist, gem_cfg=cfg)
         open_before = {p.token_address for p in store.all()}
         engine.check_exits()
         for token_address in open_before - {p.token_address for p in store.all()}:
@@ -262,6 +298,22 @@ def run_scan(once: bool = False) -> None:
                     f"[COPY-TRADE{' SHADOW' if engine._shadow else ''}] "
                     f"{reason.upper()} CLOSE {token_address[:10]}…",
                     f"closed by {reason}\ntoken {token_address}")
+        if watchlist is not None:
+            watchlist.expire()
+            for d in watchlist.active():
+                stats = get_pair_stats(d.token_address)
+                hs = get_holder_stats(d.token_address)
+                if stats is None:
+                    continue          # no sample this tick; film gap is visible in ts
+                watchlist.add_sample(d.token_address, {
+                    "ts": time.time(), "price": stats["price_usd"],
+                    "liq": stats["liquidity_usd"],
+                    "buys_h1": stats["txns_h1_buys"], "sells_h1": stats["txns_h1_sells"],
+                    "buys_m5": stats["txns_m5_buys"], "sells_m5": stats["txns_m5_sells"],
+                    "chg_m5": stats["price_change_m5"],
+                    "holders": (hs or {}).get("holder_count"),
+                    "top_pct": (hs or {}).get("top_pct"),
+                    "top5_pct": (hs or {}).get("top5_pct")})
         STATE_PATH.write_text(json.dumps({
             "last_scan_at": datetime.now(timezone.utc).isoformat(),
             "last_processed_block": source.last_processed}), encoding="utf-8")

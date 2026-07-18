@@ -226,3 +226,36 @@ def test_trail_close_notification_says_trail_not_valve(tmp_path, monkeypatch):
     body = mock_notifier.send_alert.call_args.args[1]
     assert "TRAIL" in subject.upper() and "VALVE" not in subject.upper()
     assert "trail" in body.lower() and "valve" not in body.lower()
+
+
+# ---------- phase-2 stakeout recorder wiring ----------
+
+@patch("src.agent.copy_trade.monitor.get_holder_stats",
+       return_value={"holder_count": 50, "top_pct": 0.03, "top5_pct": 0.1})
+@patch("src.agent.copy_trade.monitor.get_pair_stats")
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.monitor.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_watchlist_records_gem_band_buys(_s, _mp, _tax, stats_mock, _hs, tmp_path):
+    import time as _t
+    from src.agent.copy_trade.watchlist import Watchlist
+    young = _t.time() * 1000 - 2 * 86400_000
+    stats_mock.return_value = {"price_usd": 1.0, "liquidity_usd": 50_000.0,
+                               "market_cap_usd": 400_000.0,
+                               "pair_created_at_ms": young, "pair_address": "0xp",
+                               "txns_h1_buys": 5, "txns_h1_sells": 2,
+                               "txns_m5_buys": 1, "txns_m5_sells": 0,
+                               "price_change_m5": 1.0, "price_change_h1": 5.0}
+    tracker, engine, store = _pipeline(tmp_path)
+    wl = Watchlist(films_path=tmp_path / "films.jsonl")
+    cfg = {"max_token_age_days": 14, "max_market_cap_usd": 5_000_000,
+           "min_liquidity_usd": 20_000}
+    meta = lambda addr: ("GEM", 18)
+    process_events([_ev(W1)], tracker, engine, store, None, meta,
+                   voting=set(), watchlist=wl, gem_cfg=cfg)   # voting empty: no trade
+    assert len(wl.active()) == 1                              # but the film started
+    assert wl.get(T).armers == [W1.lower()]
+    process_events([_ev(W2), _ev(W1, direction="out")], tracker, engine, store,
+                   None, meta, voting=set(), watchlist=wl, gem_cfg=cfg)
+    assert wl.get(T) is None                                  # armer sold -> disarmed

@@ -72,6 +72,12 @@ def get_pair_stats(token_address: str) -> dict | None:
         "market_cap_usd": float(mcap) if mcap else None,
         "pair_created_at_ms": min(created) if created else None,
         "pair_address": best.get("pairAddress"),
+        "txns_h1_buys": int(((best.get("txns") or {}).get("h1") or {}).get("buys") or 0),
+        "txns_h1_sells": int(((best.get("txns") or {}).get("h1") or {}).get("sells") or 0),
+        "txns_m5_buys": int(((best.get("txns") or {}).get("m5") or {}).get("buys") or 0),
+        "txns_m5_sells": int(((best.get("txns") or {}).get("m5") or {}).get("sells") or 0),
+        "price_change_m5": (best.get("priceChange") or {}).get("m5"),
+        "price_change_h1": (best.get("priceChange") or {}).get("h1"),
     }
 
 
@@ -89,4 +95,38 @@ def get_taxes(token_address: str) -> tuple[float, float] | None:
         return float(buy_tax), float(sell_tax)
     except Exception as e:  # noqa: BLE001
         log.warning("goplus_taxes_failed", token=token_address, error=type(e).__name__)
+        return None
+
+
+_HOLDER_TTL_S = 55
+_holder_cache: dict[str, tuple[float, dict]] = {}
+_DEAD = "0x000000000000000000000000000000000000dead"
+
+
+def get_holder_stats(token_address: str) -> dict | None:
+    """Holder distribution facts for the concentration gate + phase-2 films.
+    Excludes LP pools (non-empty GoPlus tag), the dead address, and locked
+    holders — what's left is the supply that can actually dump on us."""
+    key = token_address.lower()
+    hit = _holder_cache.get(key)
+    if hit is not None and time.time() - hit[0] < _HOLDER_TTL_S:
+        return hit[1]
+    try:
+        r = requests.get(_GOPLUS + token_address, timeout=15)
+        r.raise_for_status()
+        result = r.json().get("result") or {}
+        info = result.get(token_address.lower()) or result.get(token_address)
+        if not info:
+            return None
+        free = [float(h.get("percent") or 0) for h in (info.get("holders") or [])
+                if not h.get("tag") and (h.get("address") or "").lower() != _DEAD
+                and not h.get("is_locked")]
+        free.sort(reverse=True)
+        out = {"holder_count": int(info.get("holder_count") or 0),
+               "top_pct": free[0] if free else 0.0,
+               "top5_pct": sum(free[:5])}
+        _holder_cache[key] = (time.time(), out)
+        return out
+    except Exception as e:  # noqa: BLE001
+        log.warning("goplus_holders_failed", token=token_address, error=type(e).__name__)
         return None
