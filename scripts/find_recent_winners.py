@@ -58,15 +58,33 @@ def is_catchable(stats: dict, min_multiple: float, min_peak_hours: float) -> boo
 
 # ---------- thin network layer (probe shapes before trusting — see Step 4) ----------
 
+_MAX_429_ATTEMPTS = 3
+_429_BACKOFF_S = [_SLEEP_S * 2, _SLEEP_S * 4]   # used when no Retry-After header
+
+
 def _get(url: str, params: dict | None = None) -> dict | None:
-    try:
-        r = requests.get(url, params=params or {}, timeout=20,
-                         headers={"accept": "application/json"})
-        r.raise_for_status()
-        return r.json()
-    except Exception as e:  # noqa: BLE001 — report script, never crash on one call
-        print(f"  !! GET {url} failed: {type(e).__name__}", file=sys.stderr)
-        return None
+    for attempt in range(_MAX_429_ATTEMPTS):
+        try:
+            r = requests.get(url, params=params or {}, timeout=20,
+                             headers={"accept": "application/json"})
+            if r.status_code == 429:
+                if attempt == _MAX_429_ATTEMPTS - 1:
+                    print(f"  !! GET {url} rate-limited after "
+                          f"{_MAX_429_ATTEMPTS} retries", file=sys.stderr)
+                    return None
+                retry_after = r.headers.get("Retry-After")
+                try:
+                    sleep_s = max(1.0, float(retry_after))
+                except (TypeError, ValueError):
+                    sleep_s = _429_BACKOFF_S[min(attempt, len(_429_BACKOFF_S) - 1)]
+                time.sleep(sleep_s)
+                continue
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:  # noqa: BLE001 — report script, never crash on one call
+            print(f"  !! GET {url} failed: {type(e).__name__}", file=sys.stderr)
+            return None
+    return None
 
 
 def candidate_pools(max_pages_top: int, max_pages_new: int) -> list[dict]:
