@@ -42,7 +42,8 @@ def test_audit_promote_reject_insufficient():
         stats[g] = gem_stats
     rows = [_row(f"2026-07-18T0{i}:00:00+00:00", W1, t)
             for i, t in enumerate(gems)] + [_row("2026-07-18T03:00:00+00:00", W1, OLD)]
-    # W2: only old buys -> REJECT ; W3: 1 gem buy -> INSUFFICIENT
+    # W2: only old buys -> REJECT ; W3: holds=[] (no completed hold-time
+    # observations yet, can't judge hold duration) -> INSUFFICIENT
     rows += [_row("2026-07-18T04:00:00+00:00", W2, OLD)] * 4
     rows += [_row("2026-07-18T05:00:00+00:00", W3, GEM)]
     holds = {W1: [3600.0, 4000.0], W2: [30.0], W3: []}

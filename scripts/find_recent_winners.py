@@ -98,7 +98,7 @@ def candidate_pools(max_pages_top: int, max_pages_new: int) -> list[dict]:
     return list(seen.values())
 
 
-def pool_ohlcv_hour(pool_address: str, limit: int = 504) -> list[list]:
+def pool_ohlcv_hour(pool_address: str, limit: int) -> list[list]:
     body = _get(f"{_GT}/networks/bsc/pools/{pool_address}/ohlcv/hour",
                 {"aggregate": 1, "limit": limit})
     time.sleep(_SLEEP_S)
@@ -136,9 +136,14 @@ def main() -> None:
              and a <= args.max_age_days and p["reserve_usd"] >= args.min_liq]
     print(f"pools listed: {len(pools)}, young+alive candidates: {len(young)}")
 
+    # 24 hourly candles/day + buffer, so the oldest candle reaches a pool's
+    # true first candle even for pools near --max-age-days old; GeckoTerminal
+    # caps `limit` at 1000 (~41 days) so clamp there.
+    ohlcv_limit = min(1000, int(args.max_age_days * 24) + 6)
+
     winners = []
     for p in young:
-        ohlcv = pool_ohlcv_hour(p["pool_address"])
+        ohlcv = pool_ohlcv_hour(p["pool_address"], ohlcv_limit)
         s = follower_stats(ohlcv)
         if s is None:
             continue
