@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from scripts.find_recent_winners import _get
+from scripts.find_recent_winners import _get, _MAX_429_ATTEMPTS
 
 
 def _resp(status_code, json_body=None, headers=None):
@@ -56,7 +56,7 @@ def test_429_every_attempt_gives_up_and_returns_none(mock_get, mock_sleep):
     mock_get.side_effect = [_resp(429), _resp(429), _resp(429), _resp(429), _resp(429)]
     result = _get("http://x")               # must terminate, not loop forever
     assert result is None
-    assert mock_get.call_count <= 5         # retry cap actually caps attempts
+    assert mock_get.call_count == _MAX_429_ATTEMPTS
 
 
 @patch("scripts.find_recent_winners.time.sleep")
