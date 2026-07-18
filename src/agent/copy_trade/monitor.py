@@ -173,11 +173,11 @@ def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
             else:
                 stats = get_pair_stats(ev.token_address)
                 if _is_gem_band_stats(stats, gem_cfg):
-                    watchlist.arm(ev.token_address, ev.wallet,
-                                  price=stats["price_usd"],
-                                  liquidity=stats["liquidity_usd"])
-                    log.info("stakeout_armed", token=ev.token_address,
-                             wallet=ev.wallet)
+                    if watchlist.arm(ev.token_address, ev.wallet,
+                                     price=stats["price_usd"],
+                                     liquidity=stats["liquidity_usd"]):
+                        log.info("stakeout_armed", token=ev.token_address,
+                                 wallet=ev.wallet)
         if voting is not None and ev.wallet not in voting:
             continue   # observe-only wallet: watched for data, never votes
         if store.find_by_token(ev.token_address) is not None:

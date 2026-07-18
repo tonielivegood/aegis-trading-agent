@@ -53,6 +53,7 @@ def _patch_paths(monkeypatch, tmp_path, config_path=None, wallets_path=None):
     monkeypatch.setattr(mon, "SHADOW_PATH", tmp_path / "shadow_positions.json")
     monkeypatch.setattr(mon, "POSITIONS_PATH", tmp_path / "positions.json")
     monkeypatch.setattr(mon, "JOURNAL_PATH", tmp_path / "closed.jsonl")
+    monkeypatch.setattr(mon, "FILMS_PATH", tmp_path / "films.jsonl")
 
 
 def _mock_pool_and_source():

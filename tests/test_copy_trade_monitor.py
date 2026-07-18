@@ -190,6 +190,7 @@ def test_trail_close_notification_says_trail_not_valve(tmp_path, monkeypatch):
     monkeypatch.setattr(mon, "SHADOW_PATH", shadow_path)
     monkeypatch.setattr(mon, "POSITIONS_PATH", tmp_path / "positions.json")
     monkeypatch.setattr(mon, "JOURNAL_PATH", tmp_path / "closed.jsonl")
+    monkeypatch.setattr(mon, "FILMS_PATH", tmp_path / "films.jsonl")
 
     # HWM=2.0, entry=1.0: a price of 1.5 stays well above the valve floor (0.3)
     # but trips the 20% trail off the high-water mark (1.6).
