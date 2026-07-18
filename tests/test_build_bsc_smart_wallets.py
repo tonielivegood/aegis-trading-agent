@@ -35,6 +35,21 @@ def test_assemble_candidates_merges_sources():
     assert by_addr[W3]["sources"] == ["early_buyer"]
 
 
+def test_assemble_candidates_size_pick_only():
+    cands = assemble_candidates(gmgn_counts={}, early_counts={}, size_picks={W1})
+    by_addr = {c["address"]: c for c in cands}
+    assert by_addr[W1]["sources"] == ["size_pick"]
+    assert by_addr[W1]["score"] == 1.5
+
+
+def test_assemble_candidates_early_and_size_pick_combined():
+    cands = assemble_candidates(gmgn_counts={}, early_counts={W1: 2},
+                                size_picks={W1})
+    by_addr = {c["address"]: c for c in cands}
+    assert set(by_addr[W1]["sources"]) == {"early_buyer", "size_pick"}
+    assert by_addr[W1]["score"] == 2 * 2.0 + 1.5
+
+
 def test_dexscreener_pair_skips_pair_missing_created_at(monkeypatch):
     # real-world case (LAB, 2026-07-16): the highest-liquidity BSC pair has no
     # pairCreatedAt, but a lower-liquidity one does — must fall back to it.

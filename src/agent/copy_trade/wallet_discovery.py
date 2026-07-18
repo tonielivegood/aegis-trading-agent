@@ -29,6 +29,36 @@ def early_buyers(logs: list[dict], exclude: set[str], max_buyers: int = 200) -> 
     return list(seen)
 
 
+def early_buyer_amounts(logs: list[dict], exclude: set[str],
+                        max_addrs: int = 200) -> dict[str, int]:
+    """Like early_buyers, but sums the Transfer `data` (amount) field per address
+    across ALL occurrences rather than returning a first-seen list — the signal
+    for single-token size-pick candidates (biggest early buy of ONE winner, no
+    cross-token convergence required)."""
+    excl = {a.lower() for a in exclude}
+    amounts: dict[str, int] = {}
+    for lg in logs:
+        if len(lg.get("topics", [])) < 3:
+            continue
+        to_addr = _topic_to_addr(lg["topics"][2])
+        if to_addr in excl:
+            continue
+        if to_addr not in amounts:
+            if len(amounts) >= max_addrs:
+                continue
+            amounts[to_addr] = 0
+        try:
+            amounts[to_addr] += int(lg.get("data") or "0x0", 16)
+        except (TypeError, ValueError):
+            pass
+    return amounts
+
+
+def top_by_amount(amounts: dict[str, int], top_n: int) -> list[str]:
+    """Addresses sorted by amount descending, capped at top_n."""
+    return sorted(amounts, key=lambda a: amounts[a], reverse=True)[:top_n]
+
+
 def cross_winner_candidates(buyers_by_token: dict[str, list[str]],
                             min_tokens: int = 2) -> dict[str, int]:
     """Address → how many distinct winner tokens it bought early. Only wallets early
@@ -85,12 +115,16 @@ def passes_filters(activity: dict, code: str) -> tuple[bool, str]:
     return True, "ok"
 
 
-def score_candidate(wins_early: int, gmgn_hits: int, in_both: bool) -> float:
+def score_candidate(wins_early: int, gmgn_hits: int, in_both: bool,
+                    is_size_pick: bool = False) -> float:
     """Early-winner evidence dominates (it's OUR mined signal); GMGN trade frequency
-    is a tie-breaker; showing up in both independent sources is strong confirmation."""
+    is a tie-breaker; showing up in both independent sources is strong confirmation.
+    A single-token size pick (biggest early buy, no cross-token convergence) is
+    weaker evidence than in_both, but stronger than a single gmgn hit."""
     return (min(wins_early, 5) * 2.0
             + min(gmgn_hits, 10) * 0.3
-            + (3.0 if in_both else 0.0))
+            + (3.0 if in_both else 0.0)
+            + (1.5 if is_size_pick else 0.0))
 
 
 def build_ranked_list(candidates: list[dict], top_n: int = 50) -> list[dict]:

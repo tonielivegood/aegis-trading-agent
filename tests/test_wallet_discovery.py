@@ -1,5 +1,5 @@
 from src.agent.copy_trade.wallet_discovery import (
-    cross_winner_candidates, early_buyers,
+    cross_winner_candidates, early_buyer_amounts, early_buyers, top_by_amount,
 )
 from src.agent.copy_trade.rpc_pool import TRANSFER_TOPIC, addr_topic
 
@@ -10,9 +10,10 @@ PAIR = "0x9999999999999999999999999999999999999999"
 ZERO = "0x0000000000000000000000000000000000000000"
 
 
-def _transfer_log(to_addr: str, block: int) -> dict:
+def _transfer_log(to_addr: str, block: int, data: str = "0x0") -> dict:
     return {"address": "0xtoken", "blockNumber": hex(block),
-            "topics": [TRANSFER_TOPIC, addr_topic(PAIR), addr_topic(to_addr)]}
+            "topics": [TRANSFER_TOPIC, addr_topic(PAIR), addr_topic(to_addr)],
+            "data": data}
 
 
 def test_early_buyers_first_seen_order_dedup_and_exclusions():
@@ -37,6 +38,60 @@ def test_cross_winner_candidates_requires_min_tokens():
     assert cands == {W1: 3}          # W1 early in 3 winners; W2/W3 only in 1 each
 
 
+def test_early_buyer_amounts_sums_multiple_transfers_to_same_address():
+    logs = [
+        _transfer_log(W1, 1, data="0x64"),    # 100
+        _transfer_log(W2, 2, data="0x0a"),    # 10
+        _transfer_log(W1, 3, data="0x0a"),    # +10 -> 110
+    ]
+    amounts = early_buyer_amounts(logs, exclude=set())
+    assert amounts[W1] == 110
+    assert amounts[W2] == 10
+
+
+def test_early_buyer_amounts_respects_exclude():
+    logs = [_transfer_log(PAIR, 1, data="0x64"), _transfer_log(ZERO, 2, data="0x64"),
+            _transfer_log(W1, 3, data="0x05")]
+    amounts = early_buyer_amounts(logs, exclude={PAIR, ZERO})
+    assert amounts == {W1: 5}
+
+
+def test_early_buyer_amounts_caps_distinct_addrs_but_keeps_summing_admitted():
+    logs = [
+        _transfer_log(W1, 1, data="0x0a"),          # admitted (1st distinct)
+        _transfer_log(W2, 2, data="0x0a"),          # admitted (2nd distinct, cap=2)
+        _transfer_log(W3, 3, data="0x0a"),          # NOT admitted (cap reached)
+        _transfer_log(W1, 4, data="0x0a"),          # already-admitted, keep summing
+    ]
+    amounts = early_buyer_amounts(logs, exclude=set(), max_addrs=2)
+    assert len(amounts) == 2
+    assert amounts[W1] == 20              # both transfers counted
+    assert W3 not in amounts
+
+
+def test_early_buyer_amounts_treats_missing_or_malformed_data_as_zero():
+    log_no_data = {"address": "0xtoken", "blockNumber": hex(1),
+                   "topics": [TRANSFER_TOPIC, addr_topic(PAIR), addr_topic(W1)]}
+    log_none_data = _transfer_log(W1, 2, data=None)
+    log_bad_data = _transfer_log(W1, 3, data="not-hex")
+    log_valid = _transfer_log(W1, 4, data="0x0a")   # 10
+    amounts = early_buyer_amounts(
+        [log_no_data, log_none_data, log_bad_data, log_valid], exclude=set())
+    assert amounts[W1] == 10
+
+
+def test_top_by_amount_sorts_descending():
+    amounts = {W1: 5, W2: 50, W3: 20, PAIR: 1, ZERO: 100}
+    assert top_by_amount(amounts, top_n=2) == [ZERO, W2]
+
+
+def test_top_by_amount_top_n_larger_than_dict_returns_everything():
+    amounts = {W1: 5, W2: 50}
+    result = top_by_amount(amounts, top_n=10)
+    assert set(result) == {W1, W2}
+    assert len(result) == 2
+
+
 from src.agent.copy_trade.wallet_discovery import (
     build_ranked_list, passes_filters, score_candidate, wallet_activity,
 )
@@ -56,6 +111,13 @@ def test_score_candidate_weights():
     assert score_candidate(wins_early=0, gmgn_hits=10, in_both=False) == 3.0
     assert score_candidate(wins_early=2, gmgn_hits=5, in_both=True) == 2*2.0 + 1.5 + 3.0
     assert score_candidate(wins_early=99, gmgn_hits=99, in_both=True) == 10.0 + 3.0 + 3.0
+
+
+def test_score_candidate_size_pick_bonus():
+    assert score_candidate(wins_early=0, gmgn_hits=0, in_both=False,
+                           is_size_pick=True) == 1.5
+    # default (param omitted) must NOT silently activate the bonus
+    assert score_candidate(wins_early=0, gmgn_hits=0, in_both=False) == 0.0
 
 
 def test_build_ranked_list_sorts_and_truncates():

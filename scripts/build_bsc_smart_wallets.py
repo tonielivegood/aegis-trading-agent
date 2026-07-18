@@ -13,6 +13,9 @@ Two candidate sources, merged and scored by wallet_discovery:
   2. early buyers shared across >=2 of the winner tokens (our own edge), sourced
      either from --winners-file (scripts/find_recent_winners.py output) or
      --winners (hand-picked addresses)
+  3. single-token size picks: per winner token, the early buyers with the
+     largest transfer amount (no cross-token convergence required — a thin
+     winners list rarely produces overlap)
 Prints the scored table for user review; writes to --out (a staging file, NOT
 wallets.json — deploy to the live list happens after manual review); --dry-run
 skips writing entirely.
@@ -37,8 +40,8 @@ from src.agent.copy_trade.rpc_pool import (  # noqa: E402
     DEFAULT_ENDPOINTS, DEFAULT_LOGS_ENDPOINTS, TRANSFER_TOPIC, RpcError, RpcPool,
 )
 from src.agent.copy_trade.wallet_discovery import (  # noqa: E402
-    build_ranked_list, cross_winner_candidates, early_buyers, passes_filters,
-    score_candidate, wallet_activity,
+    build_ranked_list, cross_winner_candidates, early_buyer_amounts, early_buyers,
+    passes_filters, score_candidate, top_by_amount, wallet_activity,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +67,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                          "this source produced the 2026-07 scalper contamination)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--top", type=int, default=26)
+    ap.add_argument("--size-picks-per-token", type=int, default=10,
+                    help="per winner token, how many top single-token size-pick "
+                         "candidates to include")
     ap.add_argument("--out", default=str(ROOT / "data" / "copy_trade"
                                          / "wallet_candidates.json"),
                     help="staging output (NOT wallets.json — audition first)")
@@ -80,17 +86,20 @@ def gmgn_maker_counts(trades: list[dict]) -> dict[str, int]:
 
 
 def assemble_candidates(gmgn_counts: dict[str, int],
-                        early_counts: dict[str, int]) -> list[dict]:
+                        early_counts: dict[str, int],
+                        size_picks: set[str] = frozenset()) -> list[dict]:
     out = []
-    for addr in set(gmgn_counts) | set(early_counts):
+    for addr in set(gmgn_counts) | set(early_counts) | set(size_picks):
         sources = ([s for s, hit in (("gmgn", addr in gmgn_counts),
-                                     ("early_buyer", addr in early_counts)) if hit])
+                                     ("early_buyer", addr in early_counts),
+                                     ("size_pick", addr in size_picks)) if hit])
         out.append({
             "address": addr,
             "sources": sources,
             "score": score_candidate(wins_early=early_counts.get(addr, 0),
                                      gmgn_hits=gmgn_counts.get(addr, 0),
-                                     in_both=len(sources) == 2),
+                                     in_both="gmgn" in sources and "early_buyer" in sources,
+                                     is_size_pick=addr in size_picks),
         })
     return out
 
@@ -164,12 +173,12 @@ def block_at_timestamp(pool: RpcPool, ts: int) -> int:
     return lo
 
 
-def scan_winner(pool: RpcPool, token_address: str) -> list[str]:
+def scan_winner(pool: RpcPool, token_address: str) -> tuple[list[str], dict[str, int]]:
     try:
         pair = dexscreener_pair(token_address)
         if pair is None or not pair.get("pairCreatedAt"):
             print(f"  !! no BSC pair found for {token_address} — skipping")
-            return []
+            return [], {}
         created_ts = int(pair["pairCreatedAt"]) // 1000
         start = block_at_timestamp(pool, created_ts)
         # chunk=40: free public endpoints cap eth_getLogs ranges hard (1rpc.io/bnb
@@ -182,12 +191,13 @@ def scan_winner(pool: RpcPool, token_address: str) -> list[str]:
                                      chunk=40)
         exclude = {pair["pairAddress"].lower(), token_address.lower(), ZERO}
         buyers = early_buyers(logs, exclude=exclude)
+        amounts = early_buyer_amounts(logs, exclude=exclude)
         print(f"  {pair['baseToken']['symbol']}: {len(logs)} transfers, "
               f"{len(buyers)} early buyers")
-        return buyers
+        return buyers, amounts
     except Exception as e:
         print(f"  !! error scanning {token_address}: {e} — skipping")
-        return []
+        return [], {}
 
 
 def main() -> None:
@@ -212,11 +222,19 @@ def main() -> None:
         print("== gmgn source: SKIPPED (opt-in via --with-gmgn) ==")
 
     print("== early buyers across winner tokens ==")
-    buyers_by_token = {t: scan_winner(pool, t) for t in winners}
+    buyers_by_token: dict[str, list[str]] = {}
+    amounts_by_token: dict[str, dict[str, int]] = {}
+    for t in winners:
+        buyers_by_token[t], amounts_by_token[t] = scan_winner(pool, t)
     early_counts = cross_winner_candidates(buyers_by_token, min_tokens=2)
     print(f"  {len(early_counts)} wallets early in >=2 winners")
 
-    candidates = assemble_candidates(gmgn_counts, early_counts)
+    size_picks: set[str] = set()
+    for amounts in amounts_by_token.values():
+        size_picks.update(top_by_amount(amounts, top_n=args.size_picks_per_token))
+    print(f"  {len(size_picks)} additional single-token size-pick candidates")
+
+    candidates = assemble_candidates(gmgn_counts, early_counts, size_picks)
     candidates.sort(key=lambda c: c["score"], reverse=True)
 
     print(f"== filtering top candidates (contract check + activity if available, need {args.top}) ==")
