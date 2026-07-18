@@ -8,7 +8,7 @@ scalper contamination — self-built now, so it can never silently disappear aga
 
 Verdicts: PROMOTE (>= MIN_GEM_BUYS gem-band buys AND gem share >= MIN_GEM_PCT of
 unique tokens AND median hold >= MIN_MEDIAN_HOLD_S), REJECT (enough data, bar
-failed), INSUFFICIENT (< MIN_GEM_BUYS gem buys observed — never promotable).
+failed), INSUFFICIENT (no completed hold-time data yet — never promotable).
 Gem-band stats are evaluated at REPORT time via DexScreener (ponytail: a token
 bought 2 days ago may have grown since — small skew, acceptable for a 2-3 day
 audition window; age barely drifts, mcap can)."""
