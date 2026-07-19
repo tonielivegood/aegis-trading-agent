@@ -289,6 +289,27 @@ def test_staleness_gate_skips_when_cluster_already_sold_in_batch(_s, _p, _t, tmp
 @patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
 @patch("src.agent.copy_trade.trade_engine.passes_safety_check",
        return_value=(True, 18))
+def test_already_open_gate_refuses_second_position_same_token(_s, _p, _t, tmp_path):
+    """Root-cause guard: whichever path calls open_cluster_position a second
+    time for a token already in the store (cluster-vote re-fire, or a fresh
+    phase2 dossier re-arming after 'entered') must be refused — no second
+    position, no budget consumed, no double concentration on one token."""
+    eng, budget, store = _engine_v3(tmp_path)
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is True
+    available_after_first = budget.available_usd
+
+    other_cluster = {"wallets": [W2, W3], "first_ts": 1.0, "first_price_usd": 1.5}
+    assert eng.open_cluster_position(T, "GEM", 18, other_cluster) is False
+
+    assert len(store.all()) == 1                          # still just one position
+    assert budget.available_usd == available_after_first   # second attempt cost nothing
+    assert _signals(tmp_path)[-1]["decision"] == "skipped_already_open"
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
 def test_cooldown_blocks_reopen_and_seeds_from_journal(_s, _p, _t, tmp_path):
     eng, _b, store = _engine_v3(tmp_path, cooldown_minutes=60)
     assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is True

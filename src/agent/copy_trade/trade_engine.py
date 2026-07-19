@@ -88,6 +88,13 @@ class TradeEngine:
             self._log_signal(token, token_symbol, cluster, "skipped_cooldown", "")
             log.info("cluster_buy_skipped_cooldown", token=token_symbol)
             return False
+        if self._store.find_by_token(token_address) is not None:
+            # Root-cause guard for both entry paths (cluster-vote + phase2-film):
+            # never let a token accumulate a second position. Cheapest check
+            # (no network) so it runs before every pricier gate below.
+            self._log_signal(token, token_symbol, cluster, "skipped_already_open", "")
+            log.info("cluster_buy_skipped_already_open", token=token_symbol)
+            return False
         if batch_sellers:
             dead = {w.lower() for w in cluster["wallets"]} & batch_sellers
             if len(dead) >= self._exit_wallets:
