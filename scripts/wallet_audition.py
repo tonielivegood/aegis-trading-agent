@@ -7,8 +7,10 @@ scalper contamination — self-built now, so it can never silently disappear aga
     .venv/bin/python scripts/wallet_audition.py --days 3
 
 Verdicts: PROMOTE (>= MIN_GEM_BUYS gem-band buys AND gem share >= MIN_GEM_PCT of
-unique tokens AND median hold >= MIN_MEDIAN_HOLD_S), REJECT (enough data, bar
-failed), INSUFFICIENT (no completed hold-time data yet — never promotable).
+unique tokens AND median hold >= MIN_MEDIAN_HOLD_S AND median entry age <=
+EARLY_MAX_MEDIAN_AGE_MIN minutes after pair creation — a hunter, not a follower
+chasing a pump someone else already found), REJECT (enough data, bar failed),
+INSUFFICIENT (no completed hold-time data yet — never promotable).
 Gem-band stats are evaluated at REPORT time via DexScreener (ponytail: a token
 bought 2 days ago may have grown since — small skew, acceptable for a 2-3 day
 audition window; age barely drifts, mcap can)."""
@@ -37,6 +39,7 @@ CONFIG_PATH = ROOT / "data" / "copy_trade" / "config.json"
 MIN_GEM_BUYS = 3
 MIN_GEM_PCT = 0.25          # of unique tokens bought
 MIN_MEDIAN_HOLD_S = 1800    # 30 min — scalpers need not apply
+EARLY_MAX_MEDIAN_AGE_MIN = 60   # hunters buy within the first hour; followers chase
 
 
 # ---------- pure logic (tested) ----------
@@ -74,11 +77,24 @@ def audit_wallets(rows: list[dict], stats_by_token: dict, holds: dict,
         hs = holds.get(wallet) or []
         median_hold = statistics.median(hs) if hs else None
         gem_pct = len(gem_tokens) / len(tokens) if tokens else 0.0
+        ages = []
+        for r in rows:
+            if (r["wallet"] == wallet and r["direction"] == "in"
+                    and r["token_address"] in gem_tokens):
+                st = stats_by_token.get(r["token_address"])
+                created = st.get("pair_created_at_ms") if st else None
+                if created is None:
+                    continue
+                ages.append((datetime.fromisoformat(r["ts"]).timestamp()
+                            - created / 1000) / 60)
+        median_entry_age_min = statistics.median(ages) if ages else None
         if not hs:
             verdict = "INSUFFICIENT"
         elif len(gem_tokens) < MIN_GEM_BUYS:
             verdict = "REJECT"
-        elif gem_pct >= MIN_GEM_PCT and median_hold >= MIN_MEDIAN_HOLD_S:
+        elif (gem_pct >= MIN_GEM_PCT and median_hold >= MIN_MEDIAN_HOLD_S
+              and median_entry_age_min is not None
+              and median_entry_age_min <= EARLY_MAX_MEDIAN_AGE_MIN):
             verdict = "PROMOTE"
         else:
             verdict = "REJECT"
@@ -86,6 +102,7 @@ def audit_wallets(rows: list[dict], stats_by_token: dict, holds: dict,
                     "gem_tokens": len(gem_tokens), "gem_pct": round(gem_pct, 2),
                     "median_hold_s": median_hold,
                     "hold_class": classify(median_hold) if median_hold is not None else "?",
+                    "median_entry_age_min": median_entry_age_min,
                     "verdict": verdict})
     return sorted(out, key=lambda r: (r["verdict"] != "PROMOTE", -r["gem_pct"]))
 
@@ -140,13 +157,16 @@ def main() -> None:
     holds = match_hold_times(rows)
     table = audit_wallets(rows, stats_by_token, holds, cfg)
     print(f"\n{'wallet':<44}{'toks':>5}{'gems':>5}{'gem%':>6}{'hold':>8}"
-          f"{'class':>9}  verdict")
+          f"{'class':>9}{'entry':>8}  verdict")
     for r in table:
         h = r["median_hold_s"]
         nice = ("?" if h is None else f"{h:.0f}s" if h < 120 else
                 f"{h / 60:.0f}m" if h < 7200 else f"{h / 3600:.1f}h")
+        e = r["median_entry_age_min"]
+        age_nice = "?" if e is None else f"{e:.0f}m"
         print(f"{r['wallet']:<44}{r['unique_tokens']:>5}{r['gem_tokens']:>5}"
-              f"{r['gem_pct']:>6}{nice:>8}{r['hold_class']:>9}  {r['verdict']}")
+              f"{r['gem_pct']:>6}{nice:>8}{r['hold_class']:>9}{age_nice:>8}"
+              f"  {r['verdict']}")
     n_promote = sum(1 for r in table if r["verdict"] == "PROMOTE")
     print(f"\nPROMOTE: {n_promote} | REJECT: "
           f"{sum(1 for r in table if r['verdict'] == 'REJECT')} | INSUFFICIENT: "
