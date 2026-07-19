@@ -112,3 +112,37 @@ def test_phase2_score_holders_unknown_when_all_none():
 def test_phase2_score_whale_risk():
     d = _dossier(_film(top_pct=0.20))
     assert phase2_score(d, {}, voting={W1, W2}) == (False, "whale_risk")
+
+
+def test_phase2_score_no_base_price_spike():
+    # armers(2 voting)/samples(20>=15) pass untouched; one spike in an
+    # otherwise-flat film pushes max/min to 2.0, over the 1.35 default ratio,
+    # firing check 3 before holders/liq/conc/chasing are ever looked at.
+    samples = _film()
+    samples[-1]["price"] = 2.0
+    d = _dossier(samples)
+    assert phase2_score(d, {}, voting={W1, W2}) == (False, "no_base")
+
+
+def test_phase2_score_liq_draining():
+    # base ratio stays 1.0 (flat price) and holders still grow 100->120, so
+    # checks 3-4 pass; only the last sample's liq drops below 0.9x the
+    # 51_000 arm_liquidity (45_900), firing check 5 ahead of concentration.
+    samples = _film()
+    samples[-1]["liq"] = 40_000.0
+    d = _dossier(samples)
+    assert phase2_score(d, {}, voting={W1, W2}) == (False, "liq_draining")
+
+
+def test_phase2_score_holders_unknown_via_concentration_check():
+    # holders are present and growing (100->120), so check 4 passes and we
+    # reach check 6 — a genuinely different fixture from
+    # test_phase2_score_holders_unknown_when_all_none, which sets holders=None
+    # and never gets past check 4. Here top_pct/top5_pct are all None instead,
+    # so `conc` stays None and check 6 fires its own fail-closed branch.
+    samples = _film()
+    for s in samples:
+        s["top_pct"] = None
+        s["top5_pct"] = None
+    d = _dossier(samples)
+    assert phase2_score(d, {}, voting={W1, W2}) == (False, "holders_unknown")
