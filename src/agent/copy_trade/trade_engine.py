@@ -21,7 +21,7 @@ from ..execution.binance_web3 import passes_safety_check
 from ..monitor.logger import get_logger
 from .budget import CopyTradeBudget
 from .positions import CopyPosition, PositionStore
-from .prices import get_price_usd, get_taxes, get_pair_stats
+from .prices import get_price_usd, get_taxes, get_pair_stats, get_holder_stats
 
 log = get_logger(__name__)
 
@@ -41,7 +41,10 @@ class TradeEngine:
                  min_liquidity_usd: float | None = None,
                  signals_path: Path | None = None,
                  trail_pct: float | None = None,
-                 partial_fraction: float | None = None) -> None:
+                 partial_fraction: float | None = None,
+                 max_single_holder_pct: float | None = None,
+                 max_top5_holder_pct: float | None = None,
+                 daily_loss_limit_usd: float | None = None) -> None:
         self._budget = budget
         self._store = store
         self._executors = executors
@@ -57,6 +60,9 @@ class TradeEngine:
         self._signals_path = signals_path
         self._trail_pct = trail_pct
         self._partial_fraction = partial_fraction
+        self._max_single_holder_pct = max_single_holder_pct
+        self._max_top5_holder_pct = max_top5_holder_pct
+        self._daily_loss_limit_usd = daily_loss_limit_usd
         # token -> epoch until which re-entry is refused. Seeded from the journal
         # so a restart right after a close can't bypass the cooldown (AKE was
         # churned 3x/20min live — this is that fix).
@@ -95,6 +101,29 @@ class TradeEngine:
             self._log_signal(token, token_symbol, cluster, "skipped_gem_filter", why)
             log.info("cluster_buy_skipped_gem_filter", token=token_symbol, reason=why)
             return False
+        if self._daily_loss_limit_usd is not None:
+            lost = self._realized_pnl_today()
+            if lost <= -self._daily_loss_limit_usd:
+                self._log_signal(token, token_symbol, cluster,
+                                 "skipped_circuit_breaker", f"day_pnl_{lost:.2f}")
+                log.warning("circuit_breaker_open", day_pnl=round(lost, 2))
+                return False
+        if self._max_single_holder_pct is not None or self._max_top5_holder_pct is not None:
+            hs = get_holder_stats(token)
+            if hs is None:
+                self._log_signal(token, token_symbol, cluster,
+                                 "skipped_concentration", "no_holder_data")
+                return False           # fail closed — can't see the whales, don't buy
+            if (self._max_single_holder_pct is not None
+                    and hs["top_pct"] > self._max_single_holder_pct):
+                self._log_signal(token, token_symbol, cluster,
+                                 "skipped_concentration", f"top_{hs['top_pct']:.2f}")
+                return False
+            if (self._max_top5_holder_pct is not None
+                    and hs["top5_pct"] > self._max_top5_holder_pct):
+                self._log_signal(token, token_symbol, cluster,
+                                 "skipped_concentration", f"top5_{hs['top5_pct']:.2f}")
+                return False
         if not self._budget.can_open_new():
             self._log_signal(token, token_symbol, cluster, "skipped_budget", "")
             log.info("cluster_buy_skipped_budget", token=token_symbol)
@@ -150,6 +179,20 @@ class TradeEngine:
             if age_days > self._max_age_days:
                 return False, f"age_{age_days:.1f}d"
         return True, ""
+
+    def _realized_pnl_today(self) -> float:
+        if not self._journal_path.exists():
+            return 0.0
+        today = datetime.now(timezone.utc).date().isoformat()
+        total = 0.0
+        for line in self._journal_path.read_text(encoding="utf-8").splitlines():
+            try:
+                row = json.loads(line)
+                if row.get("closed_at", "").startswith(today) and not row.get("simulated"):
+                    total += float(row.get("pnl_usd") or 0)
+            except (ValueError, TypeError):
+                continue
+        return total
 
     def _log_signal(self, token: str, symbol: str, cluster: dict,
                     decision: str, detail: str) -> None:

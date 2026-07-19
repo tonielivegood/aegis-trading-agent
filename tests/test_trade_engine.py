@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from src.agent.copy_trade.budget import CopyTradeBudget
@@ -468,3 +468,59 @@ def test_partial_off_keeps_v2_full_close(_s, _p, _t, tmp_path):
     eng.on_exit_signal(W2, T)
     assert store.find_by_token(T) is None                  # v2: full close
     assert budget.available_usd == 16.14
+
+
+# ---------- Task 3: circuit breaker + concentration gate ----------
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_circuit_breaker_ignores_stale_losses_blocks_on_today(_s, _p, _t, tmp_path):
+    journal = tmp_path / "closed.jsonl"
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat()
+    journal.write_text(json.dumps({"closed_at": f"{yesterday}T02:00:00+00:00",
+                                    "pnl_usd": -100.0, "simulated": False}) + "\n",
+                       encoding="utf-8")
+    eng, budget, store = _engine_v3(tmp_path, daily_loss_limit_usd=2.0)
+    # yesterday's huge loss must NOT count toward today's breaker
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is True
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    with open(journal, "a", encoding="utf-8") as f:
+        for _ in range(2):
+            f.write(json.dumps({"closed_at": f"{today}T01:00:00+00:00",
+                                "pnl_usd": -1.5, "simulated": False}) + "\n")
+    T2 = "0x" + "b" * 40
+    assert eng.open_cluster_position(T2, "GEM2", 18, CLUSTER) is False
+    assert _signals(tmp_path)[-1]["decision"] == "skipped_circuit_breaker"
+    assert store.find_by_token(T2) is None
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+@patch("src.agent.copy_trade.trade_engine.get_holder_stats")
+def test_concentration_gate_blocks_whales_and_fails_closed(holder_mock, _s, _p, _t,
+                                                            tmp_path):
+    eng, budget, store = _engine_v3(tmp_path, max_single_holder_pct=0.15,
+                                    max_top5_holder_pct=0.5)
+    T2, T3, T4 = ("0x" + c * 40 for c in "bcd")
+
+    holder_mock.return_value = {"holder_count": 100, "top_pct": 0.205, "top5_pct": 0.3}
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is False
+    assert _signals(tmp_path)[-1]["decision"] == "skipped_concentration"
+
+    holder_mock.return_value = None
+    assert eng.open_cluster_position(T2, "GEM2", 18, CLUSTER) is False       # fail closed
+    assert _signals(tmp_path)[-1]["detail"] == "no_holder_data"
+
+    holder_mock.return_value = {"holder_count": 100, "top_pct": 0.03, "top5_pct": 0.6}
+    assert eng.open_cluster_position(T3, "GEM3", 18, CLUSTER) is False       # top5 over
+    assert _signals(tmp_path)[-1]["decision"] == "skipped_concentration"
+
+    holder_mock.return_value = {"holder_count": 100, "top_pct": 0.03, "top5_pct": 0.05}
+    assert eng.open_cluster_position(T4, "GEM4", 18, CLUSTER) is True        # under both
+    assert store.find_by_token(T4) is not None
+    assert budget.available_usd == 16.14 - 3.0                              # only T4 opened

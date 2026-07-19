@@ -233,6 +233,9 @@ def _build_runtime(cfg: dict):
             "pancake": PancakeSwap(account=account, dry_run=settings.dry_run,
                                    slippage_bps=cfg.get("exec_slippage_bps", 1500)),
         }
+    daily_loss_limit_pct = cfg.get("daily_loss_limit_pct")
+    daily_loss_limit_usd = (daily_loss_limit_pct * cfg.get("total_budget_usd", 15.9)
+                            if daily_loss_limit_pct is not None else None)
     engine = TradeEngine(budget=budget, store=store, executors=executors,
                          shadow_mode=shadow, journal_path=JOURNAL_PATH,
                          exit_wallets=cfg.get("exit_wallets", 2),
@@ -244,7 +247,10 @@ def _build_runtime(cfg: dict):
                          max_token_age_days=cfg.get("max_token_age_days"),
                          max_market_cap_usd=cfg.get("max_market_cap_usd"),
                          min_liquidity_usd=cfg.get("min_liquidity_usd"),
-                         signals_path=SIGNALS_PATH)
+                         signals_path=SIGNALS_PATH,
+                         max_single_holder_pct=cfg.get("max_single_holder_pct"),
+                         max_top5_holder_pct=cfg.get("max_top5_holder_pct"),
+                         daily_loss_limit_usd=daily_loss_limit_usd)
     return budget, store, engine
 
 
