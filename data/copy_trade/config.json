@@ -33,11 +33,14 @@
     "rpc_endpoints": [
       "https://bsc-dataseed.binance.org",
       "https://bsc-dataseed1.defibit.io",
+      "https://56.rpc.thirdweb.com",
       "https://bsc-pokt.nodies.app",
       "https://1rpc.io/bnb"
     ],
     "rpc_logs_endpoints": [
+      "https://56.rpc.thirdweb.com",
       "https://bsc-pokt.nodies.app",
+      "https://bsc-mainnet.gateway.tatum.io",
       "https://1rpc.io/bnb"
     ],
     "ignore_tokens": [

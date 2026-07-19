@@ -13,7 +13,22 @@ on the high-capacity dataseed nodes. Funneling ALL calls through the two
 getLogs-capable free endpoints rate-limited them within minutes of going live.
 So: DEFAULT_LOGS_ENDPOINTS carries only eth_getLogs; DEFAULT_ENDPOINTS
 (dataseed first) carries everything else. Re-verify per-provider getLogs
-support before swapping in new defaults."""
+support before swapping in new defaults.
+
+2026-07-19: both nodies and 1rpc went intermittently rate-limited/timing out
+simultaneously (nodies read-timeouts, 1rpc hard "usage limit for your current
+plan"), stalling the poll loop for hours. Re-probed ~20 free BSC RPC candidates
+against the bot's REAL query shape (topics=[TRANSFER_TOPIC, None, <50 wallet
+topics>], no `address` field, from both this dev machine and the VPS itself) —
+most reject topic-only/address-less getLogs outright or cap at <=10 blocks.
+Found two new working providers: 56.rpc.thirdweb.com (accepts up to 1000
+blocks/call — 4x nodies' cap, 20x 1rpc's — survived a 10-call rapid burst with
+zero errors, verified from the VPS) and bsc-mainnet.gateway.tatum.io (100
+blocks/call, better than 1rpc, worse than nodies). Both added as earlier-tried
+fallbacks; thirdweb goes first since it's clearly the strongest. Kept nodies/
+1rpc in the rotation since their outages have been intermittent, not
+permanent — more independent providers lowers the odds of a simultaneous
+all-fail again."""
 from __future__ import annotations
 
 import requests
@@ -29,18 +44,23 @@ V2_SWAP_TOPIC = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d
 V3_SWAP_TOPIC = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67"
 
 # General-purpose calls (receipts, blocks, eth_call, nonce…) — dataseed nodes
-# are fast and don't rate-limit these; the getLogs-capable pair sits last as
-# emergency fallback.
+# are fast and don't rate-limit these; the getLogs-capable providers sit last
+# as emergency fallback.
 DEFAULT_ENDPOINTS = [
     "https://bsc-dataseed.binance.org",
     "https://bsc-dataseed1.defibit.io",
+    "https://56.rpc.thirdweb.com",
     "https://bsc-pokt.nodies.app",
     "https://1rpc.io/bnb",
 ]
-# eth_getLogs only — the sole two free providers verified to accept address-less,
-# topic-only queries (nodies caps ranges at 250 blocks, 1rpc at 50).
+# eth_getLogs only — free providers verified (2026-07-19, from the VPS itself)
+# to accept address-less, topic-only queries with the bot's real 50-wallet
+# filter. Ordered strongest-cap-first: thirdweb (1000 blocks) > nodies (250) >
+# tatum (100) > 1rpc (50).
 DEFAULT_LOGS_ENDPOINTS = [
+    "https://56.rpc.thirdweb.com",
     "https://bsc-pokt.nodies.app",
+    "https://bsc-mainnet.gateway.tatum.io",
     "https://1rpc.io/bnb",
 ]
 
