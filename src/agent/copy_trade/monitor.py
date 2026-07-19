@@ -41,7 +41,7 @@ from .positions import PositionStore
 from .prices import get_price_usd, get_pair_stats, get_holder_stats
 from .rpc_pool import RpcPool
 from .trade_engine import TradeEngine
-from .watchlist import Watchlist
+from .watchlist import Watchlist, phase2_score
 
 log = get_logger(__name__)
 ROOT = Path(__file__).resolve().parents[3]
@@ -320,6 +320,24 @@ def run_scan(once: bool = False) -> None:
                     "holders": (hs or {}).get("holder_count"),
                     "top_pct": (hs or {}).get("top_pct"),
                     "top5_pct": (hs or {}).get("top5_pct")})
+                if stats["price_usd"] >= 2 * d.arm_price:
+                    watchlist.disarm(d.token_address, "ran_away")
+            if cfg.get("phase2_entry", False) and voting:
+                for d in watchlist.active():
+                    ok, why = phase2_score(d, cfg, voting)
+                    if not ok:
+                        continue
+                    symbol, decimals = _token_meta(pool, d.token_address)
+                    opened = engine.open_cluster_position(
+                        d.token_address, symbol, decimals,
+                        {"wallets": d.armers, "first_ts": d.armed_at,
+                         "first_price_usd": d.arm_price})
+                    watchlist.disarm(d.token_address,
+                                     "entered" if opened else "entry_rejected")
+                    if opened:
+                        _notify(notifier, f"[COPY-TRADE] PHASE2 BUY {symbol}",
+                                f"token {d.token_address}\narmers: {', '.join(d.armers)}\n"
+                                f"arm price {d.arm_price}, film {len(d.samples)} samples")
         STATE_PATH.write_text(json.dumps({
             "last_scan_at": datetime.now(timezone.utc).isoformat(),
             "last_processed_block": source.last_processed}), encoding="utf-8")

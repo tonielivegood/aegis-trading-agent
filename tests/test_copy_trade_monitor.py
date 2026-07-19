@@ -260,3 +260,120 @@ def test_watchlist_records_gem_band_buys(_s, _mp, _tax, stats_mock, _hs, tmp_pat
     process_events([_ev(W2), _ev(W1, direction="out")], tracker, engine, store,
                    None, meta, voting=set(), watchlist=wl, gem_cfg=cfg)
     assert wl.get(T) is None                                  # armer sold -> disarmed
+
+
+# ---------- phase-2 stakeout entry (config-gated) ----------
+
+def _green_film(n=16, price=1.0, holders_start=100, holders_end=120,
+                liq=51_000.0, top_pct=0.03, top5_pct=0.1):
+    out = []
+    for i in range(n):
+        frac = i / (n - 1) if n > 1 else 0
+        holders = round(holders_start + (holders_end - holders_start) * frac)
+        out.append({"ts": float(i), "price": price, "liq": liq,
+                    "buys_h1": 1, "sells_h1": 1, "buys_m5": 1, "sells_m5": 0,
+                    "chg_m5": 1.0, "holders": holders,
+                    "top_pct": top_pct, "top5_pct": top5_pct})
+    return out
+
+
+def _phase2_scan_fixture(tmp_path, monkeypatch, phase2_entry):
+    """Wires run_scan(once=True) with a pre-built green dossier already sitting
+    in the watchlist (Watchlist is RAM-only, so it can't be built up via a
+    single scan pass — inject one directly, same trick as monkeypatching
+    RpcPool/ChainEventSource in the trail-close test above)."""
+    import src.agent.copy_trade.monitor as mon
+    from src.agent.copy_trade.watchlist import Dossier, Watchlist
+
+    cfg = {"shadow_mode": True, "slice_usd": 3.0, "total_budget_usd": 16.14,
+           "min_wallets": 3, "exit_wallets": 2, "window_minutes": 15,
+           "valve_drop_pct": 0.70, "poll_interval_seconds": 0,
+           "rpc_endpoints": ["https://example-rpc.invalid"],
+           "watchlist_enabled": True}
+    if phase2_entry is not None:
+        cfg["phase2_entry"] = phase2_entry
+    config_path = tmp_path / "config.json"
+    config_path.write_text(_json.dumps({"copy_settings": cfg}), encoding="utf-8")
+    wallets_path = tmp_path / "wallets.json"
+    wallets_path.write_text(_json.dumps([{"address": W1}, {"address": W2}]),
+                            encoding="utf-8")
+    shadow_path = tmp_path / "shadow_positions.json"
+
+    monkeypatch.setattr(mon, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(mon, "WALLETS_PATH", wallets_path)
+    monkeypatch.setattr(mon, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(mon, "SHADOW_PATH", shadow_path)
+    monkeypatch.setattr(mon, "POSITIONS_PATH", tmp_path / "positions.json")
+    monkeypatch.setattr(mon, "JOURNAL_PATH", tmp_path / "closed.jsonl")
+    monkeypatch.setattr(mon, "FILMS_PATH", tmp_path / "films.jsonl")
+    monkeypatch.setattr(mon, "SIGNALS_PATH", tmp_path / "signals.jsonl")
+
+    dossier = Dossier(token_address=T, armed_at=time.time(), arm_price=1.0,
+                      arm_liquidity=51_000.0, armers=[W1.lower(), W2.lower()],
+                      samples=_green_film())
+    watchlist = Watchlist(films_path=tmp_path / "films.jsonl")
+    watchlist._dossiers[T] = dossier
+    monkeypatch.setattr(mon, "Watchlist", lambda *a, **kw: watchlist)
+
+    pool_instance = MagicMock()
+    pool_instance.latest_block.return_value = 999
+    pool_instance.call.return_value = "0x"          # _token_meta: harmless fallback
+    source_instance = MagicMock()
+    source_instance.poll.return_value = []          # no wallet events this tick
+    source_instance.last_processed = 999
+
+    return dossier, shadow_path, pool_instance, source_instance
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+@patch("src.agent.copy_trade.monitor.get_holder_stats",
+       return_value={"holder_count": 121, "top_pct": 0.03, "top5_pct": 0.1})
+@patch("src.agent.copy_trade.monitor.get_pair_stats",
+       return_value={"price_usd": 1.0, "liquidity_usd": 51_000.0,
+                     "txns_h1_buys": 1, "txns_h1_sells": 1,
+                     "txns_m5_buys": 1, "txns_m5_sells": 0,
+                     "price_change_m5": 1.0})
+def test_phase2_entry_off_by_default_opens_nothing(
+        _stats, _hs, _safety, _price, _tax, tmp_path, monkeypatch):
+    dossier, shadow_path, pool_instance, source_instance = _phase2_scan_fixture(
+        tmp_path, monkeypatch, phase2_entry=None)   # key absent, like today's config
+    import src.agent.copy_trade.monitor as mon
+    with patch("src.agent.copy_trade.monitor.RpcPool", return_value=pool_instance), \
+         patch("src.agent.copy_trade.monitor.ChainEventSource",
+               return_value=source_instance), \
+         patch("src.agent.copy_trade.monitor.EmailNotifier", side_effect=ValueError):
+        mon.run_scan(once=True)
+    store = PositionStore(shadow_path)
+    store.load()
+    assert store.all() == []                        # perfect film, but the gate is off
+    assert dossier.disarmed is None
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+@patch("src.agent.copy_trade.monitor.get_holder_stats",
+       return_value={"holder_count": 121, "top_pct": 0.03, "top5_pct": 0.1})
+@patch("src.agent.copy_trade.monitor.get_pair_stats",
+       return_value={"price_usd": 1.0, "liquidity_usd": 51_000.0,
+                     "txns_h1_buys": 1, "txns_h1_sells": 1,
+                     "txns_m5_buys": 1, "txns_m5_sells": 0,
+                     "price_change_m5": 1.0})
+def test_phase2_entry_on_opens_exactly_one_and_disarms_entered(
+        _stats, _hs, _safety, _price, _tax, tmp_path, monkeypatch):
+    dossier, shadow_path, pool_instance, source_instance = _phase2_scan_fixture(
+        tmp_path, monkeypatch, phase2_entry=True)
+    import src.agent.copy_trade.monitor as mon
+    with patch("src.agent.copy_trade.monitor.RpcPool", return_value=pool_instance), \
+         patch("src.agent.copy_trade.monitor.ChainEventSource",
+               return_value=source_instance), \
+         patch("src.agent.copy_trade.monitor.EmailNotifier", side_effect=ValueError):
+        mon.run_scan(once=True)
+    store = PositionStore(shadow_path)
+    store.load()
+    assert len(store.all()) == 1
+    assert dossier.disarmed == "entered"

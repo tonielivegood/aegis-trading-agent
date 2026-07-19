@@ -6,6 +6,7 @@ film lines already written; acceptable, stakeouts re-arm on the next buy."""
 from __future__ import annotations
 
 import json
+import statistics
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -88,3 +89,45 @@ class Watchlist:
 
     def get(self, token: str) -> Dossier | None:
         return self._dossiers.get(token.lower())
+
+
+def phase2_score(d: Dossier, cfg: dict, voting: set[str]) -> tuple[bool, str]:
+    """All six film fingerprints green + enough film + >=2 voting armers + price
+    in band. Returns (ok, reason) — reason names the FIRST failing check, checks
+    run in order and short-circuit (no point scoring a film that's too short)."""
+    if len([a for a in d.armers if a in voting]) < 2:
+        return False, "need_2_voting_armers"
+    if len(d.samples) < cfg.get("phase2_min_samples", 15):
+        return False, "film_too_short"
+
+    window = d.samples[-30:]
+
+    prices = [s["price"] for s in window if s["price"]]
+    if not prices or max(prices) / min(prices) > cfg.get("phase2_base_ratio_max", 1.35):
+        return False, "no_base"
+
+    holders = [s["holders"] for s in window if s["holders"] is not None]
+    if not holders:
+        return False, "holders_unknown"
+    if holders[-1] < holders[0] * (1 + cfg.get("phase2_holder_growth_min_pct", 0.05)):
+        return False, "holders_flat"
+
+    if d.samples[-1]["liq"] < 0.9 * d.arm_liquidity:
+        return False, "liq_draining"
+
+    conc = next((s for s in reversed(window)
+                if s["top_pct"] is not None and s["top5_pct"] is not None), None)
+    if conc is None:
+        return False, "holders_unknown"
+    if (conc["top_pct"] > cfg.get("max_single_holder_pct", 0.15)
+            or conc["top5_pct"] > cfg.get("max_top5_holder_pct", 0.40)):
+        return False, "whale_risk"
+
+    last_price = d.samples[-1]["price"]
+    recent_prices = [s["price"] for s in d.samples[-15:] if s["price"]]
+    median_price = statistics.median(recent_prices) if recent_prices else last_price
+    if (last_price > cfg.get("phase2_entry_band", 1.15) * median_price
+            or last_price > cfg.get("phase2_max_vs_arm", 1.25) * d.arm_price):
+        return False, "chasing"
+
+    return True, ""
