@@ -82,6 +82,11 @@ def test_phase2_score_needs_two_voting_armers_even_with_perfect_film():
     assert phase2_score(d, {}, voting={W1}) == (False, "need_2_voting_armers")
 
 
+def test_phase2_score_min_voting_armers_configurable_to_one():
+    d = _dossier(_film(), armers=[W1])
+    assert phase2_score(d, {"phase2_min_voting_armers": 1}, voting={W1}) == (True, "")
+
+
 def test_phase2_score_film_too_short():
     d = _dossier(_film(n=10))
     assert phase2_score(d, {}, voting={W1, W2}) == (False, "film_too_short")

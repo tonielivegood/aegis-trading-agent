@@ -95,7 +95,8 @@ def phase2_score(d: Dossier, cfg: dict, voting: set[str]) -> tuple[bool, str]:
     """All six film fingerprints green + enough film + >=2 voting armers + price
     in band. Returns (ok, reason) — reason names the FIRST failing check, checks
     run in order and short-circuit (no point scoring a film that's too short)."""
-    if len([a for a in d.armers if a in voting]) < 2:
+    min_voting_armers = cfg.get("phase2_min_voting_armers", 2)
+    if len([a for a in d.armers if a in voting]) < min_voting_armers:
         return False, "need_2_voting_armers"
     if len(d.samples) < cfg.get("phase2_min_samples", 15):
         return False, "film_too_short"
