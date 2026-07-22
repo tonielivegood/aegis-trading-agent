@@ -1,7 +1,7 @@
 {
   "version": "2.0",
-  "updated_at": "2026-07-19T00:00:00Z",
-  "description": "Copy-trade v3: BSC smart-money wallet cluster with entry gates + trailing-stop exit + phase-2 stakeout entry (gated, ships OFF pending checkpoint) (wallets in wallets.json)",
+  "updated_at": "2026-07-22T07:32:00Z",
+  "description": "Copy-trade v3: BSC smart-money wallet cluster with entry gates + trailing-stop exit + phase-2 stakeout entry LIVE (small-capital real-money test, phase2_min_voting_armers lowered to 1 since only 1 wallet has cleared audition — 2026-07-22 checkpoint) (wallets in wallets.json)",
   "copy_settings": {
     "shadow_mode": false,
     "slice_usd": 3.0,
@@ -18,7 +18,8 @@
     "watchlist_enabled": true,
     "watchlist_max_dossiers": 8,
     "watchlist_max_hours": 6,
-    "phase2_entry": false,
+    "phase2_entry": true,
+    "phase2_min_voting_armers": 1,
     "phase2_min_samples": 15,
     "phase2_base_ratio_max": 1.35,
     "phase2_holder_growth_min_pct": 0.05,
