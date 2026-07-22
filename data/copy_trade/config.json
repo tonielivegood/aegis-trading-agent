@@ -5,7 +5,7 @@
   "copy_settings": {
     "shadow_mode": false,
     "slice_usd": 3.0,
-    "total_budget_usd": 15.9,
+    "total_budget_usd": 9.0,
     "max_token_age_days": 14,
     "max_market_cap_usd": 5000000,
     "min_liquidity_usd": 20000,

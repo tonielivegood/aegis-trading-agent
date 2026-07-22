@@ -326,6 +326,7 @@ def run_scan(once: bool = False) -> None:
                 for d in watchlist.active():
                     ok, why = phase2_score(d, cfg, voting)
                     if not ok:
+                        log.info("phase2_score_rejected", token=d.token_address, why=why)
                         continue
                     symbol, decimals = _token_meta(pool, d.token_address)
                     opened = engine.open_cluster_position(
