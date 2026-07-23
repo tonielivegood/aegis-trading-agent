@@ -310,6 +310,8 @@ def run_scan(once: bool = False) -> None:
                 stats = get_pair_stats(d.token_address)
                 hs = get_holder_stats(d.token_address)
                 if stats is None:
+                    log.info("watchlist_sample_skipped", token=d.token_address,
+                             reason="pair_stats_unavailable")
                     continue          # no sample this tick; film gap is visible in ts
                 watchlist.add_sample(d.token_address, {
                     "ts": time.time(), "price": stats["price_usd"],
