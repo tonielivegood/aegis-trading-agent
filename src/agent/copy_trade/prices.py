@@ -7,6 +7,7 @@ import time
 
 import requests
 
+from .net_timeout import call_with_hard_timeout
 from ..monitor.logger import get_logger
 
 log = get_logger(__name__)
@@ -31,7 +32,8 @@ def _fetch_pairs(token_address: str) -> list | None:
     if hit is not None and time.time() - hit[0] < _PRICE_TTL_S:
         return hit[1]
     try:
-        r = requests.get(_DEXSCREENER + token_address, timeout=15)
+        r = call_with_hard_timeout(requests.get, _DEXSCREENER + token_address,
+                                   timeout=15, hard_timeout=25)
         r.raise_for_status()
         pairs = [p for p in (r.json().get("pairs") or [])
                  if p.get("chainId") == "bsc" and p.get("priceUsd")]
@@ -83,7 +85,8 @@ def get_pair_stats(token_address: str) -> dict | None:
 
 def get_taxes(token_address: str) -> tuple[float, float] | None:
     try:
-        r = requests.get(_GOPLUS + token_address, timeout=15)
+        r = call_with_hard_timeout(requests.get, _GOPLUS + token_address,
+                                   timeout=15, hard_timeout=25)
         r.raise_for_status()
         result = r.json().get("result") or {}
         info = result.get(token_address.lower()) or result.get(token_address)
@@ -112,7 +115,8 @@ def get_holder_stats(token_address: str) -> dict | None:
     if hit is not None and time.time() - hit[0] < _HOLDER_TTL_S:
         return hit[1]
     try:
-        r = requests.get(_GOPLUS + token_address, timeout=15)
+        r = call_with_hard_timeout(requests.get, _GOPLUS + token_address,
+                                   timeout=15, hard_timeout=25)
         r.raise_for_status()
         result = r.json().get("result") or {}
         info = result.get(token_address.lower()) or result.get(token_address)

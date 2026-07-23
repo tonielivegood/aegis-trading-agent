@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import requests
 
+from .net_timeout import call_with_hard_timeout
 from ..monitor.logger import get_logger
 
 log = get_logger(__name__)
@@ -99,9 +100,10 @@ class RpcPool:
             endpoints = self._endpoints
         for url in endpoints:
             try:
-                r = requests.post(url, json={"jsonrpc": "2.0", "id": 1,
-                                             "method": method, "params": params},
-                                  timeout=self._timeout)
+                r = call_with_hard_timeout(
+                    requests.post, url,
+                    json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                    timeout=self._timeout, hard_timeout=self._timeout + 10)
                 r.raise_for_status()
                 payload = r.json()
                 if "error" in payload:
