@@ -10,12 +10,15 @@ Direction semantics per the v2 spec:
           missing multi-hop sells."""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 from ..monitor.logger import get_logger
 from .rpc_pool import RpcPool, TRANSFER_TOPIC, V2_SWAP_TOPIC, V3_SWAP_TOPIC, addr_topic
 
 log = get_logger(__name__)
+
+_CHUNK_BLOCKS = 40   # matches rpc_pool's own free-endpoint-cap rationale
 
 
 @dataclass(frozen=True)
@@ -41,35 +44,64 @@ class ChainEventSource:
         self._ignore = {t.lower() for t in (ignore_tokens or set())}
         # Backlog-replay guard: never look before process start (the 01:45 16/7
         # phantom-position incident was a fresh state.json replaying history).
-        self.last_processed = start_block
+        # Tracked per-direction so a deadline cutting one direction short (see
+        # poll()) never makes the OTHER, already-finished direction get
+        # rescanned next tick — self.last_processed (below) is just the
+        # min of the two, kept for external reporting (state.json).
+        self._last_processed = {"in": start_block, "out": start_block}
         self._receipt_swap_cache: dict[str, bool] = {}
 
-    def poll(self) -> list[WalletEvent]:
+    @property
+    def last_processed(self) -> int:
+        return min(self._last_processed.values())
+
+    def poll(self, deadline: float | None = None) -> list[WalletEvent]:
+        """deadline: a time.monotonic() cutoff. If the scan can't finish both
+        directions by then (a live incident 2026-07-23 saw one poll() take
+        50+ minutes under degraded RPC — chunk count times per-call retry
+        latency compounds with no ceiling), stop early and only advance each
+        direction's own progress as far as it actually got — nothing is
+        skipped or double-scanned, the remainder is simply picked up on the
+        next tick(s), keeping every tick's worst-case duration bounded."""
         latest = self._pool.latest_block()
-        if latest <= self.last_processed:
-            return []
-        frm, to = self.last_processed + 1, latest
         events: list[WalletEvent] = []
         # two filtered queries: transfers TO any tracked wallet, then FROM
         for position, direction in ((2, "in"), (1, "out")):
+            frm = self._last_processed[direction] + 1
+            if frm > latest:
+                continue   # this direction has nothing new to scan
             topics: list = [TRANSFER_TOPIC, None, None]
             topics[position] = self._wallet_topics
-            # chunk=40: free public endpoints cap eth_getLogs ranges hard
-            # (1rpc.io/bnb at 50 blocks, nodies.app at 250 — confirmed live
-            # 2026-07-17). Without this, any poll gap over the cap (a slow
-            # scan, a brief outage, a burst of confirmed events needing extra
-            # receipt lookups) raises here BEFORE last_processed advances —
-            # and since it never advances on failure, the gap only grows on
-            # every subsequent tick, permanently blinding the bot with no
-            # self-recovery. Small chunking makes get_logs_chunked's own
-            # splitting loop absorb any gap size instead.
-            for lg in self._pool.get_logs_chunked(frm, to, topics=topics, chunk=40):
+            dir_events, dir_reached = self._scan_chunked(frm, latest, topics,
+                                                          direction, deadline)
+            events.extend(dir_events)
+            self._last_processed[direction] = dir_reached
+        events.sort(key=lambda e: e.block)
+        return events
+
+    def _scan_chunked(self, frm: int, to: int, topics: list, direction: str,
+                      deadline: float | None) -> tuple[list[WalletEvent], int]:
+        # chunk=40: free public endpoints cap eth_getLogs ranges hard
+        # (1rpc.io/bnb at 50 blocks, nodies.app at 250 — confirmed live
+        # 2026-07-17). Without this, any poll gap over the cap (a slow
+        # scan, a brief outage, a burst of confirmed events needing extra
+        # receipt lookups) raises here BEFORE last_processed advances —
+        # and since it never advances on failure, the gap only grows on
+        # every subsequent tick, permanently blinding the bot with no
+        # self-recovery. Small chunking makes this loop absorb any gap size.
+        events: list[WalletEvent] = []
+        start = frm
+        while start <= to:
+            if deadline is not None and time.monotonic() > deadline:
+                return events, start - 1   # everything before `start` is done
+            end = min(start + _CHUNK_BLOCKS - 1, to)
+            flt = {"fromBlock": hex(start), "toBlock": hex(end), "topics": topics}
+            for lg in self._pool.get_logs(flt):
                 ev = self._to_event(lg, direction)
                 if ev is not None:
                     events.append(ev)
-        self.last_processed = latest
-        events.sort(key=lambda e: e.block)
-        return events
+            start = end + 1
+        return events, to
 
     def _to_event(self, lg: dict, direction: str) -> WalletEvent | None:
         topics = lg.get("topics", [])

@@ -30,6 +30,7 @@
     "daily_loss_limit_pct": 0.15,
     "valve_drop_pct": 0.70,
     "poll_interval_seconds": 60,
+    "tick_budget_seconds": 45,
     "exec_slippage_bps": 1500,
     "rpc_endpoints": [
       "https://bsc-dataseed.binance.org",

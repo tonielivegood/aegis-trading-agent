@@ -279,8 +279,17 @@ def run_scan(once: bool = False) -> None:
              mode=mode, start_block=source.last_processed)
 
     while True:
+        # Hard ceiling on how long a single tick may run. Real incident
+        # 2026-07-23: one poll() took 50+ minutes under degraded RPC (many
+        # individually-bounded retries compounding with no overall limit) —
+        # during that stall check_exits() never ran, so an open position's
+        # trailing-stop/valve would have gone unchecked the whole time.
+        # source.poll() and the watchlist sampling loop below both respect
+        # this deadline and bail cleanly (partial progress, never skipped
+        # data) rather than let one slow tick block everything after it.
+        tick_deadline = time.monotonic() + cfg.get("tick_budget_seconds", 45)
         try:
-            events = source.poll()
+            events = source.poll(deadline=tick_deadline)
             _append_wallet_events(events)
             consecutive_failures, outage_alerted = 0, False
         except Exception as e:  # noqa: BLE001
@@ -306,7 +315,12 @@ def run_scan(once: bool = False) -> None:
                     f"closed by {reason}\ntoken {token_address}")
         if watchlist is not None:
             watchlist.expire()
-            for d in watchlist.active():
+            active_dossiers = watchlist.active()
+            for i, d in enumerate(active_dossiers):
+                if time.monotonic() > tick_deadline:
+                    log.info("watchlist_tick_budget_exceeded",
+                             sampled=i, skipped=len(active_dossiers) - i)
+                    break             # picked up again next tick, not lost
                 stats = get_pair_stats(d.token_address)
                 hs = get_holder_stats(d.token_address)
                 if stats is None:

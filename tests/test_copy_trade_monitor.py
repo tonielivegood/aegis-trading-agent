@@ -377,3 +377,41 @@ def test_phase2_entry_on_opens_exactly_one_and_disarms_entered(
     store.load()
     assert len(store.all()) == 1
     assert dossier.disarmed == "entered"
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+@patch("src.agent.copy_trade.monitor.get_holder_stats",
+       return_value={"holder_count": 121, "top_pct": 0.03, "top5_pct": 0.1})
+@patch("src.agent.copy_trade.monitor.get_pair_stats",
+       return_value={"price_usd": 1.0, "liquidity_usd": 51_000.0,
+                     "txns_h1_buys": 1, "txns_h1_sells": 1,
+                     "txns_m5_buys": 1, "txns_m5_sells": 0,
+                     "price_change_m5": 1.0})
+def test_watchlist_tick_budget_exceeded_skips_sampling_without_crashing(
+        _stats, _hs, _safety, _price, _tax, tmp_path, monkeypatch):
+    """Real incident 2026-07-23: one tick took 50+ minutes under degraded RPC.
+    With tick_budget_seconds already elapsed by the time the watchlist loop
+    starts, it must skip refreshing every dossier's film this tick (no crash,
+    no fabricated sample) rather than block — new samples resume next tick.
+    Scoring against whatever film already exists is unaffected by the skip
+    (this fixture's dossier is pre-seeded already-green), proving the skip is
+    scoped to fetching NEW data, not to acting on data already in hand."""
+    dossier, shadow_path, pool_instance, source_instance = _phase2_scan_fixture(
+        tmp_path, monkeypatch, phase2_entry=True)
+    cfg = _json.loads((tmp_path / "config.json").read_text())
+    cfg["copy_settings"]["tick_budget_seconds"] = -1000   # already expired
+    (tmp_path / "config.json").write_text(_json.dumps(cfg))
+    import src.agent.copy_trade.monitor as mon
+    with patch("src.agent.copy_trade.monitor.RpcPool", return_value=pool_instance), \
+         patch("src.agent.copy_trade.monitor.ChainEventSource",
+               return_value=source_instance), \
+         patch("src.agent.copy_trade.monitor.EmailNotifier", side_effect=ValueError):
+        mon.run_scan(once=True)   # must not hang or raise
+    _stats.assert_not_called()                # sampling loop never even started
+    assert len(dossier.samples) == 16          # unchanged: the pre-seeded green film
+    store = PositionStore(shadow_path)
+    store.load()
+    assert len(store.all()) == 1               # scoring still ran on the existing film

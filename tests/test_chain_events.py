@@ -18,7 +18,17 @@ def _log(token, frm, to, block=101, tx="0x" + "f" * 64):
 def _source(logs, receipt_has_swap=True, latest=150):
     pool = MagicMock()
     pool.latest_block.return_value = latest
-    pool.get_logs_chunked.return_value = logs
+
+    def _get_logs(flt):
+        # real RPC only returns logs whose block falls inside the requested
+        # range — a fixed return_value would double-count across chunks.
+        # A log missing blockNumber (malformed-log test fixtures) can't be
+        # range-filtered — pass it through so _to_event's own handling is
+        # what's under test, not this mock.
+        lo, hi = int(flt["fromBlock"], 16), int(flt["toBlock"], 16)
+        return [lg for lg in logs
+                if "blockNumber" not in lg or lo <= int(lg["blockNumber"], 16) <= hi]
+    pool.get_logs.side_effect = _get_logs
     swap_log = {"topics": [V2_SWAP_TOPIC]} if receipt_has_swap else {"topics": ["0xdead"]}
     pool.get_receipt.return_value = {"logs": [swap_log]}
     return ChainEventSource(pool, wallets=[W], start_block=100,
@@ -48,31 +58,90 @@ def test_ignore_tokens_filtered():
 
 
 def test_poll_uses_small_chunk_so_a_large_gap_never_gets_permanently_stuck():
-    # Real incident, 2026-07-17: get_logs_chunked's 2000-block default sent
-    # a whole poll gap as ONE eth_getLogs call, and free RPC endpoints cap
-    # ranges at 50-250 blocks — any gap over that raised before last_processed
-    # ever advanced, so the bot went permanently blind after one slow tick.
-    # chunk=40 makes get_logs_chunked's own splitting loop absorb any gap.
+    # Real incident, 2026-07-17: a whole poll gap sent as ONE eth_getLogs call,
+    # and free RPC endpoints cap ranges at 50-250 blocks — any gap over that
+    # raised before last_processed ever advanced, so the bot went permanently
+    # blind after one slow tick. Small chunking absorbs any gap size instead.
     src, pool = _source([], latest=100_000)  # a huge gap from start_block=100
     src.poll()
-    for call in pool.get_logs_chunked.call_args_list:
-        assert call.kwargs.get("chunk") == 40
+    for call in pool.get_logs.call_args_list:
+        flt = call.args[0]
+        lo, hi = int(flt["fromBlock"], 16), int(flt["toBlock"], 16)
+        assert hi - lo + 1 <= 40
 
 
 def test_poll_advances_and_never_rescans():
     src, pool = _source([_log(TOKEN, OTHER, W)])
     src.poll()
     assert src.last_processed == 150
-    pool.get_logs_chunked.return_value = []
+    pool.get_logs.side_effect = None
+    pool.get_logs.return_value = []
     pool.latest_block.return_value = 160
     src.poll()
-    args = pool.get_logs_chunked.call_args_list[-1]
-    assert args.kwargs.get("from_block", args.args[0] if args.args else None) == 151
+    flt = pool.get_logs.call_args_list[-1].args[0]
+    assert int(flt["fromBlock"], 16) == 151
+
+
+def test_poll_with_a_past_deadline_makes_no_progress_and_calls_nothing():
+    # deadline already elapsed before poll() even starts scanning — must not
+    # advance last_processed at all (real incident 2026-07-23: a single slow
+    # poll() took 50+ minutes; a bounded tick must be able to bail this cleanly
+    # and pick the same range back up next tick instead of skipping it).
+    import time
+    src, pool = _source([], latest=1000)
+    src.poll(deadline=time.monotonic() - 1)
+    assert src.last_processed == 100          # unchanged from start_block
+    pool.get_logs.assert_not_called()
+
+
+def test_poll_tracks_directions_independently_no_rescan_when_one_finishes_first():
+    # Simulates a deadline having cut "out" short in a PRIOR poll while "in"
+    # fully finished — this poll must only rescan out's remaining gap, never
+    # re-request in's already-completed range. Sharing one last_processed
+    # counter across both directions (the pre-fix design) would have redone
+    # in's 151-200 here too, double-recording those events.
+    src, pool = _source([], latest=200)
+    src._last_processed["in"] = 200    # already fully caught up
+    src._last_processed["out"] = 150   # still behind
+    calls = []
+
+    def _get_logs(flt):
+        calls.append((int(flt["fromBlock"], 16), int(flt["toBlock"], 16)))
+        return []
+    pool.get_logs.side_effect = _get_logs
+    src.poll()
+    assert calls == [(151, 190), (191, 200)]   # only out's gap, chunked
+    assert src._last_processed == {"in": 200, "out": 200}
+
+
+def test_scan_chunked_stops_at_deadline_and_reports_completed_boundary(monkeypatch):
+    src, pool = _source([], latest=200)   # needs 3 chunks: 101-140, 141-180, 181-200
+    calls = []
+
+    def _get_logs(flt):
+        calls.append((int(flt["fromBlock"], 16), int(flt["toBlock"], 16)))
+        return []
+    pool.get_logs.side_effect = _get_logs
+
+    clock = {"t": 0.0}
+
+    def _fake_monotonic():
+        clock["t"] += 1.0
+        return clock["t"]
+    monkeypatch.setattr("src.agent.copy_trade.chain_events.time.monotonic", _fake_monotonic)
+
+    # deadline check happens before each chunk (t=1, t=2, t=3, ...); with
+    # deadline=2.5 the first two checks pass (do chunk 1, chunk 2), the third
+    # (t=3) trips — chunk 3 (181-200) never runs.
+    events, reached = src._scan_chunked(101, 200, [TRANSFER_TOPIC, None, None],
+                                        "in", deadline=2.5)
+    assert reached == 180
+    assert calls == [(101, 140), (141, 180)]
 
 
 def test_no_new_blocks_returns_empty_without_scanning():
-    src, pool = _source([], latest=100)
-    src.last_processed = 100
+    src, pool = _source([], latest=100)   # start_block=100 == latest: nothing new
+    assert src.last_processed == 100
     assert src.poll() == []
 
 
