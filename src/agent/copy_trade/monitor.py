@@ -55,6 +55,9 @@ SIGNALS_PATH = ROOT / "data" / "copy_trade" / "signals.jsonl"
 WALLET_EVENTS_PATH = ROOT / "data" / "copy_trade" / "wallet_events.jsonl"
 FILMS_PATH = ROOT / "data" / "copy_trade" / "watchlist_films.jsonl"
 FAILURE_ALERT_THRESHOLD = 5
+# Fraction of each tick's budget reserved for watchlist film sampling, so the
+# event poll can never consume the whole tick and starve it (see run_scan).
+_SAMPLING_BUDGET_SHARE = 0.4
 
 
 def _load_wallets() -> tuple[list[str], set[str]]:
@@ -173,11 +176,13 @@ def process_events(events: list[WalletEvent], tracker: ClusterBuySignalTracker,
             else:
                 stats = get_pair_stats(ev.token_address)
                 if _is_gem_band_stats(stats, gem_cfg):
+                    votes = voting is not None and ev.wallet in voting
                     if watchlist.arm(ev.token_address, ev.wallet,
                                      price=stats["price_usd"],
-                                     liquidity=stats["liquidity_usd"]):
+                                     liquidity=stats["liquidity_usd"],
+                                     priority=votes):
                         log.info("stakeout_armed", token=ev.token_address,
-                                 wallet=ev.wallet)
+                                 wallet=ev.wallet, priority=votes)
         if voting is not None and ev.wallet not in voting:
             continue   # observe-only wallet: watched for data, never votes
         if store.find_by_token(ev.token_address) is not None:
@@ -287,9 +292,17 @@ def run_scan(once: bool = False) -> None:
         # source.poll() and the watchlist sampling loop below both respect
         # this deadline and bail cleanly (partial progress, never skipped
         # data) rather than let one slow tick block everything after it.
-        tick_deadline = time.monotonic() + cfg.get("tick_budget_seconds", 45)
+        budget = cfg.get("tick_budget_seconds", 45)
+        tick_deadline = time.monotonic() + budget
+        # poll() gets only a SHARE of the tick so the watchlist sampling loop
+        # (which runs after it) always has real budget left. Live evidence
+        # 2026-07-25: with one shared deadline, poll() consumed all of it and
+        # the sampling loop logged sampled=0 on every single tick for hours —
+        # films never grew, so phase2_score could only ever say
+        # "film_too_short" and no entry was structurally possible.
+        poll_deadline = tick_deadline - budget * _SAMPLING_BUDGET_SHARE
         try:
-            events = source.poll(deadline=tick_deadline)
+            events = source.poll(deadline=poll_deadline)
             _append_wallet_events(events)
             consecutive_failures, outage_alerted = 0, False
         except Exception as e:  # noqa: BLE001

@@ -22,7 +22,7 @@
     "phase2_min_voting_armers": 1,
     "phase2_min_samples": 15,
     "phase2_base_ratio_max": 1.35,
-    "phase2_holder_growth_min_pct": 0.05,
+    "phase2_holder_growth_min_pct": 0.0,
     "phase2_entry_band": 1.15,
     "phase2_max_vs_arm": 1.25,
     "max_single_holder_pct": 0.15,
@@ -36,12 +36,10 @@
       "https://bsc-dataseed.binance.org",
       "https://bsc-dataseed1.defibit.io",
       "https://56.rpc.thirdweb.com",
-      "https://bsc-pokt.nodies.app",
       "https://1rpc.io/bnb"
     ],
     "rpc_logs_endpoints": [
       "https://56.rpc.thirdweb.com",
-      "https://bsc-pokt.nodies.app",
       "https://bsc-mainnet.gateway.tatum.io",
       "https://1rpc.io/bnb"
     ],

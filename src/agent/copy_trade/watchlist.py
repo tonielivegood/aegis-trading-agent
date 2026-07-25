@@ -21,6 +21,12 @@ class Dossier:
     armers: list[str]
     samples: list[dict] = field(default_factory=list)
     disarmed: str | None = None
+    # armed by a VOTING wallet, i.e. the only kind whose film can ever lead to
+    # a real entry. Live evidence 2026-07-25: of 1227 arms ever recorded, 21
+    # (1.7%) came from the single voting wallet while 1088 (89%) came from one
+    # REJECT-verdict scalper — the 8 dossier slots were almost entirely spent
+    # on films that phase2_score can only ever answer "need_2_voting_armers" to.
+    priority: bool = False
 
 
 class Watchlist:
@@ -37,16 +43,28 @@ class Watchlist:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     def arm(self, token: str, wallet: str, price: float, liquidity: float,
-            now: float | None = None) -> bool:
+            now: float | None = None, priority: bool = False) -> bool:
         token = token.lower()
-        if token in self._dossiers or len(self._dossiers) >= self._max:
+        if token in self._dossiers:
             return False
         now = time.time() if now is None else now
+        if len(self._dossiers) >= self._max:
+            if not priority:
+                return False
+            # A voting wallet's signal outranks observation-only films: evict
+            # the oldest non-priority dossier rather than drop the one arm that
+            # could actually become a trade.
+            victim = min((d for d in self._dossiers.values() if not d.priority),
+                         key=lambda d: d.armed_at, default=None)
+            if victim is None:
+                return False          # all slots already hold voting films
+            self._disarm(victim, "evicted_for_voting_wallet", now)
         self._dossiers[token] = Dossier(token_address=token, armed_at=now,
                                         arm_price=price, arm_liquidity=liquidity,
-                                        armers=[wallet.lower()])
+                                        armers=[wallet.lower()], priority=priority)
         self._write({"event": "arm", "token_address": token, "ts": now,
-                     "wallet": wallet.lower(), "price": price, "liquidity": liquidity})
+                     "wallet": wallet.lower(), "price": price,
+                     "liquidity": liquidity, "priority": priority})
         return True
 
     def note_buy(self, token: str, wallet: str) -> None:
@@ -85,7 +103,11 @@ class Watchlist:
                      "reason": reason, "ts": now})
 
     def active(self) -> list[Dossier]:
-        return list(self._dossiers.values())
+        """Voting-armed films first, then oldest-armed. The sampling loop can
+        run out of tick budget partway through, so ordering decides which
+        films actually grow — the ones that can lead to an entry go first."""
+        return sorted(self._dossiers.values(),
+                      key=lambda d: (not d.priority, d.armed_at))
 
     def get(self, token: str) -> Dossier | None:
         return self._dossiers.get(token.lower())

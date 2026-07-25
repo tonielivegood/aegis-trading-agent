@@ -40,6 +40,40 @@ def test_armer_sell_disarms_and_persists_reason(tmp_path):
                                     "reason": "armer_sold", "ts": 9.0}
 
 
+def test_voting_wallet_evicts_oldest_observation_film_when_full(tmp_path):
+    # Live evidence 2026-07-25: 1088 of 1227 arms came from ONE scalper wallet
+    # that can never trigger an entry, so the voting wallet's signals were
+    # being dropped at a full watchlist. A voting arm must displace the oldest
+    # observation-only film rather than be refused.
+    wl = _wl(tmp_path, max_dossiers=2)
+    assert wl.arm(T1, W1, price=1, liquidity=1, now=10.0) is True    # observation
+    assert wl.arm(T2, W1, price=1, liquidity=1, now=20.0) is True    # observation
+    T3 = "0x" + "c" * 40
+    assert wl.arm(T3, W2, price=1, liquidity=1, now=30.0) is False   # non-voting: refused
+    assert wl.arm(T3, W2, price=1, liquidity=1, now=31.0, priority=True) is True
+    assert wl.get(T1) is None                       # oldest observation evicted
+    assert wl.get(T2) is not None and wl.get(T3).priority is True
+    assert _lines(tmp_path)[-2]["reason"] == "evicted_for_voting_wallet"
+
+
+def test_voting_films_are_never_evicted_by_another_voting_arm(tmp_path):
+    wl = _wl(tmp_path, max_dossiers=1)
+    assert wl.arm(T1, W1, price=1, liquidity=1, now=10.0, priority=True) is True
+    # nothing evictable (the only slot holds a voting film) — refuse, don't
+    # cannibalise a film that could itself become a trade
+    assert wl.arm(T2, W2, price=1, liquidity=1, now=20.0, priority=True) is False
+    assert wl.get(T1) is not None
+
+
+def test_active_returns_voting_films_first(tmp_path):
+    # the sampling loop can run out of tick budget partway through, so the
+    # films that can actually lead to an entry must be sampled first
+    wl = _wl(tmp_path, max_dossiers=4)
+    wl.arm(T1, W1, price=1, liquidity=1, now=10.0)                    # older, observation
+    wl.arm(T2, W2, price=1, liquidity=1, now=20.0, priority=True)     # newer, voting
+    assert [d.token_address for d in wl.active()] == [T2, T1]
+
+
 def test_cap_and_expiry(tmp_path):
     wl = _wl(tmp_path, max_dossiers=1, max_age_s=100)
     assert wl.arm(T1, W1, price=1, liquidity=1, now=0.0) is True

@@ -415,3 +415,45 @@ def test_watchlist_tick_budget_exceeded_skips_sampling_without_crashing(
     store = PositionStore(shadow_path)
     store.load()
     assert len(store.all()) == 1               # scoring still ran on the existing film
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.0, 0.0))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=1.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+@patch("src.agent.copy_trade.monitor.get_holder_stats",
+       return_value={"holder_count": 121, "top_pct": 0.03, "top5_pct": 0.1})
+@patch("src.agent.copy_trade.monitor.get_pair_stats",
+       return_value={"price_usd": 1.0, "liquidity_usd": 51_000.0,
+                     "txns_h1_buys": 1, "txns_h1_sells": 1,
+                     "txns_m5_buys": 1, "txns_m5_sells": 0,
+                     "price_change_m5": 1.0})
+def test_event_poll_cannot_consume_the_whole_tick_and_starve_film_sampling(
+        _stats, _hs, _safety, _price, _tax, tmp_path, monkeypatch):
+    """Live incident 2026-07-25: poll() and the watchlist sampling loop shared
+    ONE deadline, so poll() spent all of it and sampling logged sampled=0 on
+    every tick for hours — films never grew past film_too_short, making an
+    entry structurally impossible. poll() must only get a share of the budget."""
+    dossier, shadow_path, pool_instance, source_instance = _phase2_scan_fixture(
+        tmp_path, monkeypatch, phase2_entry=False)   # scoring off: sampling is what's under test
+    import src.agent.copy_trade.monitor as mon
+
+    def _greedy_poll(deadline=None):
+        # burn every second poll() is allowed to have, like the real one did
+        if deadline is not None:
+            while time.monotonic() < deadline:
+                time.sleep(0.005)
+        return []
+    source_instance.poll.side_effect = _greedy_poll
+
+    cfg = _json.loads((tmp_path / "config.json").read_text())
+    cfg["copy_settings"]["tick_budget_seconds"] = 0.2   # keep the test fast
+    (tmp_path / "config.json").write_text(_json.dumps(cfg))
+
+    before = len(dossier.samples)
+    with patch("src.agent.copy_trade.monitor.RpcPool", return_value=pool_instance), \
+         patch("src.agent.copy_trade.monitor.ChainEventSource",
+               return_value=source_instance), \
+         patch("src.agent.copy_trade.monitor.EmailNotifier", side_effect=ValueError):
+        mon.run_scan(once=True)
+    assert len(dossier.samples) == before + 1   # the film GREW despite a greedy poll
