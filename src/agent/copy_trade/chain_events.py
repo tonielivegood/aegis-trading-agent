@@ -49,7 +49,6 @@ class ChainEventSource:
         # rescanned next tick — self.last_processed (below) is just the
         # min of the two, kept for external reporting (state.json).
         self._last_processed = {"in": start_block, "out": start_block}
-        self._receipt_swap_cache: dict[str, bool] = {}
 
     @property
     def last_processed(self) -> int:
@@ -96,14 +95,32 @@ class ChainEventSource:
                 return events, start - 1   # everything before `start` is done
             end = min(start + _CHUNK_BLOCKS - 1, to)
             flt = {"fromBlock": hex(start), "toBlock": hex(end), "topics": topics}
-            for lg in self._pool.get_logs(flt):
-                ev = self._to_event(lg, direction)
+            logs = self._pool.get_logs(flt)
+            # "in" needs to know which of this SAME chunk's txs contain a swap
+            # (drops airdrops/plain transfers) — one bulk eth_getLogs for the
+            # swap topics over this chunk replaces one eth_getTransactionReceipt
+            # PER matching transfer. Real incident 2026-07-24: a single 40-block
+            # chunk had 32-94 matching transfers for the 50 tracked wallets;
+            # at ~0.5s/receipt serially that alone ate a whole tick's budget,
+            # so the bot could never catch up a backlog (or keep up with
+            # real-time volume) no matter how generous the timeout/deadline.
+            swap_txs = (self._fetch_swap_tx_hashes(start, end)
+                       if direction == "in" and logs else frozenset())
+            for lg in logs:
+                ev = self._to_event(lg, direction, swap_txs)
                 if ev is not None:
                     events.append(ev)
             start = end + 1
         return events, to
 
-    def _to_event(self, lg: dict, direction: str) -> WalletEvent | None:
+    def _fetch_swap_tx_hashes(self, from_block: int, to_block: int) -> frozenset[str]:
+        flt = {"fromBlock": hex(from_block), "toBlock": hex(to_block),
+              "topics": [[V2_SWAP_TOPIC, V3_SWAP_TOPIC]]}
+        return frozenset(lg["transactionHash"] for lg in self._pool.get_logs(flt)
+                         if lg.get("transactionHash"))
+
+    def _to_event(self, lg: dict, direction: str,
+                 swap_txs: frozenset[str] = frozenset()) -> WalletEvent | None:
         topics = lg.get("topics", [])
         if len(topics) < 3:
             return None
@@ -117,19 +134,8 @@ class ChainEventSource:
         if wallet not in self._wallets:
             return None
         tx_hash = lg["transactionHash"]
-        if direction == "in" and not self._tx_has_swap(tx_hash):
+        if direction == "in" and tx_hash not in swap_txs:
             return None   # airdrop / plain transfer — not a buy
         return WalletEvent(wallet=wallet, token_address=token, direction=direction,
                            amount_raw=int(lg.get("data", "0x0"), 16),
                            tx_hash=tx_hash, block=int(block_number, 16))
-
-    def _tx_has_swap(self, tx_hash: str) -> bool:
-        if tx_hash in self._receipt_swap_cache:
-            return self._receipt_swap_cache[tx_hash]
-        receipt = self._pool.get_receipt(tx_hash) or {}
-        has = any(l.get("topics") and l["topics"][0] in (V2_SWAP_TOPIC, V3_SWAP_TOPIC)
-                  for l in receipt.get("logs", []))
-        self._receipt_swap_cache[tx_hash] = has
-        if len(self._receipt_swap_cache) > 2000:   # ponytail: crude cap, fine for 50 wallets
-            self._receipt_swap_cache.clear()
-        return has

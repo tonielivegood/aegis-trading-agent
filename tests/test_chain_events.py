@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 from src.agent.copy_trade.chain_events import ChainEventSource, WalletEvent
-from src.agent.copy_trade.rpc_pool import TRANSFER_TOPIC, V2_SWAP_TOPIC, addr_topic
+from src.agent.copy_trade.rpc_pool import TRANSFER_TOPIC, addr_topic
 
 W = "0x1111111111111111111111111111111111111111"
 OTHER = "0x2222222222222222222222222222222222222222"
@@ -26,11 +26,20 @@ def _source(logs, receipt_has_swap=True, latest=150):
         # range-filtered — pass it through so _to_event's own handling is
         # what's under test, not this mock.
         lo, hi = int(flt["fromBlock"], 16), int(flt["toBlock"], 16)
-        return [lg for lg in logs
-                if "blockNumber" not in lg or lo <= int(lg["blockNumber"], 16) <= hi]
+        in_range = [lg for lg in logs
+                    if "blockNumber" not in lg or lo <= int(lg["blockNumber"], 16) <= hi]
+        # the bulk swap-topic query (_fetch_swap_tx_hashes) always passes
+        # topics[0] as a LIST ([V2_SWAP_TOPIC, V3_SWAP_TOPIC]); the regular
+        # transfer query always passes a single topic string — that shape is
+        # how this mock tells the two queries apart.
+        topics0 = (flt.get("topics") or [None])[0]
+        if isinstance(topics0, list):
+            if not receipt_has_swap:
+                return []
+            return [{"transactionHash": lg["transactionHash"]} for lg in in_range
+                    if "transactionHash" in lg]
+        return in_range
     pool.get_logs.side_effect = _get_logs
-    swap_log = {"topics": [V2_SWAP_TOPIC]} if receipt_has_swap else {"topics": ["0xdead"]}
-    pool.get_receipt.return_value = {"logs": [swap_log]}
     return ChainEventSource(pool, wallets=[W], start_block=100,
                             ignore_tokens={USDT}), pool
 
@@ -165,10 +174,43 @@ def test_log_missing_block_number_is_skipped_not_crashed():
     assert src.poll() == []   # malformed log skipped, poll() doesn't raise
 
 
-def test_receipt_log_with_empty_topics_is_not_a_swap():
-    src, pool = _source([_log(TOKEN, OTHER, W)])
-    pool.get_receipt.return_value = {"logs": [{"topics": []}, {"topics": [V2_SWAP_TOPIC]}]}
+def test_in_direction_uses_one_bulk_swap_query_not_one_per_transfer():
+    # Real incident 2026-07-24: one 40-block chunk had 32-94 matching
+    # transfers, and the old per-tx eth_getTransactionReceipt approach made
+    # that many serial RPC round-trips (~0.5s each) — enough alone to eat an
+    # entire tick's budget and permanently stall catch-up. The fix: exactly
+    # ONE extra eth_getLogs call per chunk covers the whole chunk's swaps.
+    many_logs = [_log(TOKEN, OTHER, W, block=101, tx=f"0x{i:064x}") for i in range(20)]
+    # latest=140: the whole 101-140 range fits in exactly one 40-block chunk
+    src, pool = _source(many_logs, latest=140)   # receipt_has_swap=True: all 20 are buys
     events = src.poll()
-    # empty-topics log doesn't crash iteration; the other log in the same
-    # receipt is still checked and still finds the swap
+    assert len(events) == 20
+    # calls: 1 transfer query (in) + 1 swap query (in) + 1 transfer query
+    # (out, no matches, no swap query needed) = 3 total — NOT 20+ receipt calls.
+    assert pool.get_logs.call_count == 3
+
+
+def test_no_matching_transfers_skips_the_swap_query_entirely():
+    src, pool = _source([])   # nothing matches this chunk
+    src.poll()
+    for call in pool.get_logs.call_args_list:
+        topics0 = call.args[0]["topics"][0]
+        assert not isinstance(topics0, list)   # never the swap query
+
+
+def test_swap_query_ignores_entries_missing_tx_hash_without_crashing():
+    # A malformed swap-log entry (no transactionHash) must not crash
+    # _fetch_swap_tx_hashes; a real swap entry for the transfer's own tx
+    # (the default "0x"+"f"*64 from _log()) is still found alongside it.
+    src, pool = _source([_log(TOKEN, OTHER, W)])
+
+    def _get_logs(flt):
+        topics0 = (flt.get("topics") or [None])[0]
+        if isinstance(topics0, list):
+            return [{"topics": []}, {"transactionHash": "0x" + "f" * 64}]
+        lo, hi = int(flt["fromBlock"], 16), int(flt["toBlock"], 16)
+        return [lg for lg in [_log(TOKEN, OTHER, W)]
+                if lo <= int(lg["blockNumber"], 16) <= hi]
+    pool.get_logs.side_effect = _get_logs
+    events = src.poll()
     assert [e.direction for e in events] == ["in"]
