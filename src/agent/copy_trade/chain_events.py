@@ -64,6 +64,17 @@ class ChainEventSource:
         next tick(s), keeping every tick's worst-case duration bounded."""
         latest = self._pool.latest_block()
         events: list[WalletEvent] = []
+        # "in" is given at most HALF of whatever budget remains, so a large
+        # "in"-side backlog (it does more work per block — see
+        # _fetch_swap_tx_hashes) can never fully starve "out" of progress too;
+        # "out" then gets the full original deadline, i.e. whatever "in"
+        # left unused plus its own reserved half (live incident 2026-07-24:
+        # "in" alone consumed an entire tick's budget, "out" got zero chunks
+        # every single tick).
+        in_deadline = deadline
+        if deadline is not None:
+            in_deadline = time.monotonic() + (deadline - time.monotonic()) / 2
+        deadlines = {"in": in_deadline, "out": deadline}
         # two filtered queries: transfers TO any tracked wallet, then FROM
         for position, direction in ((2, "in"), (1, "out")):
             frm = self._last_processed[direction] + 1
@@ -72,7 +83,7 @@ class ChainEventSource:
             topics: list = [TRANSFER_TOPIC, None, None]
             topics[position] = self._wallet_topics
             dir_events, dir_reached = self._scan_chunked(frm, latest, topics,
-                                                          direction, deadline)
+                                                          direction, deadlines[direction])
             events.extend(dir_events)
             self._last_processed[direction] = dir_reached
         events.sort(key=lambda e: e.block)

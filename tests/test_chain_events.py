@@ -123,6 +123,33 @@ def test_poll_tracks_directions_independently_no_rescan_when_one_finishes_first(
     assert src._last_processed == {"in": 200, "out": 200}
 
 
+def test_poll_gives_in_direction_at_most_half_the_budget_so_out_isnt_starved(monkeypatch):
+    # Real incident 2026-07-24: "in" does more work per block (the bulk swap
+    # query) and, sharing one deadline, consumed the ENTIRE tick's budget
+    # every time — "out" (sell/exit signals) got zero chunks, tick after
+    # tick, even with a huge backlog on both sides.
+    src, pool = _source([], latest=100_000)
+    calls = []
+
+    def _get_logs(flt):
+        calls.append(flt["topics"][2] is not None)   # True only for "in"
+        return []
+    pool.get_logs.side_effect = _get_logs
+
+    clock = {"t": 0.0}
+
+    def _fake_monotonic():
+        clock["t"] += 1.0
+        return clock["t"]
+    monkeypatch.setattr("src.agent.copy_trade.chain_events.time.monotonic", _fake_monotonic)
+
+    src.poll(deadline=22.0)
+    in_count = sum(calls)
+    out_count = len(calls) - in_count
+    assert in_count > 0 and out_count > 0        # neither got zero
+    assert out_count >= in_count * 0.5           # out isn't starved
+
+
 def test_scan_chunked_stops_at_deadline_and_reports_completed_boundary(monkeypatch):
     src, pool = _source([], latest=200)   # needs 3 chunks: 101-140, 141-180, 181-200
     calls = []
