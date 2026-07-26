@@ -7,6 +7,16 @@ from __future__ import annotations
 import requests
 
 
+# Sinks that can receive a token but can never be a buyer worth watching. Kept
+# here rather than at each call site so every caller is covered: a 2026-07-26
+# mining run surfaced 0x…dead as a top-ranked "size pick" because burning is a
+# large transfer and the caller had only excluded 0x…0000.
+BURN_ADDRESSES = frozenset({
+    "0x0000000000000000000000000000000000000000",
+    "0x000000000000000000000000000000000000dead",
+})
+
+
 def _topic_to_addr(topic: str) -> str:
     return "0x" + topic[-40:].lower()
 
@@ -15,7 +25,7 @@ def early_buyers(logs: list[dict], exclude: set[str], max_buyers: int = 200) -> 
     """First-seen unique Transfer recipients of a token's earliest logs — the wallets
     that were in BEFORE the run. Caller passes logs from pair creation onward and
     excludes the pair/zero/router addresses."""
-    excl = {a.lower() for a in exclude}
+    excl = {a.lower() for a in exclude} | BURN_ADDRESSES
     seen: dict[str, None] = {}
     for lg in logs:
         if len(lg.get("topics", [])) < 3:
@@ -35,7 +45,7 @@ def early_buyer_amounts(logs: list[dict], exclude: set[str],
     across ALL occurrences rather than returning a first-seen list — the signal
     for single-token size-pick candidates (biggest early buy of ONE winner, no
     cross-token convergence required)."""
-    excl = {a.lower() for a in exclude}
+    excl = {a.lower() for a in exclude} | BURN_ADDRESSES
     amounts: dict[str, int] = {}
     for lg in logs:
         if len(lg.get("topics", [])) < 3:

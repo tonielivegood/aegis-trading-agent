@@ -78,16 +78,21 @@ def test_dexscreener_pair_none_when_no_pair_has_created_at(monkeypatch):
 
 
 class _FakePool:
-    """Simulates a chain with an exact 3s block time, genesis (block 0) at ts=0.
+    """Simulates a chain with a constant block time, genesis (block 0) at ts=0.
     Records every block number queried so tests can assert the search never
     probes near genesis for a recent target timestamp."""
-    def __init__(self, latest_block: int, missing_blocks: set[int] | None = None):
+    def __init__(self, latest_block: int, missing_blocks: set[int] | None = None,
+                 block_time: float = 3):
         self.latest_block_ = latest_block
         self.missing = missing_blocks or set()
+        self.block_time = block_time
         self.queried: list[int] = []
 
     def latest_block(self) -> int:
         return self.latest_block_
+
+    def block_ts(self, block_num: int) -> int:
+        return int(block_num * self.block_time)
 
     def call(self, method, params):
         assert method == "eth_getBlockByNumber"
@@ -95,7 +100,19 @@ class _FakePool:
         self.queried.append(block_num)
         if block_num in self.missing:
             return None
-        return {"timestamp": hex(block_num * 3)}
+        return {"timestamp": hex(self.block_ts(block_num))}
+
+
+class _BlockTimeChangedPool(_FakePool):
+    """A chain whose block time CHANGED partway through: blocks up to SWITCH are
+    3s apart, everything after is 0.5s. BSC really did this (3s -> 1.5s -> 0.75s
+    -> ~0.45s), so even a live-measured recent rate misplaces an OLD target."""
+    SWITCH = 9_900_000
+
+    def block_ts(self, block_num: int) -> int:
+        if block_num <= self.SWITCH:
+            return block_num * 3
+        return self.SWITCH * 3 + int((block_num - self.SWITCH) * 0.5)
 
 
 def test_block_at_timestamp_finds_correct_block_without_probing_genesis():
@@ -105,6 +122,28 @@ def test_block_at_timestamp_finds_correct_block_without_probing_genesis():
     found = block_at_timestamp(pool, target_ts)
     assert found == target_block
     assert min(pool.queried) > 9_000_000  # never wandered anywhere near genesis
+
+
+def test_block_at_timestamp_correct_when_real_block_time_differs_from_assumption():
+    # Regression, 2026-07-26: the anchor divided by a hardcoded 3s block time
+    # while BSC actually ran at ~0.45s. The estimate landed ~6x short, the target
+    # fell far outside the search window, and the search silently converged on
+    # the window edge. Every wallet-mining run since 2026-07-16 therefore scanned
+    # a window ~19h AFTER each token launched instead of at its launch, which is
+    # why "early buyers" never converged across winners.
+    pool = _FakePool(latest_block=10_000_000, block_time=0.5)
+    target_block = 9_800_000
+    found = block_at_timestamp(pool, pool.block_ts(target_block))
+    assert found == target_block
+
+
+def test_block_at_timestamp_raises_instead_of_returning_a_window_edge():
+    # The failure mode that hid the bug above: when the target lies outside the
+    # anchored window the search converges on an edge, which is NOT the answer.
+    # It must fail loudly rather than hand back a plausible-looking wrong block.
+    pool = _BlockTimeChangedPool(latest_block=10_000_000)
+    with pytest.raises(RpcError):
+        block_at_timestamp(pool, pool.block_ts(9_000_000))
 
 
 def test_block_at_timestamp_raises_when_latest_block_has_no_data():

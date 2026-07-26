@@ -46,7 +46,13 @@ from src.agent.copy_trade.wallet_discovery import (  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 ZERO = "0x0000000000000000000000000000000000000000"
-EARLY_WINDOW_BLOCKS = 4 * 60 * 60 // 3   # ~4h of BSC blocks after pair creation
+EARLY_WINDOW_S = 60 * 60   # 1h after pair creation, expressed in TIME not blocks
+                           # (a block count silently means a different duration
+                           # every time BSC changes its block time). Matches
+                           # wallet_audition's EARLY_MAX_MEDIAN_AGE_MIN=60: a
+                           # wallet buying later can't clear the audition's
+                           # earliness bar anyway, so scanning wider only burns
+                           # RPC calls without adding a promotable candidate.
 
 
 def load_winners_file(path: str) -> list[str]:
@@ -136,9 +142,30 @@ def dexscreener_pair(token_address: str) -> dict | None:
     return None
 
 
-AVG_BLOCK_TIME_S = 3  # BSC's stable post-Luban block time; only used to anchor an
-                       # estimate for RECENT history (our winner tokens are all
-                       # <2 years old) — never used to search all the way to genesis.
+_PROBE_SPAN_BLOCKS = 100_000   # ~12h at BSC's current rate: recent enough that
+                               # free endpoints still serve the header, wide
+                               # enough to average out per-block jitter.
+
+
+def measure_block_time(pool: RpcPool, latest: int, latest_ts: int) -> float:
+    """Seconds per block, measured live off the chain itself.
+
+    BSC has changed this repeatedly (3s -> 1.5s -> 0.75s -> ~0.45s measured
+    2026-07-26). A hardcoded constant rots silently and throws every
+    timestamp->block estimate off by exactly the factor it has drifted — which
+    is what made every mining run between 2026-07-16 and 2026-07-26 scan the
+    wrong blocks without ever raising."""
+    probe_n = max(1, latest - _PROBE_SPAN_BLOCKS)
+    span = latest - probe_n
+    if span <= 0:
+        raise RpcError(f"chain too short ({latest} blocks) to measure block time")
+    blk = pool.call("eth_getBlockByNumber", [hex(probe_n), False])
+    if blk is None:
+        raise RpcError(f"no data for probe block {probe_n} from any endpoint")
+    elapsed = latest_ts - int(blk["timestamp"], 16)
+    if elapsed <= 0:
+        raise RpcError("block timestamps did not increase across the probe span")
+    return elapsed / span
 
 
 def block_at_timestamp(pool: RpcPool, ts: int) -> int:
@@ -157,10 +184,14 @@ def block_at_timestamp(pool: RpcPool, ts: int) -> int:
     if latest_blk is None:
         raise RpcError(f"no data for the latest block ({latest}) from any endpoint")
     latest_ts = int(latest_blk["timestamp"], 16)
-    est_blocks_back = max(0, (latest_ts - ts) // AVG_BLOCK_TIME_S)
-    window = max(2000, est_blocks_back // 10)  # covers block-time estimate drift
+    est_blocks_back = max(0, int((latest_ts - ts) / measure_block_time(
+        pool, latest, latest_ts)))
+    window = max(2000, est_blocks_back // 5)  # covers block-time change ACROSS
+                                              # the lookback, which a live
+                                              # measurement of the tip can't see
     lo = max(1, latest - est_blocks_back - window)
     hi = min(latest, latest - est_blocks_back + window)
+    lo_edge, hi_edge = lo, hi
     while lo < hi:
         mid = (lo + hi) // 2
         blk = pool.call("eth_getBlockByNumber", [hex(mid), False])
@@ -170,6 +201,14 @@ def block_at_timestamp(pool: RpcPool, ts: int) -> int:
             lo = mid + 1
         else:
             hi = mid
+    # Converging exactly on an edge means the target was never bracketed — the
+    # window is the answer, not the timestamp. Fail loudly: returning the edge
+    # is what let a 6x block-time drift corrupt mining runs unnoticed for weeks.
+    if (lo == lo_edge and lo_edge > 1) or (lo == hi_edge and hi_edge < latest):
+        raise RpcError(
+            f"timestamp {ts} fell outside the anchored window "
+            f"[{lo_edge}, {hi_edge}] — block time likely changed across the "
+            f"lookback; widen the window or anchor closer to the target")
     return lo
 
 
@@ -181,12 +220,15 @@ def scan_winner(pool: RpcPool, token_address: str) -> tuple[list[str], dict[str,
             return [], {}
         created_ts = int(pair["pairCreatedAt"]) // 1000
         start = block_at_timestamp(pool, created_ts)
+        # Resolve the window END from a timestamp too, rather than adding a block
+        # count to `start` — same reason as EARLY_WINDOW_S above.
+        end = block_at_timestamp(pool, created_ts + EARLY_WINDOW_S)
         # chunk=40: free public endpoints cap eth_getLogs ranges hard (1rpc.io/bnb
         # at 50 blocks, nodies.app at 250 — confirmed live 2026-07-16), well under
         # get_logs_chunked's 2000-block default used elsewhere for small polling
-        # ranges. This call spans a full ~4h window in one go, so it must respect
-        # the tightest known limit across the configured endpoints.
-        logs = pool.get_logs_chunked(start, start + EARLY_WINDOW_BLOCKS,
+        # ranges. This call spans the whole early window in one go, so it must
+        # respect the tightest known limit across the configured endpoints.
+        logs = pool.get_logs_chunked(start, end,
                                      topics=[TRANSFER_TOPIC], address=token_address,
                                      chunk=40)
         exclude = {pair["pairAddress"].lower(), token_address.lower(), ZERO}

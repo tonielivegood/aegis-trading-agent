@@ -8,6 +8,7 @@ W2 = "0x2222222222222222222222222222222222222222"
 W3 = "0x3333333333333333333333333333333333333333"
 PAIR = "0x9999999999999999999999999999999999999999"
 ZERO = "0x0000000000000000000000000000000000000000"
+DEAD = "0x000000000000000000000000000000000000dead"
 
 
 def _transfer_log(to_addr: str, block: int, data: str = "0x0") -> dict:
@@ -25,6 +26,22 @@ def test_early_buyers_first_seen_order_dedup_and_exclusions():
         _transfer_log(W1, 5),            # duplicate
     ]
     assert early_buyers(logs, exclude={PAIR, ZERO}) == [W1, W2]
+
+
+def test_early_buyers_excludes_burn_addresses_even_when_caller_forgets():
+    # 2026-07-26: a real mining run ranked 0x…dead as candidate "BSC_SMART_07".
+    # Burning is a large transfer, so amount-based ranking loves it. The caller
+    # only excluded 0x…0000, so the guard belongs here where every caller routes
+    # through, not in each call site.
+    assert early_buyers([_transfer_log(DEAD, 1), _transfer_log(W1, 2)],
+                        exclude=set()) == [W1]
+
+
+def test_early_buyer_amounts_excludes_burn_addresses_even_when_caller_forgets():
+    amounts = early_buyer_amounts([_transfer_log(DEAD, 1, data="0xff"),
+                                   _transfer_log(W1, 2, data="0x0a")],
+                                  exclude=set())
+    assert DEAD not in amounts and amounts[W1] == 10
 
 
 def test_early_buyers_caps_at_max():
