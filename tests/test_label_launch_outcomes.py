@@ -4,7 +4,8 @@ The label is the whole point of the collector — a film without an outcome
 teaches nothing. Measured base rate when this was written: of 16 confirmed 4x+
 winners, only 2 were still alive days later.
 """
-from scripts.label_launch_outcomes import label_outcome, pending_tokens
+import scripts.label_launch_outcomes as lbl
+from scripts.label_launch_outcomes import fetch_ohlcv, label_outcome, pending_tokens
 
 ARMED = 1_785_000_000.0
 HOUR = 3600.0
@@ -80,6 +81,50 @@ def test_empty_ohlcv_is_labelled_not_crashed():
     assert out["alive"] is False
     assert out["max_multiple"] is None and out["time_to_peak_h"] is None
     assert out["ohlcv_candles"] == 0
+
+
+def test_peak_and_its_timestamp_come_from_the_same_post_arm_window():
+    # Live 2026-07-30: the hour candle a token is armed in OPENS before the arm,
+    # so taking the peak from post-arm candles but its time from all candles
+    # reported time_to_peak_h=-0.94 next to max_multiple=None.
+    rows = _candles([9.0, 1.0, 3.0], start=ARMED - HOUR)
+    out = label_outcome(LAUNCH, None, rows, now=ARMED + 72 * HOUR)
+    assert out["max_multiple"] == 3.0        # the 9.0 pre-arm candle is excluded
+    assert out["time_to_peak_h"] == 1.0      # ...from the timestamp too
+
+
+def test_fetch_ohlcv_retries_a_429_then_returns_the_candles(monkeypatch):
+    calls = []
+
+    class _R:
+        def __init__(self, code):
+            self.status_code, self.headers = code, {}
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError(self.status_code)
+
+        def json(self):
+            return {"data": {"attributes": {"ohlcv_list": [[1, 2, 3, 4, 5, 6]]}}}
+
+    def _get(*a, **k):
+        calls.append(1)
+        return _R(429 if len(calls) == 1 else 200)
+
+    monkeypatch.setattr(lbl.requests, "get", _get)
+    monkeypatch.setattr(lbl.time, "sleep", lambda s: None)
+    assert fetch_ohlcv("0xpool") == [[1, 2, 3, 4, 5, 6]]
+    assert len(calls) == 2
+
+
+def test_fetch_ohlcv_returns_none_not_empty_when_every_attempt_fails(monkeypatch):
+    # None ("unknown") must stay distinguishable from [] ("never traded"):
+    # outcomes.jsonl is append-only, so a row written off a failed read bakes a
+    # wrong null peak in permanently.
+    monkeypatch.setattr(lbl.requests, "get",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(lbl.time, "sleep", lambda s: None)
+    assert fetch_ohlcv("0xpool") is None
 
 
 def test_pending_tokens_skips_films_that_are_too_young():

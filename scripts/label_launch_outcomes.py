@@ -28,7 +28,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.gem_report import _max_high_since, _read_jsonl        # noqa: E402
+from scripts.gem_report import _read_jsonl                         # noqa: E402
 from src.agent.copy_trade.prices import get_pair_stats             # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +38,12 @@ OUTCOMES_PATH = ROOT / "data" / "launch_collector" / "outcomes.jsonl"
 _GT_OHLCV = "https://api.geckoterminal.com/api/v2/networks/bsc/pools/{pool}/ohlcv/hour"
 _SLEEP_S = 3.0        # deliberately slower than find_recent_winners' 2.1s: the
                       # collector now holds ~3 req/min of the shared budget
+_OHLCV_RETRIES = 3    # measured 2026-07-30: GeckoTerminal 429s roughly half the
+                      # calls at this spacing even though 10 req/min is well
+                      # under the documented 30. Unlike the collector — where a
+                      # dropped sample costs nothing — a dropped OHLCV read here
+                      # means a permanently peak-less label, so we do retry.
+_RETRY_SLEEP_S = 6.0
 DEAD_LIQ_USD = 1_000.0
 HOUR = 3600.0
 
@@ -57,8 +63,14 @@ def label_outcome(launch: dict, pair_stats: dict | None, ohlcv: list[list],
     price_now = (pair_stats or {}).get("price_usd")
 
     rows = sorted(ohlcv or [], key=lambda r: r[0])
-    peak = _max_high_since(rows, armed_at) if rows else None
-    peak_row = max(rows, key=lambda r: r[2]) if rows else None
+    # Both the peak and its timestamp must come from the SAME post-arm window.
+    # Reading the peak from candles after arming while taking its time from all
+    # candles reported a negative time_to_peak_h against a null max_multiple —
+    # seen on live data 2026-07-30, because the hour candle a token is armed in
+    # opens before the arm.
+    after_arm = [r for r in rows if armed_at is None or r[0] >= armed_at]
+    peak_row = max(after_arm, key=lambda r: r[2]) if after_arm else None
+    peak = peak_row[2] if peak_row else None
     traded = [r for r in rows if (r[5] or 0) > 0]
 
     def _mult_by_hour(h: float) -> float | None:
@@ -126,18 +138,34 @@ def pending_tokens(snapshots: list[dict], outcomes: list[dict], now: float,
     return out
 
 
-def fetch_ohlcv(pool_address: str, limit: int = 336) -> list[list]:
-    try:
-        r = requests.get(_GT_OHLCV.format(pool=pool_address),
-                         params={"aggregate": 1, "limit": limit},
-                         headers={"Accept": "application/json;version=20230302"},
-                         timeout=25)
-        r.raise_for_status()
-        return r.json().get("data", {}).get("attributes", {}).get("ohlcv_list") or []
-    except Exception as e:  # noqa: BLE001 — a missing candle set still labels
-        print(f"  !! ohlcv failed for {pool_address}: {type(e).__name__}",
-              file=sys.stderr)
-        return []
+def fetch_ohlcv(pool_address: str, limit: int = 336) -> list[list] | None:
+    """Hourly candles for a pool, or None if the read FAILED.
+
+    None and [] mean different things and the caller must not conflate them:
+    [] is a pool that genuinely never traded, None is "we don't know yet".
+    outcomes.jsonl is append-only, so writing a row off a failed read bakes a
+    wrong `max_multiple: null` into the dataset permanently.
+    """
+    for attempt in range(_OHLCV_RETRIES):
+        try:
+            r = requests.get(_GT_OHLCV.format(pool=pool_address),
+                             params={"aggregate": 1, "limit": limit},
+                             headers={"Accept": "application/json;version=20230302"},
+                             timeout=25)
+            if r.status_code == 429 and attempt < _OHLCV_RETRIES - 1:
+                wait = r.headers.get("Retry-After")
+                time.sleep(float(wait) if wait and wait.isdigit() else _RETRY_SLEEP_S)
+                continue
+            r.raise_for_status()
+            return (r.json().get("data", {}).get("attributes", {})
+                    .get("ohlcv_list") or [])
+        except Exception as e:  # noqa: BLE001 — report and let the caller skip
+            if attempt >= _OHLCV_RETRIES - 1:
+                print(f"  !! ohlcv failed for {pool_address}: {type(e).__name__}",
+                      file=sys.stderr)
+                return None
+            time.sleep(_RETRY_SLEEP_S)
+    return None
 
 
 def main() -> None:
@@ -160,12 +188,20 @@ def main() -> None:
           f"(of {sum(1 for s in snapshots if s.get('event') == 'launch')} launched)")
 
     labelled = []
+    skipped = 0
     for i, launch in enumerate(todo, 1):
         token = launch["token_address"]
         stats = get_pair_stats(token)
         time.sleep(_SLEEP_S)
         ohlcv = fetch_ohlcv(launch.get("pool_address") or "")
         time.sleep(_SLEEP_S)
+        if ohlcv is None:
+            # Leave it unlabelled rather than write a peak-less row into an
+            # append-only file — the next run picks it up again.
+            skipped += 1
+            print(f"[{i}/{len(todo)}] {str(launch.get('symbol'))[:12]:12s} "
+                  f"SKIP  (ohlcv unavailable, will retry next run)")
+            continue
         row = label_outcome(launch, stats, ohlcv, now)
         labelled.append(row)
         mult = row["max_multiple"]
@@ -188,6 +224,8 @@ def main() -> None:
         print(f"\nwrote {len(labelled)} row(s): {alive} alive, "
               f"{len(labelled) - alive} dead "
               f"({alive / len(labelled) * 100:.0f}% survival this batch)")
+    if skipped:
+        print(f"{skipped} skipped on a failed OHLCV read — re-run to pick them up")
 
 
 if __name__ == "__main__":
