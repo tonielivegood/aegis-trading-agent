@@ -38,12 +38,18 @@ OUTCOMES_PATH = ROOT / "data" / "launch_collector" / "outcomes.jsonl"
 _GT_OHLCV = "https://api.geckoterminal.com/api/v2/networks/bsc/pools/{pool}/ohlcv/hour"
 _SLEEP_S = 3.0        # deliberately slower than find_recent_winners' 2.1s: the
                       # collector now holds ~3 req/min of the shared budget
-_OHLCV_RETRIES = 3    # measured 2026-07-30: GeckoTerminal 429s roughly half the
-                      # calls at this spacing even though 10 req/min is well
-                      # under the documented 30. Unlike the collector — where a
-                      # dropped sample costs nothing — a dropped OHLCV read here
-                      # means a permanently peak-less label, so we do retry.
-_RETRY_SLEEP_S = 6.0
+_OHLCV_RETRIES = 3    # unlike the collector — where a dropped sample costs
+                      # nothing — a dropped OHLCV read here means a permanently
+                      # peak-less label, so this one does retry.
+# Measured against the live OHLCV endpoint 2026-07-30, 6 calls per spacing:
+# 2s -> 4/6, 4s -> 3/6, 8s -> 5/6, 15s -> 6/6. The documented 30 req/min does
+# not hold for this endpoint while the collector shares the IP. 60 films at
+# this pace is a ~20 min batch, which is fine for something run every few days.
+_GT_MIN_GAP_S = 15.0
+# GeckoTerminal answers a 429 with `Retry-After: 0`. Obeying it literally means
+# retrying instantly into the same 429 and burning every attempt in
+# milliseconds — that is exactly what happened on the first live run. Treat the
+# header as a floor to raise, never one to lower.
 DEAD_LIQ_USD = 1_000.0
 HOUR = 3600.0
 
@@ -153,8 +159,12 @@ def fetch_ohlcv(pool_address: str, limit: int = 336) -> list[list] | None:
                              headers={"Accept": "application/json;version=20230302"},
                              timeout=25)
             if r.status_code == 429 and attempt < _OHLCV_RETRIES - 1:
-                wait = r.headers.get("Retry-After")
-                time.sleep(float(wait) if wait and wait.isdigit() else _RETRY_SLEEP_S)
+                wait = r.headers.get("Retry-After") or 0
+                try:
+                    wait = float(wait)
+                except (TypeError, ValueError):
+                    wait = 0.0
+                time.sleep(max(wait, _GT_MIN_GAP_S))
                 continue
             r.raise_for_status()
             return (r.json().get("data", {}).get("attributes", {})
@@ -164,7 +174,7 @@ def fetch_ohlcv(pool_address: str, limit: int = 336) -> list[list] | None:
                 print(f"  !! ohlcv failed for {pool_address}: {type(e).__name__}",
                       file=sys.stderr)
                 return None
-            time.sleep(_RETRY_SLEEP_S)
+            time.sleep(_GT_MIN_GAP_S)
     return None
 
 
@@ -194,7 +204,7 @@ def main() -> None:
         stats = get_pair_stats(token)
         time.sleep(_SLEEP_S)
         ohlcv = fetch_ohlcv(launch.get("pool_address") or "")
-        time.sleep(_SLEEP_S)
+        time.sleep(_GT_MIN_GAP_S)      # spacing between GeckoTerminal calls
         if ohlcv is None:
             # Leave it unlabelled rather than write a peak-less row into an
             # append-only file — the next run picks it up again.

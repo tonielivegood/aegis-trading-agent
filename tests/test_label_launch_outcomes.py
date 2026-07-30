@@ -97,8 +97,10 @@ def test_fetch_ohlcv_retries_a_429_then_returns_the_candles(monkeypatch):
     calls = []
 
     class _R:
+        # GeckoTerminal really answers a 429 with `Retry-After: 0`; obeying it
+        # literally burns all three attempts in milliseconds.
         def __init__(self, code):
-            self.status_code, self.headers = code, {}
+            self.status_code, self.headers = code, {"Retry-After": "0"}
 
         def raise_for_status(self):
             if self.status_code >= 400:
@@ -111,10 +113,12 @@ def test_fetch_ohlcv_retries_a_429_then_returns_the_candles(monkeypatch):
         calls.append(1)
         return _R(429 if len(calls) == 1 else 200)
 
+    slept = []
     monkeypatch.setattr(lbl.requests, "get", _get)
-    monkeypatch.setattr(lbl.time, "sleep", lambda s: None)
+    monkeypatch.setattr(lbl.time, "sleep", slept.append)
     assert fetch_ohlcv("0xpool") == [[1, 2, 3, 4, 5, 6]]
     assert len(calls) == 2
+    assert slept == [lbl._GT_MIN_GAP_S]     # the useless header did not win
 
 
 def test_fetch_ohlcv_returns_none_not_empty_when_every_attempt_fails(monkeypatch):
