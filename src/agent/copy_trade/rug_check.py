@@ -38,7 +38,8 @@ _RUG_FLAGS = {
 
 def passes_rug_check(token_address: str) -> tuple[bool, str]:
     """(True, "") if none of the GoPlus mint/ownership/proxy rug flags are set.
-    Fails closed: any network error or missing record blocks the buy."""
+    Fails closed: any network error, missing record, or incomplete record
+    (a flag GoPlus hasn't analysed yet) blocks the buy."""
     try:
         r = call_with_hard_timeout(requests.get, _GOPLUS + token_address,
                                    timeout=15, hard_timeout=25)
@@ -47,10 +48,17 @@ def passes_rug_check(token_address: str) -> tuple[bool, str]:
         info = result.get(token_address.lower()) or result.get(token_address)
         if not info:
             return False, "no_goplus_record"
+        # GoPlus analyses tokens asynchronously and omits these fields entirely
+        # for non-open-source contracts, so a record can exist while the flags
+        # we gate on are absent. Defaulting a missing flag to "clean" would wave
+        # through exactly the freshly-launched contracts this gate exists to
+        # catch — treat an incomplete record as unanalysable, not as safe.
+        if any(str(info.get(f, "")).strip() == "" for f in _RUG_FLAGS):
+            return False, "incomplete_goplus_record"
+        for field, reason in _RUG_FLAGS.items():
+            if str(info[field]) == "1":
+                return False, reason
+        return True, ""
     except Exception as e:  # noqa: BLE001 — fail closed: no data = no buy
         log.warning("rug_check_failed", token=token_address, error=type(e).__name__)
         return False, "goplus_error"
-    for field, reason in _RUG_FLAGS.items():
-        if str(info.get(field, "0")) == "1":
-            return False, reason
-    return True, ""

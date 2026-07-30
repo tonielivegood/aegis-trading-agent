@@ -69,3 +69,17 @@ def test_network_error_blocks(mock_get):
 def test_bad_http_status_blocks(mock_get):
     mock_get.return_value = FakeResp({}, status_ok=False)
     assert passes_rug_check(TOKEN) == (False, "goplus_error")
+
+
+@patch("src.agent.copy_trade.rug_check.requests.get")
+def test_incomplete_record_blocks(mock_get):
+    # GoPlus analyses asynchronously: a brand-new token can return a real record
+    # with the flags we gate on still absent. That must block, not pass.
+    mock_get.return_value = FakeResp(_goplus_payload({"is_open_source": "1"}))
+    assert passes_rug_check(TOKEN) == (False, "incomplete_goplus_record")
+
+
+@patch("src.agent.copy_trade.rug_check.requests.get")
+def test_non_dict_record_blocks_instead_of_crashing(mock_get):
+    mock_get.return_value = FakeResp({"result": {TOKEN.lower(): "rate limit exceeded"}})
+    assert passes_rug_check(TOKEN) == (False, "goplus_error")

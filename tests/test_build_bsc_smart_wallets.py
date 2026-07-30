@@ -4,7 +4,7 @@ import pytest
 
 from scripts.build_bsc_smart_wallets import (
     assemble_candidates, block_at_timestamp, dexscreener_pair, gmgn_maker_counts,
-    load_winners_file, parse_args,
+    load_winners_file, parse_args, scan_winner,
 )
 from src.agent.copy_trade.rpc_pool import RpcError
 
@@ -174,6 +174,24 @@ def test_parse_args_winners_file_and_defaults(tmp_path):
     assert args.winners_file == str(f)
     assert args.with_gmgn is False                    # gmgn is opt-in now
     assert args.out.endswith("wallet_candidates.json")
+
+
+def test_scan_winner_returns_empty_for_benign_no_pair(monkeypatch):
+    # Legitimately-empty result (no BSC pair found) must stay distinguishable
+    # from a real scan failure — main() only refuses to write on the latter.
+    monkeypatch.setattr("scripts.build_bsc_smart_wallets.dexscreener_pair",
+                        lambda token_address: None)
+    assert scan_winner(pool=None, token_address=TOKEN) == ([], {})
+
+
+def test_scan_winner_returns_none_on_real_error(monkeypatch):
+    # A genuine exception (RPC error, etc.) must return the None sentinel, not
+    # the same ([], {}) a benign no-pair result returns — that ambiguity is
+    # what let a scan failure silently degrade the written candidate list.
+    def boom(token_address):
+        raise RuntimeError("rpc down")
+    monkeypatch.setattr("scripts.build_bsc_smart_wallets.dexscreener_pair", boom)
+    assert scan_winner(pool=None, token_address=TOKEN) is None
 
 
 def test_parse_args_requires_some_winner_source():

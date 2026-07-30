@@ -2,6 +2,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.agent.copy_trade.budget import CopyTradeBudget
 from src.agent.copy_trade.positions import CopyPosition, PositionStore
 from src.agent.copy_trade.trade_engine import TradeEngine
@@ -59,6 +61,20 @@ def test_safety_gate_blocks_and_releases_budget(_s, tmp_path):
     assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is False
     assert budget.available_usd == 16.14
     assert store.all() == []
+
+
+@patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.04, 0.04))
+@patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=2.0)
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_store_write_failure_releases_budget(_s, _p, _t, tmp_path):
+    # Finding 3: open_position() sat OUTSIDE the release-and-reraise try block —
+    # a disk-write failure there leaked the slice until process restart.
+    eng, budget, store = _engine(tmp_path)
+    store.open_position = MagicMock(side_effect=OSError("disk full"))
+    with pytest.raises(OSError):
+        eng.open_cluster_position(T, "GEM", 18, CLUSTER)
+    assert budget.available_usd == 16.14                  # slice released, not leaked
 
 
 @patch("src.agent.copy_trade.trade_engine.passes_rug_check",

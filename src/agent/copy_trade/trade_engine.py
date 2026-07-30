@@ -160,13 +160,13 @@ class TradeEngine:
             else:
                 pos = self._live_fill(token_address, token_symbol,
                                       resolved_decimals, usd_size, cluster)
+            if pos is None:
+                self._budget.release(usd_size)
+                return False
+            self._store.open_position(pos)
         except Exception:
             self._budget.release(usd_size)   # never leak a slice on failure
             raise
-        if pos is None:
-            self._budget.release(usd_size)
-            return False
-        self._store.open_position(pos)
         self._log_signal(token, token_symbol, cluster, "opened", "")
         log.info("cluster_position_opened", token=token_symbol,
                  simulated=pos.simulated, entry=pos.entry_price_usd)

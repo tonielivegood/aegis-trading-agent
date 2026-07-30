@@ -212,7 +212,11 @@ def block_at_timestamp(pool: RpcPool, ts: int) -> int:
     return lo
 
 
-def scan_winner(pool: RpcPool, token_address: str) -> tuple[list[str], dict[str, int]]:
+def scan_winner(pool: RpcPool, token_address: str) -> tuple[list[str], dict[str, int]] | None:
+    """None means the scan itself failed (RPC error etc.) — a real gap in the
+    candidate data. ([], {}) means it legitimately found no BSC pair. Callers
+    must not treat the two the same: a None has to block writing the output,
+    a benign empty result doesn't."""
     try:
         pair = dexscreener_pair(token_address)
         if pair is None or not pair.get("pairCreatedAt"):
@@ -239,7 +243,7 @@ def scan_winner(pool: RpcPool, token_address: str) -> tuple[list[str], dict[str,
         return buyers, amounts
     except Exception as e:
         print(f"  !! error scanning {token_address}: {e} — skipping")
-        return [], {}
+        return None
 
 
 def main() -> None:
@@ -266,8 +270,13 @@ def main() -> None:
     print("== early buyers across winner tokens ==")
     buyers_by_token: dict[str, list[str]] = {}
     amounts_by_token: dict[str, dict[str, int]] = {}
+    scan_failures = 0
     for t in winners:
-        buyers_by_token[t], amounts_by_token[t] = scan_winner(pool, t)
+        result = scan_winner(pool, t)
+        if result is None:
+            scan_failures += 1
+            continue
+        buyers_by_token[t], amounts_by_token[t] = result
     early_counts = cross_winner_candidates(buyers_by_token, min_tokens=2)
     print(f"  {len(early_counts)} wallets early in >=2 winners")
 
@@ -313,9 +322,19 @@ def main() -> None:
     for w in wallets:
         print(f"{w['label']:<14}{w['score']:>7}  {','.join(w['sources']):<16} {w['address']}")
 
+    if scan_failures:
+        print(f"\n{scan_failures} winner token(s) failed to scan — refusing to "
+              f"write an incomplete candidate list")
+
     if args.dry_run:
         print(f"\n--dry-run: not writing {args.out}")
+        if scan_failures:
+            raise SystemExit(1)
         return
+
+    if scan_failures:
+        raise SystemExit(1)
+
     out_path = Path(args.out)
     out_path.write_text(json.dumps(wallets, indent=2, ensure_ascii=False),
                         encoding="utf-8")
