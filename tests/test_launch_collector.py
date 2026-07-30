@@ -167,3 +167,116 @@ def test_new_pools_returns_empty_on_network_error_never_raises(monkeypatch):
     monkeypatch.setattr("src.agent.copy_trade.launch_collector.time.sleep",
                         lambda s: None)
     assert new_pools(pages=2) == []
+
+
+# ---------- T4: batch fetchers + demux (highest-risk: a demux bug silently
+# attributes one token's film to another, poisoning the dataset without error) ----------
+
+from src.agent.copy_trade.launch_collector import (  # noqa: E402
+    DEX_BATCH, GOPLUS_BATCH, fetch_pairs_batch, goplus_batch,
+)
+
+CHECKSUMMED = "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01"
+
+
+def _ds_pair(base, quote="0x" + "b" * 40, liq=1000.0):
+    return {"chainId": "bsc", "baseToken": {"address": base},
+            "quoteToken": {"address": quote}, "priceUsd": "1.0",
+            "liquidity": {"usd": liq}}
+
+
+def test_fetch_pairs_batch_demux_is_case_insensitive(monkeypatch):
+    # Probed live 2026-07-30: DexScreener echoes CHECKSUMMED addresses even
+    # though we asked in lowercase. A case-sensitive lookup silently returns
+    # nothing for every token.
+    monkeypatch.setattr(
+        "src.agent.copy_trade.launch_collector.requests.get",
+        lambda url, **kw: FakeResp({"pairs": [_ds_pair(CHECKSUMMED)]}))
+    out = fetch_pairs_batch([CHECKSUMMED.lower()])
+    assert out[CHECKSUMMED.lower()], "checksummed response must map back to the lowercase key"
+
+
+def test_fetch_pairs_batch_ignores_pairs_where_token_is_only_the_quote(monkeypatch):
+    # Probed live: asking for N tokens returns pairs where a requested token sits
+    # in quoteToken. Treating those as the token's own pair would read the WRONG
+    # side's price and liquidity into its film.
+    monkeypatch.setattr(
+        "src.agent.copy_trade.launch_collector.requests.get",
+        lambda url, **kw: FakeResp({"pairs": [_ds_pair(base="0x" + "f" * 40,
+                                                       quote=T1)]}))
+    assert fetch_pairs_batch([T1]) == {T1: []}
+
+
+def test_fetch_pairs_batch_token_with_no_pairs_maps_to_empty_not_missing(monkeypatch):
+    monkeypatch.setattr(
+        "src.agent.copy_trade.launch_collector.requests.get",
+        lambda url, **kw: FakeResp({"pairs": [_ds_pair(T1)]}))
+    out = fetch_pairs_batch([T1, T2])
+    assert out[T1] and out[T2] == []          # T2 present as [], never a KeyError
+
+
+def test_fetch_pairs_batch_keeps_only_bsc_pairs(monkeypatch):
+    eth = dict(_ds_pair(T1), chainId="ethereum")
+    monkeypatch.setattr(
+        "src.agent.copy_trade.launch_collector.requests.get",
+        lambda url, **kw: FakeResp({"pairs": [eth]}))
+    assert fetch_pairs_batch([T1]) == {T1: []}
+
+
+def test_fetch_pairs_batch_chunks_at_the_documented_limit(monkeypatch):
+    urls = []
+
+    def fake_get(url, **kw):
+        urls.append(url)
+        return FakeResp({"pairs": []})
+
+    monkeypatch.setattr("src.agent.copy_trade.launch_collector.requests.get", fake_get)
+    tokens = [f"0x{i:040x}" for i in range(DEX_BATCH + 1)]
+    fetch_pairs_batch(tokens)
+    assert len(urls) == 2
+    assert urls[0].rsplit("/", 1)[1].count(",") == DEX_BATCH - 1   # DEX_BATCH addrs
+    assert urls[1].rsplit("/", 1)[1].count(",") == 0               # the 1 leftover
+
+
+def test_goplus_batch_demux_and_missing_records(monkeypatch):
+    # Probed live 2026-07-30: GoPlus keys are lowercase, and it returns a record
+    # for only a fraction of brand-new tokens (1 of 5 in the probe) because it
+    # analyses asynchronously. A token with no record must be absent, not faked.
+    monkeypatch.setattr(
+        "src.agent.copy_trade.launch_collector.requests.get",
+        lambda url, **kw: FakeResp({"result": {T1: {"is_mintable": "0"}}}))
+    out = goplus_batch([CHECKSUMMED, T1])
+    assert out[T1] == {"is_mintable": "0"}
+    assert CHECKSUMMED.lower() not in out
+
+
+def test_goplus_batch_chunks_at_the_documented_limit(monkeypatch):
+    urls = []
+
+    def fake_get(url, **kw):
+        urls.append(url)
+        return FakeResp({"result": {}})
+
+    monkeypatch.setattr("src.agent.copy_trade.launch_collector.requests.get", fake_get)
+    monkeypatch.setattr("src.agent.copy_trade.launch_collector.time.sleep", lambda s: None)
+    goplus_batch([f"0x{i:040x}" for i in range(GOPLUS_BATCH + 1)])
+    assert len(urls) == 2
+
+
+def test_batch_fetchers_yield_on_failure_instead_of_raising(monkeypatch):
+    def boom(url, **kw):
+        raise ConnectionError("down")
+
+    monkeypatch.setattr("src.agent.copy_trade.launch_collector.requests.get", boom)
+    monkeypatch.setattr("src.agent.copy_trade.launch_collector.time.sleep", lambda s: None)
+    assert fetch_pairs_batch([T1]) == {T1: []}
+    assert goplus_batch([T1]) == {}
+
+
+def test_fetch_pairs_batch_empty_input_makes_no_calls(monkeypatch):
+    def fail(url, **kw):
+        raise AssertionError("should not call the network for an empty batch")
+
+    monkeypatch.setattr("src.agent.copy_trade.launch_collector.requests.get", fail)
+    assert fetch_pairs_batch([]) == {}
+    assert goplus_batch([]) == {}
