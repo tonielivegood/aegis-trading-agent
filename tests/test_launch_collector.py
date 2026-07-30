@@ -464,6 +464,53 @@ def test_discover_and_arm_respects_the_cap_and_counts_the_miss(tmp_path, monkeyp
     assert lc.STATS["arms_skipped_cap"] == 2
 
 
+def _sample_once(wl, tmp_path, monkeypatch, liq, tick=1, now=NOW):
+    monkeypatch.setattr(lc, "fetch_pairs_batch",
+                        lambda t: {tok: [_rich_pair(base=tok, liq=liq)]
+                                   for tok in t})
+    monkeypatch.setattr(lc, "goplus_batch", lambda t: {})
+    return lc.sample_tick(wl, tick, tmp_path / "s.jsonl", now)
+
+
+def test_a_dead_film_releases_its_slot_after_two_confirming_samples(tmp_path,
+                                                                   monkeypatch):
+    """A dead token has nothing left to record but held a slot for the full 4h
+    writing zeros, and most tokens die in their first minutes — that was most of
+    the capacity. arms_skipped_cap going non-zero is the one failure that makes
+    every rule derived from this dataset worthless."""
+    wl = _collector(tmp_path)
+    monkeypatch.setattr(lc, "new_pools", lambda pages=4: [
+        {"pool_address": "0xp", "token_address": T1, "name": "x",
+         "created_ts": NOW - 1800, "reserve_usd": 41_000.0}])
+    monkeypatch.setattr(lc, "fetch_pairs_batch", lambda t: {T1: [_rich_pair()]})
+    monkeypatch.setattr(lc, "goplus_batch", lambda t: {})
+    assert lc.discover_and_arm(wl, set(), tmp_path / "s.jsonl", NOW) == 1
+
+    lc.STATS["films_released_dead"] = 0
+    _sample_once(wl, tmp_path, monkeypatch, liq=0.5, tick=1, now=NOW + 30)
+    # One sub-floor read is not enough: DexScreener returned $1.7 BILLION for
+    # GLGNS on 30/7, so a single bad read must not end a live token's film.
+    assert len(wl.active()) == 1 and lc.STATS["films_released_dead"] == 0
+
+    _sample_once(wl, tmp_path, monkeypatch, liq=0.4, tick=2, now=NOW + 60)
+    assert wl.active() == [] and lc.STATS["films_released_dead"] == 1
+
+
+def test_a_dip_that_recovers_keeps_its_film(tmp_path, monkeypatch):
+    wl = _collector(tmp_path)
+    monkeypatch.setattr(lc, "new_pools", lambda pages=4: [
+        {"pool_address": "0xp", "token_address": T1, "name": "x",
+         "created_ts": NOW - 1800, "reserve_usd": 41_000.0}])
+    monkeypatch.setattr(lc, "fetch_pairs_batch", lambda t: {T1: [_rich_pair()]})
+    monkeypatch.setattr(lc, "goplus_batch", lambda t: {})
+    lc.discover_and_arm(wl, set(), tmp_path / "s.jsonl", NOW)
+
+    _sample_once(wl, tmp_path, monkeypatch, liq=0.5, tick=1, now=NOW + 30)
+    _sample_once(wl, tmp_path, monkeypatch, liq=41_000.0, tick=2, now=NOW + 60)
+    _sample_once(wl, tmp_path, monkeypatch, liq=0.5, tick=3, now=NOW + 90)
+    assert len(wl.active()) == 1        # not two CONSECUTIVE sub-floor samples
+
+
 def test_discover_and_arm_skips_a_pool_dexscreener_says_is_empty(tmp_path,
                                                                  monkeypatch):
     """GeckoTerminal's reserve got 4 of 29 live arms (2026-07-30) through the

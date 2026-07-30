@@ -376,11 +376,36 @@ FILM_MAX_AGE_S = 4 * 3600      # anh TONiE's call: dense film long enough for
                                # reconstructed hourly by the labelling pass.
 HOLDER_SAMPLE_EVERY_N = 10     # GoPlus every 10th tick = every 5 min
 
+# Below this a pool is dead. Measured 30/7: 24 of 25 deaths went from $20k-$112k
+# to under $1k inside ONE 30s sample, and the dead ones sit at $0.01-$3.
+DEAD_LIQ_USD = 1_000.0
+# A dead token has nothing left to record, but its film held a slot for the full
+# FILM_MAX_AGE_S recording zeros — and with most tokens dying in the first
+# minutes that was most of the capacity. Releasing the slot is what keeps
+# arms_skipped_cap at 0, and a biased sample is the one thing that would make
+# every rule derived from this dataset worthless.
+#
+# Two consecutive sub-floor samples, not one: DexScreener demonstrably returns
+# nonsense occasionally (GLGNS came back with $1.7 BILLION liquidity on 30/7), and
+# ending a live token's film on a single bad read costs the rest of that film,
+# whereas waiting one more tick costs 30 seconds of a slot.
+DEAD_SAMPLES_TO_RELEASE = 2
+
 # Sample bias is the single biggest threat to this dataset: if launches outpace
 # the cap, MAX_FILMS and MIN_RESERVE_USD — not the market — decide what gets
 # filmed, and every rule derived later inherits that. There is no way to design
 # it away, only to measure it, so the misses are counted and persisted.
-STATS = {"arms_skipped_cap": 0, "arms_skipped_empty_pool": 0}
+STATS = {"arms_skipped_cap": 0, "arms_skipped_empty_pool": 0,
+         "films_released_dead": 0}
+
+
+def _film_is_dead(dossier) -> bool:
+    """DEAD_SAMPLES_TO_RELEASE consecutive samples under the liquidity floor."""
+    tail = dossier.samples[-DEAD_SAMPLES_TO_RELEASE:]
+    if len(tail) < DEAD_SAMPLES_TO_RELEASE:
+        return False
+    return all(s.get("liq") is not None and s["liq"] < DEAD_LIQ_USD
+               for s in tail)
 
 
 def _append(path: Path, row: dict) -> None:
@@ -478,6 +503,14 @@ def sample_tick(wl, tick: int, snapshots_path: Path,
             continue
         wl.add_sample(token, row)
         written += 1
+
+        if _film_is_dead(d):
+            STATS["films_released_dead"] += 1
+            log.info("film_released_dead", token=token,
+                     liq=round(row.get("liq") or 0.0, 2),
+                     samples=len(d.samples))
+            wl.disarm(token, "dead", now)
+            continue
 
         if pairs:
             info = socials_of(_best(pairs))

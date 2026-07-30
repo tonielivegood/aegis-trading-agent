@@ -29,6 +29,8 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.gem_report import _read_jsonl                         # noqa: E402
+# The collector releases a film at this same floor, so the two must not drift.
+from src.agent.copy_trade.launch_collector import DEAD_LIQ_USD     # noqa: E402
 from src.agent.copy_trade.prices import get_pair_stats             # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,7 +53,6 @@ _GT_MIN_GAP_S = 15.0
 # retrying instantly into the same 429 and burning every attempt in
 # milliseconds — that is exactly what happened on the first live run. Treat the
 # header as a floor to raise, never one to lower.
-DEAD_LIQ_USD = 1_000.0
 HOUR = 3600.0
 
 
