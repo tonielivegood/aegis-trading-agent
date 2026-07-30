@@ -36,9 +36,18 @@ def test_arm_candidates_accepts_pool_inside_window():
 
 
 def test_arm_candidates_rejects_one_second_too_young():
-    # 14:59 is out, 15:00 is in — the boundary is where an off-by-one hides.
+    # One second under is out, exactly on the floor is in — the boundary is where
+    # an off-by-one hides.
     assert arm_candidates([_pool(age_s=ARM_MIN_AGE_S - 1)], now=NOW, seen=set()) == []
     assert len(arm_candidates([_pool(age_s=ARM_MIN_AGE_S)], now=NOW, seen=set())) == 1
+
+
+def test_the_arm_floor_is_early_enough_to_see_the_run_up():
+    """Measured 2026-07-30 on the first 6 armed tokens: four had already done
+    ~2x before minute 15 and four peaked before it (minutes 3.8, 4.3, 8.3,
+    10.5). A floor that sits above those is filming the aftermath of the move,
+    not the move, and no entry rule can be learned from that."""
+    assert ARM_MIN_AGE_S <= 4 * 60
 
 
 def test_arm_candidates_rejects_one_second_too_old():

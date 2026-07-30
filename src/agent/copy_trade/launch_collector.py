@@ -38,14 +38,26 @@ _GT_HEADERS = {"Accept": "application/json;version=20230302"}
 
 # Probed 2026-07-30: BSC new_pools has exactly 4 non-empty pages reaching back
 # ~58 min (p1 covers 1.6-18min, p4 covers 43-58min); page 5 is empty. That does
-# NOT span the full 15min-2h arm window — but it does not need to. Polling every
-# DISCOVERY_INTERVAL_S means every pool is seen repeatedly while it sits in the
-# 15-33min band (pages 1-2), so each one is caught the moment it ages in. The 2h
-# upper bound is a safety net for pools missed during downtime, not the main path.
+# NOT span the full arm window — but it does not need to. Polling every
+# DISCOVERY_INTERVAL_S means a pool is seen repeatedly from ~1.6 min onward on
+# page 1, so each one is caught the moment it crosses ARM_MIN_AGE_S. The 2h upper
+# bound is a safety net for pools missed during downtime, not the main path.
 DISCOVERY_PAGES = 4
 DISCOVERY_INTERVAL_S = 120
 
-ARM_MIN_AGE_S = 15 * 60
+# Was 15 min — anh TONiE's original call — and that was measured wrong on
+# 2026-07-30 against minute candles for the first 6 armed tokens: FOUR had
+# already done ~2x or more before minute 15 (1.92x, 1.94x, 2.70x, 3.09x) and
+# FOUR peaked before it (minutes 3.8, 4.3, 8.3, 10.5). The entry signal the
+# strategy is built on — "2x'd, with buys overwhelming sells" — forms inside the
+# window the collector was blind to, so the film was recording the aftermath of
+# the move rather than the move. Lowered with his approval.
+#
+# This does not arm MORE tokens, it arms the same ones sooner, so MAX_FILMS is
+# unaffected. A pool under MIN_RESERVE_USD at 3 min is not lost either: `seen`
+# only records a token once it actually arms, so it is re-examined every
+# discovery tick until it either qualifies or ages past ARM_MAX_AGE_S.
+ARM_MIN_AGE_S = 3 * 60
 ARM_MAX_AGE_S = 2 * 3600
 MIN_RESERVE_USD = 20_000.0     # anh TONiE's call. Probed: only ~6% of new pools
                                # clear this, so it — not MAX_FILMS — is the
