@@ -1,0 +1,21 @@
+[Unit]
+Description=Aegis Launch Collector (records new BSC token launches, never trades)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agent
+WorkingDirectory=/home/agent/Track1-trade-onchain
+ExecStart=/home/agent/Track1-trade-onchain/.venv/bin/python -u -m src.agent.copy_trade.launch_collector
+Restart=always
+RestartSec=15
+# Research collector: it must always lose a CPU fight with anything that trades.
+Nice=10
+StandardOutput=append:/home/agent/Track1-trade-onchain/logs/launch_collector.log
+StandardError=append:/home/agent/Track1-trade-onchain/logs/launch_collector.log
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
