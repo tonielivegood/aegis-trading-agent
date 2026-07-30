@@ -59,12 +59,24 @@ def get_price_usd(token_address: str) -> float | None:
 
 
 def get_pair_stats(token_address: str) -> dict | None:
-    """Gem-filter facts for a token. price/liquidity/mcap come from the
-    highest-liquidity BSC pair; age is the EARLIEST pairCreatedAt across all
-    pairs (DexScreener sometimes omits it on the best pair — seen live 17/7)."""
+    """Gem-filter facts for a token, fetched and cached. See
+    pair_stats_from_pairs for the rules applied to the pair list."""
     pairs = _fetch_pairs(token_address)
     if not pairs:
         return None
+    return pair_stats_from_pairs(pairs)
+
+
+def pair_stats_from_pairs(pairs: list) -> dict:
+    """Gem-filter facts from an already-fetched BSC pair list. price/liquidity/
+    mcap come from the highest-liquidity pair; age is the EARLIEST
+    pairCreatedAt across ALL pairs (DexScreener sometimes omits it on the best
+    pair — seen live 17/7).
+
+    Split out from get_pair_stats so the launch collector can apply the same
+    rules to pairs it fetched in a batch. Both of those rules are fixes learned
+    from live incidents; duplicating them elsewhere would duplicate the bug fix.
+    """
     best = _best_pair(pairs)
     created = [p["pairCreatedAt"] for p in pairs if p.get("pairCreatedAt")]
     mcap = best.get("marketCap") or best.get("fdv")
@@ -106,10 +118,26 @@ _holder_cache: dict[str, tuple[float, dict]] = {}
 _DEAD = "0x000000000000000000000000000000000000dead"
 
 
+def holder_stats_from_record(info: dict) -> dict:
+    """Holder distribution from an already-fetched GoPlus record. Excludes LP
+    pools (non-empty GoPlus tag), the dead address, and locked holders — what's
+    left is the supply that can actually dump on us.
+
+    Split out so the launch collector can apply the same exclusion rules to
+    records it fetched in a batch, rather than re-deriving them.
+    """
+    free = [float(h.get("percent") or 0) for h in (info.get("holders") or [])
+            if not h.get("tag") and (h.get("address") or "").lower() != _DEAD
+            and not h.get("is_locked")]
+    free.sort(reverse=True)
+    return {"holder_count": int(info.get("holder_count") or 0),
+            "top_pct": free[0] if free else 0.0,
+            "top5_pct": sum(free[:5])}
+
+
 def get_holder_stats(token_address: str) -> dict | None:
-    """Holder distribution facts for the concentration gate + phase-2 films.
-    Excludes LP pools (non-empty GoPlus tag), the dead address, and locked
-    holders — what's left is the supply that can actually dump on us."""
+    """Holder distribution facts for the concentration gate + phase-2 films,
+    fetched and cached. See holder_stats_from_record for the rules applied."""
     key = token_address.lower()
     hit = _holder_cache.get(key)
     if hit is not None and time.time() - hit[0] < _HOLDER_TTL_S:
@@ -122,13 +150,7 @@ def get_holder_stats(token_address: str) -> dict | None:
         info = result.get(token_address.lower()) or result.get(token_address)
         if not info:
             return None
-        free = [float(h.get("percent") or 0) for h in (info.get("holders") or [])
-                if not h.get("tag") and (h.get("address") or "").lower() != _DEAD
-                and not h.get("is_locked")]
-        free.sort(reverse=True)
-        out = {"holder_count": int(info.get("holder_count") or 0),
-               "top_pct": free[0] if free else 0.0,
-               "top5_pct": sum(free[:5])}
+        out = holder_stats_from_record(info)
         _holder_cache[key] = (time.time(), out)
         return out
     except Exception as e:  # noqa: BLE001

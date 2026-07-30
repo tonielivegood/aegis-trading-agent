@@ -115,3 +115,39 @@ def test_holder_stats_failure_returns_none_never_cached(get_mock):
     prices._holder_cache.clear()
     assert prices.get_holder_stats(TOKEN) is None
     assert prices._holder_cache == {}
+
+
+# ---- the extracted pure cores, called directly (no network, no cache) ----
+# Split out 2026-07-30 so the launch collector applies the SAME rules to pairs
+# and GoPlus records it fetched in a batch, instead of re-deriving them.
+
+def test_pair_stats_from_pairs_applies_earliest_created_and_mcap_fallback():
+    pairs = [
+        {"priceUsd": "2.0", "liquidity": {"usd": 100.0}, "pairCreatedAt": 900,
+         "pairAddress": "0xlow", "fdv": 5_000},
+        {"priceUsd": "2.5", "liquidity": {"usd": 900.0}, "pairAddress": "0xbest",
+         "fdv": 7_000, "txns": {"h1": {"buys": 4, "sells": 1},
+                                "m5": {"buys": 2, "sells": 0}},
+         "priceChange": {"m5": 3.0, "h1": 9.0}},
+    ]
+    s = prices.pair_stats_from_pairs(pairs)
+    assert s["pair_address"] == "0xbest"          # highest liquidity wins
+    assert s["price_usd"] == 2.5
+    assert s["pair_created_at_ms"] == 900         # earliest across ALL pairs
+    assert s["market_cap_usd"] == 7_000.0         # marketCap absent -> fdv
+    assert (s["txns_h1_buys"], s["txns_m5_sells"]) == (4, 0)
+
+
+def test_holder_stats_from_record_excludes_lp_dead_and_locked():
+    info = {"holder_count": "42", "holders": [
+        {"address": "0xpool", "tag": "PancakeSwap", "percent": "0.60"},
+        {"address": "0x000000000000000000000000000000000000dead", "tag": "",
+         "percent": "0.10"},
+        {"address": "0xlocked", "tag": "", "percent": "0.30", "is_locked": 1},
+        {"address": "0xwhale", "tag": "", "percent": "0.09", "is_locked": 0},
+        {"address": "0xsmall", "tag": "", "percent": "0.01", "is_locked": 0},
+    ]}
+    h = prices.holder_stats_from_record(info)
+    assert h["holder_count"] == 42
+    assert h["top_pct"] == 0.09                   # whale, not the 60% LP pool
+    assert abs(h["top5_pct"] - 0.10) < 1e-9       # only the two free holders
