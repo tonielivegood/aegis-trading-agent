@@ -121,6 +121,21 @@ def test_died_at_h_is_the_first_film_sample_below_the_dead_floor():
     assert out["died_at_h"] == round(90 / HOUR, 4)
 
 
+def test_born_dead_separates_never_lived_from_died_fast():
+    # 4 of 29 live arms (2026-07-30) were armed off a GeckoTerminal reserve that
+    # DexScreener contradicted, and read empty from their very first sample.
+    # Counting those as "died in 0 minutes" would corrupt the time-to-death
+    # distribution the exit rule gets fitted against.
+    never = label_outcome(LAUNCH, None, [], now=ARMED + 72 * HOUR,
+                          film=_film([0.001], liq=0.01))
+    assert never["born_dead"] is True
+
+    fast = label_outcome(LAUNCH, None, [], now=ARMED + 72 * HOUR,
+                         film=_film([1.0, 2.0]) + _film([0.001], start=ARMED + 90.0,
+                                                        liq=5.0))
+    assert fast["born_dead"] is False and fast["died_at_h"] == round(90 / HOUR, 4)
+
+
 def test_no_film_falls_back_to_candles_unchanged():
     out = label_outcome(LAUNCH, None, _candles([1.0, 5.0]),
                         now=ARMED + 72 * HOUR)

@@ -455,6 +455,47 @@ def test_discover_and_arm_respects_the_cap_and_counts_the_miss(tmp_path, monkeyp
     assert lc.STATS["arms_skipped_cap"] == 2
 
 
+def test_discover_and_arm_skips_a_pool_dexscreener_says_is_empty(tmp_path,
+                                                                 monkeypatch):
+    """GeckoTerminal's reserve got 4 of 29 live arms (2026-07-30) through the
+    filter while DexScreener reported $0.01 for the same pool at the same
+    moment; all 4 read zero for their entire film. Filming an empty pool burns a
+    slot and four hours of quota to record zeros."""
+    wl = _collector(tmp_path)
+    snap = tmp_path / "snapshots.jsonl"
+    monkeypatch.setattr(lc, "new_pools", lambda pages=4: [
+        {"pool_address": "0xp", "token_address": T1, "name": "x",
+         "created_ts": NOW - 1800, "reserve_usd": 41_000.0}])
+    monkeypatch.setattr(lc, "fetch_pairs_batch",
+                        lambda t: {T1: [_rich_pair(liq=0.01)]})
+    monkeypatch.setattr(lc, "goplus_batch", lambda t: {})
+
+    lc.STATS["arms_skipped_empty_pool"] = 0
+    assert lc.discover_and_arm(wl, set(), snap, NOW) == 0
+    assert lc.STATS["arms_skipped_empty_pool"] == 1
+    assert _read(snap) == []
+
+
+def test_discover_and_arm_still_trusts_geckoterminal_when_dexscreener_is_silent(
+        tmp_path, monkeypatch):
+    """No pairs at all means DexScreener has not indexed the token yet — the
+    normal early state, not an empty pool. Dropping those would throw away good
+    launches, so GeckoTerminal's reserve stands and the arm goes ahead."""
+    wl = _collector(tmp_path)
+    snap = tmp_path / "snapshots.jsonl"
+    monkeypatch.setattr(lc, "new_pools", lambda pages=4: [
+        {"pool_address": "0xp", "token_address": T1, "name": "x",
+         "created_ts": NOW - 1800, "reserve_usd": 41_000.0}])
+    monkeypatch.setattr(lc, "fetch_pairs_batch", lambda t: {T1: []})
+    monkeypatch.setattr(lc, "goplus_batch", lambda t: {})
+
+    assert lc.discover_and_arm(wl, set(), snap, NOW) == 1
+    row = _read(snap)[0]
+    # Both liquidity readings are on the record: the filter gated on the GT one.
+    assert row["arm_reserve_usd_gt"] == 41_000.0
+    assert row["arm_liquidity_usd"] == 41_000.0
+
+
 def test_discover_and_arm_never_double_arms_a_token(tmp_path, monkeypatch):
     wl = _collector(tmp_path)
     pool = {"pool_address": "0xp", "token_address": T1, "name": "x",

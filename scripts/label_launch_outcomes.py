@@ -144,6 +144,11 @@ def label_outcome(launch: dict, pair_stats: dict | None, ohlcv: list[list],
         "mult_24h": _mult_by_hour(24),
         "died_at_h": (round((dead["ts"] - armed_at) / HOUR, 4)
                       if dead and armed_at else None),
+        # A token whose very first sample is already under the floor never lived
+        # — it was armed off a GeckoTerminal reserve DexScreener contradicted.
+        # Without this flag those rows read as "died in 0 minutes" and would drag
+        # the time-to-death distribution the exit rule is fitted against.
+        "born_dead": bool(dead) and dead is film[0] if film else False,
         "last_active_h": (round((traded[-1][0] - armed_at) / HOUR, 2)
                           if traded and armed_at else None),
         "film_samples": len(film),

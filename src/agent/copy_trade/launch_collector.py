@@ -305,6 +305,12 @@ def launch_snapshot(pool: dict, pairs: list[dict], goplus: dict | None,
                               else None),
         "arm_price_usd": stats.get("price_usd"),
         "arm_liquidity_usd": stats.get("liquidity_usd", pool.get("reserve_usd")),
+        # GeckoTerminal's reserve is what the arm filter actually gated on, so it
+        # has to be on the record next to DexScreener's number. They agreed to
+        # 1.0x on 25 of 29 live arms (2026-07-30) and disagreed totally on 4,
+        # where GT claimed >$20k against DexScreener's $0.01. Storing only one of
+        # them leaves the dataset unable to say which source was wrong.
+        "arm_reserve_usd_gt": pool.get("reserve_usd"),
         "arm_market_cap_usd": stats.get("market_cap_usd"),
         "pair_created_at_ms": stats.get("pair_created_at_ms"),
         "pairs_count": len(pairs),
@@ -362,7 +368,7 @@ HOLDER_SAMPLE_EVERY_N = 10     # GoPlus every 10th tick = every 5 min
 # the cap, MAX_FILMS and MIN_RESERVE_USD — not the market — decide what gets
 # filmed, and every rule derived later inherits that. There is no way to design
 # it away, only to measure it, so the misses are counted and persisted.
-STATS = {"arms_skipped_cap": 0}
+STATS = {"arms_skipped_cap": 0, "arms_skipped_empty_pool": 0}
 
 
 def _append(path: Path, row: dict) -> None:
@@ -396,6 +402,19 @@ def discover_and_arm(wl, seen: set[str], snapshots_path: Path,
         stats = pair_stats_from_pairs(pairs) if pairs else {}
         price = stats.get("price_usd") or 0.0
         liq = stats.get("liquidity_usd") or pool.get("reserve_usd") or 0.0
+        # GeckoTerminal's reserve got these through the age/liquidity filter, but
+        # on 4 of 29 live arms (2026-07-30) DexScreener said the pool held $0.01
+        # at that same moment — and every one of those 4 read zero for its whole
+        # film and never recovered, so DexScreener was the truthful source. An
+        # empty pool is not a sample; filming it burns a slot and four hours of
+        # API quota to record zeros. Only skip when DexScreener actually answered
+        # for the token: no pairs at all means "not indexed yet", not "empty".
+        if pairs and (stats.get("liquidity_usd") or 0.0) < MIN_RESERVE_USD:
+            STATS["arms_skipped_empty_pool"] += 1
+            log.info("launch_skipped_empty_pool", token=token,
+                     dex_liq=round(stats.get("liquidity_usd") or 0.0, 2),
+                     gt_reserve=round(pool.get("reserve_usd") or 0.0, 2))
+            continue
         if not wl.arm(token, wallet="pool", price=price, liquidity=liq, now=now):
             STATS["arms_skipped_cap"] += 1
             continue
