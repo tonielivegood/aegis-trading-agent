@@ -61,6 +61,17 @@ def test_safety_gate_blocks_and_releases_budget(_s, tmp_path):
     assert store.all() == []
 
 
+@patch("src.agent.copy_trade.trade_engine.passes_rug_check",
+       return_value=(False, "mintable"))
+@patch("src.agent.copy_trade.trade_engine.passes_safety_check",
+       return_value=(True, 18))
+def test_rug_gate_blocks_and_releases_budget(_s, _r, tmp_path):
+    eng, budget, store = _engine(tmp_path)
+    assert eng.open_cluster_position(T, "GEM", 18, CLUSTER) is False
+    assert budget.available_usd == 16.14
+    assert store.all() == []
+
+
 @patch("src.agent.copy_trade.trade_engine.get_taxes", return_value=(0.04, 0.04))
 @patch("src.agent.copy_trade.trade_engine.get_price_usd", return_value=2.0)
 @patch("src.agent.copy_trade.trade_engine.passes_safety_check",

@@ -21,3 +21,20 @@ def _no_real_telegram(request, monkeypatch):
     if request.module.__name__.rsplit(".", 1)[-1] == "test_notifier":
         return
     monkeypatch.setattr(notifier, "send", lambda *a, **k: False)
+
+
+@pytest.fixture(autouse=True)
+def _default_rug_check_passes(request, monkeypatch):
+    """Safety net: tests written before passes_rug_check existed don't know
+    about it and would otherwise hit the real GoPlus API inside
+    open_cluster_position. Default every test to a passing rug check; tests
+    that need to assert on rug-blocking re-patch with their own return value
+    (a test-level @patch always wins over this fixture for that test).
+
+    test_rug_check.py is exempt — it tests passes_rug_check itself via
+    requests.get at the network boundary, never through this default.
+    """
+    if request.module.__name__.rsplit(".", 1)[-1] == "test_rug_check":
+        return
+    monkeypatch.setattr("src.agent.copy_trade.trade_engine.passes_rug_check",
+                        lambda *a, **k: (True, ""))

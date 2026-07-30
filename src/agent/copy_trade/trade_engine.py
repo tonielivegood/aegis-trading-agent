@@ -18,6 +18,7 @@ from ..config import settings
 from ..data.token_list import register_discovered
 from ..execution.best_execution import rank_backends
 from ..execution.binance_web3 import passes_safety_check
+from .rug_check import passes_rug_check
 from ..monitor.logger import get_logger
 from .budget import CopyTradeBudget
 from .positions import CopyPosition, PositionStore
@@ -143,6 +144,13 @@ class TradeEngine:
             self._budget.release(usd_size)
             self._log_signal(token, token_symbol, cluster, "skipped_safety", "")
             log.warning("cluster_buy_skipped_safety", token=token_symbol)
+            return False
+        rug_ok, rug_reason = passes_rug_check(token_address)
+        if not rug_ok:
+            self._budget.release(usd_size)
+            self._log_signal(token, token_symbol, cluster, "skipped_rug", rug_reason)
+            log.warning("cluster_buy_skipped_rug", token=token_symbol,
+                       reason=rug_reason)
             return False
         resolved_decimals = decimals or token_decimals
         try:
