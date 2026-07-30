@@ -33,6 +33,7 @@ from src.agent.copy_trade.prices import get_pair_stats             # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOTS_PATH = ROOT / "data" / "launch_collector" / "snapshots.jsonl"
+FILMS_PATH = ROOT / "data" / "launch_collector" / "films.jsonl"
 OUTCOMES_PATH = ROOT / "data" / "launch_collector" / "outcomes.jsonl"
 
 _GT_OHLCV = "https://api.geckoterminal.com/api/v2/networks/bsc/pools/{pool}/ohlcv/hour"
@@ -60,28 +61,65 @@ def _mult(price: float | None, base: float | None) -> float | None:
     return price / base
 
 
+def load_films(path: Path) -> dict[str, list[dict]]:
+    """token -> its 30s samples, oldest first."""
+    out: dict[str, list[dict]] = {}
+    for row in _read_jsonl(path):
+        if row.get("event") == "sample" and row.get("token_address"):
+            out.setdefault(row["token_address"], []).append(row)
+    for samples in out.values():
+        samples.sort(key=lambda s: s.get("ts") or 0.0)
+    return out
+
+
+def price_series(film: list[dict], ohlcv: list[list]) -> list[tuple[float, float]]:
+    """(ts, price) at the best resolution available for each part of the life.
+
+    The film samples every 30s; hourly candles are ~120x coarser. Measured
+    2026-07-30: tokens that lived an hour have 110-122 film points against 2
+    hourly candles, and most tokens now die inside the hour. Deriving a peak or
+    an exit rule from 2 candles is not possible, so the film wins wherever it
+    reaches and the candles only extend past its end.
+    """
+    series = [(s["ts"], s["price"]) for s in film
+              if s.get("ts") is not None and s.get("price")]
+    film_end = max((ts for ts, _ in series), default=None)
+    for row in ohlcv or []:
+        if film_end is None or row[0] >= film_end:
+            series.append((row[0], row[2]))       # candle HIGH, not close
+    series.sort()
+    return series
+
+
 def label_outcome(launch: dict, pair_stats: dict | None, ohlcv: list[list],
-                  now: float) -> dict:
+                  now: float, film: list[dict] | None = None) -> dict:
     """One labelled row. Pure — every network read is done by the caller."""
     armed_at = launch.get("ts")
     base = launch.get("arm_price_usd")
     liq_now = (pair_stats or {}).get("liquidity_usd")
     price_now = (pair_stats or {}).get("price_usd")
 
+    film = film or []
     rows = sorted(ohlcv or [], key=lambda r: r[0])
+    series = price_series(film, rows)
     # Both the peak and its timestamp must come from the SAME post-arm window.
-    # Reading the peak from candles after arming while taking its time from all
-    # candles reported a negative time_to_peak_h against a null max_multiple —
+    # Reading the peak from points after arming while taking its time from all
+    # of them reported a negative time_to_peak_h against a null max_multiple —
     # seen on live data 2026-07-30, because the hour candle a token is armed in
     # opens before the arm.
-    after_arm = [r for r in rows if armed_at is None or r[0] >= armed_at]
-    peak_row = max(after_arm, key=lambda r: r[2]) if after_arm else None
-    peak = peak_row[2] if peak_row else None
+    after_arm = [p for p in series if armed_at is None or p[0] >= armed_at]
+    peak_ts, peak = max(after_arm, key=lambda p: p[1]) if after_arm else (None, None)
     traded = [r for r in rows if (r[5] or 0) > 0]
 
+    # Time of death at 30s resolution: the first film sample whose liquidity
+    # fell through the floor. This is the exit rule's target variable — "how
+    # long did I have to get out" — and hourly candles cannot answer it.
+    dead = next((s for s in film
+                 if s.get("liq") is not None and s["liq"] < DEAD_LIQ_USD), None)
+
     def _mult_by_hour(h: float) -> float | None:
-        window = [r for r in rows if r[0] <= armed_at + h * HOUR]
-        high = max((r[2] for r in window), default=None)
+        window = [p for p in after_arm if p[0] <= armed_at + h * HOUR]
+        high = max((p[1] for p in window), default=None)
         return _mult(high, base)
 
     return {
@@ -98,16 +136,20 @@ def label_outcome(launch: dict, pair_stats: dict | None, ohlcv: list[list],
         "multiple_now": _mult(price_now, base),
         "max_price_usd": peak,
         "max_multiple": _mult(peak, base),
-        "time_to_peak_h": (round((peak_row[0] - armed_at) / HOUR, 2)
-                           if peak_row and armed_at else None),
+        "time_to_peak_h": (round((peak_ts - armed_at) / HOUR, 4)
+                           if peak_ts and armed_at else None),
         # Did a 4h film even cover the move? That is what decides whether the
         # collector's window is long enough to learn an exit rule from.
         "mult_1h": _mult_by_hour(1), "mult_4h": _mult_by_hour(4),
         "mult_24h": _mult_by_hour(24),
+        "died_at_h": (round((dead["ts"] - armed_at) / HOUR, 4)
+                      if dead and armed_at else None),
         "last_active_h": (round((traded[-1][0] - armed_at) / HOUR, 2)
                           if traded and armed_at else None),
+        "film_samples": len(film),
         "ohlcv_candles": len(rows),
-        "source": "geckoterminal_ohlcv_hour",
+        "source": ("film_30s+geckoterminal_ohlcv_hour" if film
+                   else "geckoterminal_ohlcv_hour"),
     }
 
 
@@ -185,12 +227,14 @@ def main() -> None:
     ap.add_argument("--refresh-until-hours", type=float, default=336.0,
                     help="keep re-labelling until a film is this old (14d)")
     ap.add_argument("--snapshots", default=str(SNAPSHOTS_PATH))
+    ap.add_argument("--films", default=str(FILMS_PATH))
     ap.add_argument("--out", default=str(OUTCOMES_PATH))
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
     snapshots = _read_jsonl(Path(args.snapshots))
     outcomes = _read_jsonl(Path(args.out))
+    films = load_films(Path(args.films))
     now = time.time()
     todo = pending_tokens(snapshots, outcomes, now, args.min_age_hours,
                           args.refresh_until_hours)
@@ -212,13 +256,16 @@ def main() -> None:
             print(f"[{i}/{len(todo)}] {str(launch.get('symbol'))[:12]:12s} "
                   f"SKIP  (ohlcv unavailable, will retry next run)")
             continue
-        row = label_outcome(launch, stats, ohlcv, now)
+        row = label_outcome(launch, stats, ohlcv, now, films.get(token))
         labelled.append(row)
         mult = row["max_multiple"]
+        died = row["died_at_h"]
         print(f"[{i}/{len(todo)}] {str(row['symbol'])[:12]:12s} "
               f"{'ALIVE' if row['alive'] else 'DEAD ':5s} "
               f"peak={mult if mult is None else round(mult, 2)}x "
-              f"@{row['time_to_peak_h']}h  liq_now={row['liquidity_usd_now']}")
+              f"@{row['time_to_peak_h']}h  "
+              f"died@{'-' if died is None else f'{died * 60:.0f}min'}  "
+              f"film={row['film_samples']}pts")
 
     if args.dry_run:
         print("--dry-run: not writing")

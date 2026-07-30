@@ -83,6 +83,52 @@ def test_empty_ohlcv_is_labelled_not_crashed():
     assert out["ohlcv_candles"] == 0
 
 
+def _film(prices, start=ARMED, step=30.0, liq=50_000.0):
+    """The collector's 30s samples — 120x the resolution of an hourly candle."""
+    return [{"event": "sample", "token_address": LAUNCH["token_address"],
+             "ts": start + i * step, "price": p, "liq": liq}
+            for i, p in enumerate(prices)]
+
+
+def test_the_film_beats_hourly_candles_wherever_it_reaches():
+    # Measured 2026-07-30: a token that lived an hour has ~118 film points and
+    # 2 hourly candles. A spike that lasts 10 minutes is invisible to the
+    # candles and is exactly what an exit rule has to be built on.
+    film = _film([1.0] * 10 + [8.0] + [1.2] * 10)      # 8x spike at t+5min
+    candles = _candles([1.0, 1.3])                      # the hour closed at 1.3
+    out = label_outcome(LAUNCH, {"liquidity_usd": 50_000.0, "price_usd": 1.2},
+                        candles, now=ARMED + 72 * HOUR, film=film)
+    assert out["max_multiple"] == 8.0
+    assert out["time_to_peak_h"] == round(300 / HOUR, 4)   # 5 minutes in
+    assert out["film_samples"] == 21
+    assert out["source"] == "film_30s+geckoterminal_ohlcv_hour"
+
+
+def test_hourly_candles_still_cover_the_tail_past_the_film():
+    # The film stops at 4h; anything after that can only come from candles.
+    film = _film([1.0, 2.0])
+    candles = _candles([1.0, 3.0, 12.0], start=ARMED + 4 * HOUR)
+    out = label_outcome(LAUNCH, None, candles, now=ARMED + 72 * HOUR, film=film)
+    assert out["max_multiple"] == 12.0
+    assert out["time_to_peak_h"] == 6.0
+
+
+def test_died_at_h_is_the_first_film_sample_below_the_dead_floor():
+    # "How long did I have to get out" — the exit rule's target variable.
+    film = (_film([1.0, 2.0, 3.0])
+            + _film([0.001], start=ARMED + 90.0, liq=12.0))
+    out = label_outcome(LAUNCH, None, [], now=ARMED + 72 * HOUR, film=film)
+    assert out["died_at_h"] == round(90 / HOUR, 4)
+
+
+def test_no_film_falls_back_to_candles_unchanged():
+    out = label_outcome(LAUNCH, None, _candles([1.0, 5.0]),
+                        now=ARMED + 72 * HOUR)
+    assert out["max_multiple"] == 5.0
+    assert out["died_at_h"] is None and out["film_samples"] == 0
+    assert out["source"] == "geckoterminal_ohlcv_hour"
+
+
 def test_peak_and_its_timestamp_come_from_the_same_post_arm_window():
     # Live 2026-07-30: the hour candle a token is armed in OPENS before the arm,
     # so taking the peak from post-arm candles but its time from all candles
