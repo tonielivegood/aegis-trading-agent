@@ -20,11 +20,15 @@ Live API shapes verified 2026-07-30 (see the probe notes on each constant).
 """
 from __future__ import annotations
 
+import json
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
 
+from .prices import holder_stats_from_record, pair_stats_from_pairs
+from .watchlist import Watchlist
 from ..monitor.logger import get_logger
 
 log = get_logger(__name__)
@@ -248,3 +252,257 @@ def _json_get(url: str) -> dict | None:
                 return None
             time.sleep(_RETRY_SLEEP_S)
     return None
+
+
+# The 7 contract flags GoPlus can report. Kept here only to answer "has GoPlus
+# finished analysing this token yet" — the collector does NOT gate on them (that
+# is rug_check.py's job on the trading path). Storing the raw record is what
+# matters; these are for the completeness flag.
+_GATED_FLAGS = ("is_mintable", "can_take_back_ownership", "hidden_owner",
+                "owner_change_balance", "transfer_pausable",
+                "slippage_modifiable", "is_proxy")
+
+
+def _best(pairs: list[dict]) -> dict:
+    return max(pairs, key=lambda p: (p.get("liquidity") or {}).get("usd") or 0)
+
+
+def socials_of(pair: dict) -> dict:
+    """The `info` block — the thing that is ERASED when a token dies, which is
+    exactly why it must be captured live. Probed 2026-07-30: 4 of 5 brand-new
+    tokens have no info block at all, so absence is normal and is recorded as
+    such rather than treated as an error."""
+    info = pair.get("info") or {}
+    return {"socials": list(info.get("socials") or []),
+            "websites": list(info.get("websites") or []),
+            "info_present": bool(info)}
+
+
+def goplus_complete(record: dict | None) -> bool:
+    """True once GoPlus has actually analysed the contract. It analyses
+    asynchronously — a brand-new token commonly returns a record with these
+    fields blank, and reading blank as "0" would mean reading "not analysed" as
+    "clean". That exact confusion was a Critical bug in rug_check.py."""
+    if not record:
+        return False
+    return all(str(record.get(f, "")).strip() != "" for f in _GATED_FLAGS)
+
+
+def launch_snapshot(pool: dict, pairs: list[dict], goplus: dict | None,
+                    now: float) -> dict:
+    """Everything about a token that is unrecoverable once it dies."""
+    best = _best(pairs) if pairs else {}
+    base = best.get("baseToken") or {}
+    stats = pair_stats_from_pairs(pairs) if pairs else {}
+    return {
+        "event": "launch", "ts": now,
+        "token_address": (pool.get("token_address") or "").lower(),
+        "pool_address": pool.get("pool_address"),
+        "symbol": base.get("symbol"), "name": pool.get("name"),
+        "pool_created_ts": pool.get("created_ts"),
+        "pool_age_s_at_arm": (now - pool["created_ts"]
+                              if isinstance(pool.get("created_ts"), (int, float))
+                              else None),
+        "arm_price_usd": stats.get("price_usd"),
+        "arm_liquidity_usd": stats.get("liquidity_usd", pool.get("reserve_usd")),
+        "arm_market_cap_usd": stats.get("market_cap_usd"),
+        "pair_created_at_ms": stats.get("pair_created_at_ms"),
+        "pairs_count": len(pairs),
+        **socials_of(best),
+        "goplus": goplus,                     # RAW and whole, not a subset
+        "goplus_complete": goplus_complete(goplus),
+    }
+
+
+def sample_row(token: str, pairs: list[dict], holders: dict | None,
+               now: float, armed_at: float) -> dict | None:
+    """One point in a token's film. None when the token has no pairs this tick
+    (a gap in the film, visible via ts, rather than a fabricated row)."""
+    if not pairs:
+        return None
+    best = _best(pairs)
+    stats = pair_stats_from_pairs(pairs)
+    vol = best.get("volume") or {}
+    return {
+        "ts": now, "age_s": now - armed_at,
+        "price": stats["price_usd"], "liq": stats["liquidity_usd"],
+        "mcap": stats["market_cap_usd"],
+        "buys_m5": stats["txns_m5_buys"], "sells_m5": stats["txns_m5_sells"],
+        "buys_h1": stats["txns_h1_buys"], "sells_h1": stats["txns_h1_sells"],
+        # volume is NOT in pair_stats_from_pairs — the live bot never needed it.
+        # It is what makes "buy pressure" analysable: with the txn counts it
+        # gives buy_share and average trade size, the closest free proxy for the
+        # buy-vs-sell USD split (no free API exposes the real split).
+        "vol_m5": _as_float(vol.get("m5")), "vol_h1": _as_float(vol.get("h1")),
+        "vol_h6": _as_float(vol.get("h6")), "vol_h24": _as_float(vol.get("h24")),
+        "chg_m5": stats["price_change_m5"], "chg_h1": stats["price_change_h1"],
+        "holders": (holders or {}).get("holder_count"),
+        "top_pct": (holders or {}).get("top_pct"),
+        "top5_pct": (holders or {}).get("top5_pct"),
+    }
+
+
+# ---------------------------------------------------------------- collector loop
+
+ROOT = Path(__file__).resolve().parents[3]
+DATA_DIR = ROOT / "data" / "launch_collector"
+FILMS_PATH = DATA_DIR / "films.jsonl"
+SNAPSHOTS_PATH = DATA_DIR / "snapshots.jsonl"
+STATE_PATH = DATA_DIR / "state.json"
+
+SAMPLE_INTERVAL_S = 30         # DexScreener's m5 window / 10, so an imbalance is
+                               # visible while it is forming rather than after
+MAX_FILMS = 60
+FILM_MAX_AGE_S = 4 * 3600      # anh TONiE's call: dense film long enough for
+                               # ENTRY rules. The long tail (exit rules) is
+                               # reconstructed hourly by the labelling pass.
+HOLDER_SAMPLE_EVERY_N = 10     # GoPlus every 10th tick = every 5 min
+
+# Sample bias is the single biggest threat to this dataset: if launches outpace
+# the cap, MAX_FILMS and MIN_RESERVE_USD — not the market — decide what gets
+# filmed, and every rule derived later inherits that. There is no way to design
+# it away, only to measure it, so the misses are counted and persisted.
+STATS = {"arms_skipped_cap": 0}
+
+
+def _append(path: Path, row: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def discover_and_arm(wl, seen: set[str], snapshots_path: Path,
+                     now: float | None = None) -> int:
+    """Find new pools in the age window and start filming them.
+
+    Writes exactly one `launch` snapshot per armed token, capturing the socials
+    and the raw GoPlus record — the things that cannot be recovered once the
+    token dies.
+    """
+    now = time.time() if now is None else now
+    pools = new_pools()
+    picked = arm_candidates(pools, now=now, seen=seen)
+    if not picked:
+        return 0
+
+    tokens = [p["token_address"].lower() for p in picked]
+    pairs_by_token = fetch_pairs_batch(tokens)
+    goplus_by_token = goplus_batch(tokens)
+
+    armed = 0
+    for pool in picked:
+        token = pool["token_address"].lower()
+        pairs = pairs_by_token.get(token) or []
+        stats = pair_stats_from_pairs(pairs) if pairs else {}
+        price = stats.get("price_usd") or 0.0
+        liq = stats.get("liquidity_usd") or pool.get("reserve_usd") or 0.0
+        if not wl.arm(token, wallet="pool", price=price, liquidity=liq, now=now):
+            STATS["arms_skipped_cap"] += 1
+            continue
+        seen.add(token)
+        _append(snapshots_path,
+                launch_snapshot(pool, pairs, goplus_by_token.get(token), now))
+        armed += 1
+        log.info("launch_armed", token=token, liq=round(liq, 2),
+                 age_s=round(now - pool["created_ts"]))
+    return armed
+
+
+# Last-seen values per token, so `security`/`info` rows are appended only when
+# something actually changed rather than once per tick.
+_last_info: dict[str, dict] = {}
+_last_goplus: dict[str, dict] = {}
+
+
+def sample_tick(wl, tick: int, snapshots_path: Path,
+                now: float | None = None) -> int:
+    """One sampling pass over every film in progress."""
+    now = time.time() if now is None else now
+    wl.expire(now)
+    films = wl.active()
+    tokens = [d.token_address for d in films]
+    # Drop change-detection state for films that have ended, otherwise these
+    # dicts grow by one entry per token for the life of the process.
+    for stale in set(_last_info) - set(tokens):
+        _last_info.pop(stale, None)
+    for stale in set(_last_goplus) - set(tokens):
+        _last_goplus.pop(stale, None)
+    if not films:
+        return 0
+
+    pairs_by_token = fetch_pairs_batch(tokens)
+    want_goplus = tick % HOLDER_SAMPLE_EVERY_N == 0
+    goplus_by_token = goplus_batch(tokens) if want_goplus else {}
+
+    written = 0
+    for d in films:
+        token = d.token_address
+        pairs = pairs_by_token.get(token) or []
+        record = goplus_by_token.get(token)
+        holders = holder_stats_from_record(record) if record else None
+
+        row = sample_row(token, pairs, holders, now=now, armed_at=d.armed_at)
+        if row is None:
+            log.info("sample_skipped", token=token, reason="no_pairs")
+            continue
+        wl.add_sample(token, row)
+        written += 1
+
+        if pairs:
+            info = socials_of(_best(pairs))
+            if info != _last_info.get(token):
+                if _last_info.get(token) is not None or info["info_present"]:
+                    # Capturing WHEN socials appear is the point — retrospective
+                    # research cannot see it, because a dead token's info block
+                    # is erased entirely.
+                    _append(snapshots_path,
+                            {"event": "info", "ts": now, "token_address": token,
+                             **info})
+                _last_info[token] = info
+
+        if record is not None and record != _last_goplus.get(token):
+            _append(snapshots_path,
+                    {"event": "security", "ts": now, "token_address": token,
+                     "goplus": record, "goplus_complete": goplus_complete(record)})
+            _last_goplus[token] = record
+    return written
+
+
+def run_collector(once: bool = False) -> None:
+    """Discover, film, repeat. Never trades — see the module docstring."""
+    wl = Watchlist(FILMS_PATH, max_dossiers=MAX_FILMS, max_age_s=FILM_MAX_AGE_S)
+    seen: set[str] = set()
+    tick = 0
+    last_discovery = 0.0
+    log.info("launch_collector_start", max_films=MAX_FILMS,
+             sample_interval_s=SAMPLE_INTERVAL_S, film_max_age_s=FILM_MAX_AGE_S)
+    while True:
+        tick += 1
+        now = time.time()
+        if once or now - last_discovery >= DISCOVERY_INTERVAL_S:
+            try:
+                discover_and_arm(wl, seen, SNAPSHOTS_PATH, now)
+            except Exception as e:  # noqa: BLE001 — a bad tick must not end the run
+                log.warning("discovery_tick_failed", error=type(e).__name__)
+            last_discovery = now
+        try:
+            sample_tick(wl, tick, SNAPSHOTS_PATH, now)
+        except Exception as e:  # noqa: BLE001
+            log.warning("sample_tick_failed", error=type(e).__name__)
+
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(json.dumps({
+            "last_tick_at": datetime.now(timezone.utc).isoformat(),
+            "tick": tick, "active_films": len(wl.active()),
+            "tokens_seen": len(seen), **STATS}), encoding="utf-8")
+        if once:
+            break
+        time.sleep(SAMPLE_INTERVAL_S)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Record new BSC token launches")
+    ap.add_argument("--once", action="store_true", help="run a single tick")
+    run_collector(once=ap.parse_args().once)
