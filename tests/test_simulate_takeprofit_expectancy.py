@@ -1,10 +1,14 @@
 from scripts.simulate_takeprofit_expectancy import (
-    expectancy, find_entry, simulate_token,
+    Config, find_entry, is_unsellable, simulate_token, summarize,
 )
+
+# Fill immediately and charge nothing, so each test isolates the behaviour it
+# names instead of measuring the cost model.
+FREE = Config(size_usd=100.0, fill_delay=0, dex_fee=0.0, gas_usd=0.0)
 
 
 def _samples(prices, liqs=None, dominance=None):
-    liqs = liqs or [50_000.0] * len(prices)
+    liqs = liqs if liqs is not None else [1e9] * len(prices)
     dominance = dominance or [True] * len(prices)
     return [{"price": p, "liq": l,
              "buys_m5": 10 if d else 0, "sells_m5": 0 if d else 10}
@@ -12,13 +16,11 @@ def _samples(prices, liqs=None, dominance=None):
 
 
 def test_find_entry_is_the_first_sample_at_or_above_2x_arm_price():
-    s = _samples([1.0, 1.5, 1.9, 2.0, 3.0])
-    assert find_entry(s, require_dominance=False) == 3
+    assert find_entry(_samples([1.0, 1.5, 1.9, 2.0, 3.0])) == 3
 
 
 def test_find_entry_is_none_when_2x_is_never_reached():
-    s = _samples([1.0, 1.2, 1.5, 1.9])
-    assert find_entry(s, require_dominance=False) is None
+    assert find_entry(_samples([1.0, 1.2, 1.5, 1.9])) is None
 
 
 def test_find_entry_with_dominance_skips_a_2x_sample_where_sells_lead():
@@ -26,47 +28,76 @@ def test_find_entry_with_dominance_skips_a_2x_sample_where_sells_lead():
     assert find_entry(s, require_dominance=True) == 2
 
 
-def test_a_target_hit_before_death_is_a_win():
-    # entry at 2.0x arm; from there 3.0x (=1.5x entry) is hit before liq dies.
-    s = _samples([1.0, 2.0, 3.0, 0.1], liqs=[50_000, 50_000, 50_000, 0.5])
-    out = simulate_token(s, require_dominance=False)
-    assert out["entered"] is True
-    assert out["results"][1.5] == "win"    # 3.0 / 2.0 = 1.5x entry
+def test_a_target_reached_before_the_drain_returns_the_target():
+    s = _samples([1.0, 2.0, 3.0, 0.1], liqs=[1e9, 1e9, 1e9, 0.5])
+    out = simulate_token(s, None, target=1.5, cfg=FREE)
+    assert out["outcome"] == "win"
+    assert round(out["net_multiple"], 6) == 1.5
 
 
-def test_death_before_the_target_is_hit_is_a_loss():
-    s = _samples([1.0, 2.0, 2.1, 0.05], liqs=[50_000, 50_000, 50_000, 0.5])
-    out = simulate_token(s, require_dominance=False)
-    assert out["results"][3.0] == "loss"    # never reached 3x entry, then died
+def test_a_drain_before_the_target_is_a_total_loss_not_a_stop_loss():
+    """24 of 25 measured deaths gave no exit window at all, so the loss is the
+    whole position — modelling it as a stop-loss percentage would invent an
+    exit that does not exist."""
+    s = _samples([1.0, 2.0, 2.1, 0.05], liqs=[1e9, 1e9, 1e9, 0.5])
+    out = simulate_token(s, None, target=3.0, cfg=FREE)
+    assert out["outcome"] == "rugged" and out["net_multiple"] == 0.0
 
 
-def test_the_film_ending_with_neither_outcome_is_open():
-    s = _samples([1.0, 2.0, 2.1, 2.2])       # never dies, never hits 3x
-    out = simulate_token(s, require_dominance=False)
-    assert out["results"][3.0] == "open"
+def test_a_position_still_open_at_the_end_is_SOLD_not_excluded():
+    """Excluding these flatters the result: they are disproportionately tokens
+    that went nowhere, and a real bot still holds something it must sell."""
+    s = _samples([1.0, 2.0, 2.2])          # entered at 2.0, never hit 3x, alive
+    out = simulate_token(s, None, target=3.0, cfg=FREE)
+    assert out["outcome"] == "open_closed_at_end"
+    assert round(out["net_multiple"], 6) == 1.1     # 2.2 / 2.0
 
 
-def test_a_tie_between_win_and_death_favors_the_win():
-    # A limit-sell watching this tick would see the target price satisfied in
-    # the same sample the pool goes empty — the fill happens before the drain.
-    s = _samples([1.0, 2.0, 3.0], liqs=[50_000, 50_000, 0.5])
-    out = simulate_token(s, require_dominance=False)
-    assert out["results"][1.5] == "win"      # 3.0/2.0 = 1.5x, same sample as death
+def test_an_unsellable_token_is_a_total_loss_however_high_the_price_goes():
+    s = _samples([1.0, 2.0, 20.0])
+    assert simulate_token(s, {"is_honeypot": "1"}, 3.0, FREE)["net_multiple"] == 0.0
+    assert simulate_token(s, {"cannot_sell_all": "1"}, 3.0, FREE)["net_multiple"] == 0.0
+    assert is_unsellable({"is_honeypot": "1"}) is True
+    assert is_unsellable(None) is False
 
 
-def test_never_entering_is_excluded_from_the_token_but_not_a_crash():
-    s = _samples([1.0, 1.1, 1.2])
-    out = simulate_token(s, require_dominance=False)
-    assert out == {"entered": False}
+def test_taxes_and_fees_come_off_both_legs():
+    s = _samples([1.0, 2.0, 4.0])
+    cfg = Config(size_usd=100.0, fill_delay=0, dex_fee=0.01, gas_usd=0.0)
+    out = simulate_token(s, {"buy_tax": "0.05", "sell_tax": "0.10"}, 2.0, cfg)
+    # 2x gross, minus 1% fee and 5% buy tax in, minus 1% fee and 10% sell tax out
+    assert round(out["net_multiple"], 6) == round(
+        2.0 * 0.99 * 0.95 * 0.99 * 0.90, 6)
 
 
-def test_expectancy_matches_a_hand_worked_example():
-    # 2 wins at 2x (+1.0 each), 3 losses (-1.0 each), 1 still open (excluded).
-    outcomes = (
-        [{"entered": True, "results": {2.0: "win"}}] * 2
-        + [{"entered": True, "results": {2.0: "loss"}}] * 3
-        + [{"entered": True, "results": {2.0: "open"}}]
-    )
-    e = expectancy(outcomes, 2.0)
-    assert e == {"wins": 2, "losses": 3, "open": 1, "resolved": 5,
-                "win_rate": 0.4, "expectancy_per_unit": 0.4 * 1.0 - 0.6 * 1.0}
+def test_a_missing_goplus_record_is_treated_as_no_tax_not_as_unsellable():
+    s = _samples([1.0, 2.0, 4.0])
+    assert round(simulate_token(s, None, 2.0, FREE)["net_multiple"], 6) == 2.0
+
+
+def test_price_impact_scales_with_position_against_pool_size():
+    s = _samples([1.0, 2.0, 4.0], liqs=[10_000.0] * 3)
+    big = simulate_token(s, None, 2.0, Config(size_usd=1_000.0, fill_delay=0,
+                                              dex_fee=0.0, gas_usd=0.0))
+    small = simulate_token(s, None, 2.0, Config(size_usd=10.0, fill_delay=0,
+                                                dex_fee=0.0, gas_usd=0.0))
+    assert big["net_multiple"] < small["net_multiple"] < 2.0
+
+
+def test_buying_into_an_already_drained_pool_returns_nothing():
+    s = _samples([1.0, 2.0, 2.1], liqs=[1e9, 0.5, 0.5])
+    out = simulate_token(s, None, 3.0, FREE)
+    assert out["outcome"] == "dead_on_arrival" and out["net_multiple"] == 0.0
+
+
+def test_never_reaching_2x_is_not_a_trade_at_all():
+    assert simulate_token(_samples([1.0, 1.1, 1.2]), None, 3.0, FREE) is None
+
+
+def test_summarize_averages_every_position_including_the_zeros():
+    rows = ([{"outcome": "win", "net_multiple": 6.0}] * 2
+            + [{"outcome": "rugged", "net_multiple": 0.0}] * 8)
+    st = summarize(rows, 6.0)
+    assert st["n"] == 10 and st["wins"] == 2 and st["total_losses"] == 8
+    assert st["profit_rate"] == 0.2
+    assert round(st["expectancy"], 6) == 0.2      # (2*6 + 8*0)/10 - 1
