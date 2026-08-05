@@ -1,5 +1,5 @@
 from scripts.simulate_takeprofit_expectancy import (
-    Config, find_entry, is_unsellable, simulate_token, summarize,
+    Config, _terminal, find_entry, is_unsellable, simulate_token, summarize,
 )
 
 # Fill immediately and charge nothing, so each test isolates the behaviour it
@@ -92,6 +92,35 @@ def test_buying_into_an_already_drained_pool_returns_nothing():
 
 def test_never_reaching_2x_is_not_a_trade_at_all():
     assert simulate_token(_samples([1.0, 1.1, 1.2]), None, 3.0, FREE) is None
+
+
+def _trade(entry_ts, exit_ts, mult):
+    return {"outcome": "x", "net_multiple": mult,
+            "entry_ts": entry_ts, "exit_ts": exit_ts}
+
+
+def test_capital_stays_locked_until_a_position_actually_exits():
+    """With one slot, the second trade cannot be taken while the first is open,
+    so its payout must not appear."""
+    cfg = Config(size_usd=100.0, fill_delay=0)
+    rows = [_trade(0, 1000, 6.0), _trade(10, 20, 6.0)]
+    # 400 left + 600 from the one position taken. Taking both would give 1500,
+    # which is exactly what the next test asserts once the slot frees in time.
+    assert _terminal(rows, cfg, bankroll=500.0, max_concurrent=1) == 1000.0
+
+
+def test_a_slot_frees_once_its_position_has_exited():
+    cfg = Config(size_usd=100.0, fill_delay=0)
+    rows = [_trade(0, 5, 6.0), _trade(10, 20, 6.0)]
+    assert _terminal(rows, cfg, bankroll=500.0, max_concurrent=1) == 1500.0
+
+
+def test_trades_are_skipped_once_the_bankroll_cannot_cover_one():
+    """Losing everything on ~75% of trades means sizing decides survival, so a
+    bankroll walk that let trades happen on credit would be meaningless."""
+    cfg = Config(size_usd=100.0, fill_delay=0)
+    rows = [_trade(i * 10, i * 10 + 5, 0.0) for i in range(10)]
+    assert _terminal(rows, cfg, bankroll=250.0, max_concurrent=5) == 50.0
 
 
 def test_summarize_averages_every_position_including_the_zeros():

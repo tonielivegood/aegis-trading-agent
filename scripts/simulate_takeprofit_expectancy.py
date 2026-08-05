@@ -162,7 +162,28 @@ def simulate_token(samples: list[dict], goplus: dict | None, target: float,
     sell_px = sell["price"] * (1 - _impact(cfg.size_usd, sell.get("liq")))
     proceeds = (tokens * sell_px * (1 - cfg.dex_fee)
                 * (1 - _tax(goplus, "sell_tax")) - cfg.gas_usd)
-    return {"outcome": outcome, "net_multiple": max(proceeds, 0.0) / spent}
+    return {"outcome": outcome, "net_multiple": max(proceeds, 0.0) / spent,
+            "entry_ts": buy.get("ts"), "exit_ts": sell.get("ts")}
+
+
+def _terminal(rows: list[dict], cfg: Config, bankroll: float,
+              max_concurrent: int) -> float:
+    """Walk the trades in the order they actually happened, holding capital for
+    the life of each position. Expectancy alone cannot say whether a strategy
+    survives: this one loses everything on ~75% of trades, so position size and
+    how much capital is tied up at once decide whether the edge is ever reached."""
+    open_pos: list[tuple[float, float]] = []       # (exit_ts, payout)
+    for r in sorted(rows, key=lambda r: r.get("entry_ts") or 0.0):
+        now = r.get("entry_ts") or 0.0
+        for exit_ts, payout in [p for p in open_pos if p[0] <= now]:
+            bankroll += payout
+        open_pos = [p for p in open_pos if p[0] > now]
+        if len(open_pos) >= max_concurrent or bankroll < cfg.size_usd:
+            continue                                # no slot, or cannot afford it
+        bankroll -= cfg.size_usd
+        open_pos.append((r.get("exit_ts") or now,
+                         r["net_multiple"] * cfg.size_usd))
+    return bankroll + sum(payout for _, payout in open_pos)
 
 
 def summarize(results: list[dict], target: float) -> dict:
@@ -189,10 +210,28 @@ def main() -> None:
     ap.add_argument("--size-usd", type=float, default=100.0)
     ap.add_argument("--dominance", action="store_true",
                     help="also require buys_m5 > sells_m5 at entry")
+    ap.add_argument("--risk", type=float, metavar="TARGET",
+                    help="bankroll walk at this take-profit target instead")
+    ap.add_argument("--bankroll", type=float, default=500.0)
     args = ap.parse_args()
 
     by_token = load_token_samples(Path(args.films))
     goplus = load_goplus(Path(args.snapshots))
+
+    if args.risk:
+        print(f"bankroll walk @ {args.risk}x target, start ${args.bankroll:.0f}, "
+              f"{len(by_token)} tokens filmed over the collected window\n")
+        print(f"{'size':>7} {'slots':>6} {'final':>10} {'return':>9}")
+        for size in (5.0, 10.0, 25.0, 50.0, 100.0):
+            cfg = Config(size_usd=size, fill_delay=1)
+            rows = [r for r in
+                    (simulate_token(s, goplus.get(t), args.risk, cfg, args.dominance)
+                     for t, s in by_token.items()) if r]
+            for slots in (3, 5, 10):
+                end = _terminal(rows, cfg, args.bankroll, slots)
+                print(f"{size:>6.0f}$ {slots:>6} {end:>10.2f} "
+                      f"{end / args.bankroll - 1:>+8.1%}")
+        return
 
     print(f"tokens with film data: {len(by_token)}   size ${args.size_usd:.0f}/trade")
     for delay, label in ((0, "immediate fill"), (1, "one 30s poll late")):
