@@ -1,5 +1,8 @@
+import json
+
 from scripts.simulate_takeprofit_expectancy import (
-    Config, _terminal, find_entry, is_unsellable, simulate_token, summarize,
+    Config, _terminal, find_entry, is_unsellable, load_token_samples,
+    simulate_token, summarize,
 )
 
 # Fill immediately and charge nothing, so each test isolates the behaviour it
@@ -145,6 +148,66 @@ def test_trades_are_skipped_once_the_bankroll_cannot_cover_one():
     cfg = Config(size_usd=100.0, fill_delay=0)
     rows = [_trade(i * 10, i * 10 + 5, 0.0) for i in range(10)]
     assert _terminal(rows, cfg, bankroll=250.0, max_concurrent=5) == 50.0
+
+
+def _write_film(tmp_path, rows):
+    p = tmp_path / "films.jsonl"
+    p.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    return p
+
+
+def _arm(tok):
+    return {"event": "arm", "token_address": tok}
+
+
+def _s(tok, ts, price, liq=1e9):
+    return {"event": "sample", "token_address": tok, "ts": ts,
+            "price": price, "liq": liq}
+
+
+def test_only_the_first_film_of_a_re_armed_token_is_used(tmp_path):
+    """A restart clears the collector's in-memory `seen` set, so tokens get
+    armed twice. Concatenating both films by address stitches two separate price
+    histories together and invents a move that never happened."""
+    tok = "0xaaa"
+    path = _write_film(tmp_path, [
+        _arm(tok), _s(tok, 100, 1.0), _s(tok, 130, 1.1),
+        _arm(tok), _s(tok, 900, 9.0), _s(tok, 930, 9.5),
+    ])
+    by_token, rejected = load_token_samples(path)
+    assert [s["price"] for s in by_token[tok]] == [1.0, 1.1]
+    assert rejected["re_armed"] == 1
+
+
+def test_a_film_with_an_impossible_price_jump_is_thrown_out(tmp_path):
+    """One 'winner' jumped x22,996 between two 30s samples (5/8). Real winners
+    climb gradually — the median biggest single-sample jump is x1.18."""
+    good, bad = "0xgood", "0xbad"
+    path = _write_film(tmp_path, [
+        _arm(good), _s(good, 100, 1.0), _s(good, 130, 1.2), _s(good, 160, 1.5),
+        _arm(bad), _s(bad, 100, 1.0), _s(bad, 130, 23_000.0),
+    ])
+    by_token, rejected = load_token_samples(path)
+    assert good in by_token and bad not in by_token
+    assert rejected["bad_print"] == 1
+
+
+def test_a_crash_print_is_rejected_the_same_as_a_spike(tmp_path):
+    tok = "0xaaa"
+    path = _write_film(tmp_path, [
+        _arm(tok), _s(tok, 100, 1000.0), _s(tok, 130, 0.001),
+    ])
+    by_token, rejected = load_token_samples(path)
+    assert tok not in by_token and rejected["bad_print"] == 1
+
+
+def test_samples_before_any_arm_row_are_ignored(tmp_path):
+    tok = "0xaaa"
+    path = _write_film(tmp_path, [
+        _s(tok, 50, 5.0), _arm(tok), _s(tok, 100, 1.0), _s(tok, 130, 1.1),
+    ])
+    by_token, _ = load_token_samples(path)
+    assert [s["price"] for s in by_token[tok]] == [1.0, 1.1]
 
 
 def test_summarize_averages_every_position_including_the_zeros():

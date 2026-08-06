@@ -52,16 +52,53 @@ class Config:
     gas_usd: float = GAS_USD
 
 
-def load_token_samples(path: Path) -> dict[str, list[dict]]:
-    out: dict[str, list[dict]] = {}
+# A price that moves more than this between two consecutive 30s samples is a bad
+# print, not a trade. Real winners climb far more gradually — the median biggest
+# single-sample jump across winners is x1.18. Measured 5/8: one "winner" jumped
+# x22,996 in one sample, and DexScreener has separately returned $1.7 BILLION
+# liquidity for a $30k pool, so bad prints in this feed are established fact.
+MAX_SANE_SAMPLE_JUMP = 10.0
+
+
+def load_token_samples(path: Path) -> tuple[dict[str, list[dict]], dict[str, int]]:
+    """Samples per token, plus a count of what was rejected and why.
+
+    Only the FIRST film of a token is kept. A restart clears the collector's
+    in-memory `seen` set, so 30 tokens were armed more than once; concatenating
+    those films by address stitches two separate price histories into one series
+    and invents moves that never happened.
+    """
+    films: dict[str, list[list[dict]]] = {}
     with open(path, encoding="utf-8") as f:
         for line in f:
             row = json.loads(line)
-            if row.get("event") == "sample" and row.get("token_address"):
-                out.setdefault(row["token_address"], []).append(row)
-    for samples in out.values():
-        samples.sort(key=lambda s: s.get("ts") or 0.0)
-    return out
+            tok = row.get("token_address")
+            if not tok:
+                continue
+            if row.get("event") == "arm":
+                films.setdefault(tok, []).append([])
+            elif row.get("event") == "sample" and films.get(tok):
+                films[tok][-1].append(row)
+
+    rejected = {"re_armed": 0, "bad_print": 0}
+    out: dict[str, list[dict]] = {}
+    for tok, takes in films.items():
+        if len(takes) > 1:
+            rejected["re_armed"] += 1
+        samples = sorted(takes[0], key=lambda s: s.get("ts") or 0.0)
+        if _has_bad_print(samples):
+            rejected["bad_print"] += 1
+            continue
+        if samples:
+            out[tok] = samples
+    return out, rejected
+
+
+def _has_bad_print(samples: list[dict]) -> bool:
+    prices = [s["price"] for s in samples if s.get("price")]
+    return any(prices[i + 1] / prices[i] > MAX_SANE_SAMPLE_JUMP
+               or prices[i] / prices[i + 1] > MAX_SANE_SAMPLE_JUMP
+               for i in range(len(prices) - 1))
 
 
 def load_goplus(path: Path) -> dict[str, dict]:
@@ -223,8 +260,10 @@ def main() -> None:
     ap.add_argument("--bankroll", type=float, default=500.0)
     args = ap.parse_args()
 
-    by_token = load_token_samples(Path(args.films))
+    by_token, rejected = load_token_samples(Path(args.films))
     goplus = load_goplus(Path(args.snapshots))
+    print(f"excluded: {rejected['re_armed']} re-armed (only first film kept), "
+          f"{rejected['bad_print']} with a bad price print")
 
     if args.risk:
         print(f"bankroll walk @ {args.risk}x target, start ${args.bankroll:.0f}, "
