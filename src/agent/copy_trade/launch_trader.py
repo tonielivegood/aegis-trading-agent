@@ -307,8 +307,13 @@ class LaunchTrader:
             liq = stats.get("liquidity_usd")
         else:
             price, liq = sample.get("price"), sample.get("liq")
-        if not price or (liq is not None and liq < MIN_ENTRY_LIQ_USD):
-            log.info("launch_entry_aborted_stale", token=token, liq=liq)
+        # FAIL CLOSED. `liq is not None and liq < FLOOR` let an UNKNOWN liquidity
+        # through, and on the first live run that bought a pool holding $1.41 —
+        # unsellable, a total loss of the position. Not knowing the liquidity is
+        # not permission to spend; it is the reason to refuse.
+        if not price or liq is None or liq < MIN_ENTRY_LIQ_USD:
+            log.info("launch_entry_aborted_stale", token=token, liq=liq,
+                     price=price)
             return None
         pos = self._buy(token, sample.get("symbol") or token[:10], price, now)
         if pos is None:

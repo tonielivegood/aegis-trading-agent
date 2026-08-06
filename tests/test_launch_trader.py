@@ -166,6 +166,25 @@ def test_a_stale_film_price_cannot_commit_money_on_its_own(tmp_path, monkeypatch
     assert t._state.open_positions == {}
 
 
+def test_unknown_liquidity_refuses_the_entry_instead_of_allowing_it(tmp_path,
+                                                                   monkeypatch):
+    """The first live run bought a pool holding $1.41 — unsellable, a total
+    loss — because the guard read `liq is not None and liq < FLOOR` and a quote
+    with no liquidity field made that False. Not knowing is not permission."""
+    monkeypatch.setattr(lt, "get_pair_stats", lambda t: {"price_usd": 2.0})
+    t = _trader(tmp_path)
+    t.on_sample({"event": "arm", "token_address": T1, "price": 1.0}, now=NOW)
+    assert t.on_sample(_sample(price=2.0), now=NOW) is None
+    assert t._state.open_positions == {}
+
+
+def test_a_quote_that_fails_entirely_refuses_the_entry(tmp_path, monkeypatch):
+    monkeypatch.setattr(lt, "get_pair_stats", lambda t: None)
+    t = _trader(tmp_path)
+    t.on_sample({"event": "arm", "token_address": T1, "price": 1.0}, now=NOW)
+    assert t.on_sample(_sample(price=2.0), now=NOW) is None
+
+
 def test_timeouts_are_swept_even_when_the_film_stream_goes_silent(tmp_path):
     """The collector disarms a token at 4h, so the samples that would trigger the
     exit stop arriving exactly when they are needed."""
