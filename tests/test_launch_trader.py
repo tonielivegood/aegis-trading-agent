@@ -49,6 +49,36 @@ def test_entry_needs_an_arm_price_at_all():
     assert should_enter(_sample(price=2.0), arm_price=0.0) is False
 
 
+def test_the_buy_share_filter_is_off_unless_asked_for():
+    """The unfiltered rule is the one 4200 films were measured on; the filter is
+    an opt-in variant, not a silent change to what was validated."""
+    assert should_enter(_sample(price=2.0), arm_price=1.0) is True
+
+
+def test_the_buy_share_filter_rejects_a_sell_heavy_entry():
+    """Walk-forward measured 6/8: buys >= 80% of m5 trades roughly doubles
+    expectancy (+0.305 -> +0.749 at a 6x target, held out)."""
+    heavy = {**_sample(price=2.0), "buys_m5": 9, "sells_m5": 1}
+    light = {**_sample(price=2.0), "buys_m5": 5, "sells_m5": 5}
+    assert should_enter(heavy, arm_price=1.0, min_buy_share=0.8) is True
+    assert should_enter(light, arm_price=1.0, min_buy_share=0.8) is False
+
+
+def test_an_unknown_buy_share_is_a_refusal_not_a_pass():
+    """The fail-open shape of exactly this test already bought a $1.41 pool with
+    real money."""
+    blank = {"event": "sample", "token_address": T1, "price": 2.0,
+             "liq": 50_000.0}
+    assert should_enter(blank, arm_price=1.0, min_buy_share=0.8) is False
+    zero = {**blank, "buys_m5": 0, "sells_m5": 0}
+    assert should_enter(zero, arm_price=1.0, min_buy_share=0.8) is False
+
+
+def test_the_filter_cannot_rescue_an_entry_that_fails_the_basics():
+    thin = {**_sample(price=2.0, liq=500.0), "buys_m5": 10, "sells_m5": 0}
+    assert should_enter(thin, arm_price=1.0, min_buy_share=0.8) is False
+
+
 # ---------- exit rule ----------
 
 def test_take_profit_fires_at_6x_the_entry_not_the_signal_price():

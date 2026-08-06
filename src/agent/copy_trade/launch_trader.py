@@ -3,12 +3,15 @@
 The rules are not adjustable opinions — each one is the losing side of a measured
 curve if changed:
 
-- **Entry at 2x the arm price.** No token filter of any kind. Five filter
-  hypotheses were tested against real data and all five died (LP-lock, GoPlus
-  flags, socials, buy-volume dominance, and stop-loss-based risk management).
-- **Take profit at 6x the entry.** 3x and 4x targets are NEGATIVE expectancy,
-  10x is strongly negative. Only 5x-8x pays, peaking at 6x. Taking profit
-  earlier feels safer and loses money.
+- **Entry at 2x the arm price.** Four filter hypotheses died against real data
+  (LP-lock, GoPlus flags, socials, and stop-loss-based risk management).
+- **Optionally, a buy-share filter — `--min-buy-share 0.8`.** This one SURVIVED
+  a walk-forward on 6/8 and roughly doubles expectancy. It was previously listed
+  here as dead, written off on a single token; see `min_buy_share` below.
+- **Take profit at 6x the entry.** UNFILTERED, 3x and 4x are negative and only
+  5x-8x pays. With the buy-share filter a 4x target turns positive and wins far
+  more often, which is the low-variance option. Target and filter were measured
+  as a PAIR — changing one alone is untested.
 - **No stop loss, ever.** 24 of 25 measured deaths went from healthy liquidity
   to under $1k inside ONE 30s sample. Removing liquidity is a single
   transaction; after it there is no price to sell into and no counterparty. A
@@ -94,6 +97,20 @@ class TraderConfig:
     # exit price against an entry quoted at today's price. The first replay did
     # exactly that and reported $26 of profit on a $2 position capped at $10.
     use_live_quote: bool = True
+    # Require buys to be at least this share of the last 5 minutes' trades.
+    # Measured 6/8 with a walk-forward (chosen on the first half of the data,
+    # applied blind to the second) over 63 combinations:
+    #   no filter, 6x   1071 trades  24.9% win  +0.314
+    #   buy>=80%, 6x     386 trades  33.7% win  +0.741
+    #   buy>=80%, 5x     386 trades  35.0% win  +0.556
+    #   buy>=80%, 4x     386 trades  35.8% win  +0.311
+    # The filter is what makes a LOWER target viable: unfiltered 4x is NEGATIVE
+    # (-0.018). It rejects ~64% of triggers, so evidence accumulates slower.
+    #
+    # An earlier note in this project called buy-volume dominance "refuted" on
+    # the strength of ONE token (BANK: 71 buys, 8 sells, then zero). A single
+    # loser cannot refute a filter that only claims to shift the RATE.
+    min_buy_share: float | None = None
 
 
 @dataclass
@@ -161,13 +178,27 @@ def read_new_film_rows(path: Path, offset: int) -> tuple[list[dict], int]:
     return rows, consumed
 
 
-def should_enter(sample: dict, arm_price: float) -> bool:
+def buy_share(sample: dict) -> float | None:
+    """Share of the last 5 minutes' trades that were buys."""
+    buys, sells = sample.get("buys_m5"), sample.get("sells_m5")
+    total = (buys or 0) + (sells or 0)
+    return (buys or 0) / total if total else None
+
+
+def should_enter(sample: dict, arm_price: float,
+                 min_buy_share: float | None = None) -> bool:
     price = sample.get("price")
     liq = sample.get("liq")
-    return bool(
-        arm_price and price
-        and price >= arm_price * ENTRY_MULTIPLE
-        and liq is not None and liq >= MIN_ENTRY_LIQ_USD)
+    if not (arm_price and price
+            and price >= arm_price * ENTRY_MULTIPLE
+            and liq is not None and liq >= MIN_ENTRY_LIQ_USD):
+        return False
+    if min_buy_share is None:
+        return True
+    # Unknown buy share is a refusal, not a pass — the fail-open shape of this
+    # exact test already bought a $1.41 pool with real money.
+    share = buy_share(sample)
+    return share is not None and share >= min_buy_share
 
 
 def exit_reason(pos: LaunchPosition, price: float | None, liq: float | None,
@@ -345,7 +376,8 @@ class LaunchTrader:
             return self.close(pos, row.get("price"), reason, now) if reason else None
 
         arm_price = self._arm_prices.get(token)
-        if arm_price is None or not should_enter(row, arm_price):
+        if arm_price is None or not should_enter(row, arm_price,
+                                                 self._cfg.min_buy_share):
             return None
         ok, why = self.can_open(token)
         if not ok:
@@ -507,6 +539,10 @@ def main() -> None:
     ap.add_argument("--max-concurrent", type=int, default=3)
     ap.add_argument("--bankroll", type=float, default=50.0)
     ap.add_argument("--max-loss", type=float, default=25.0)
+    ap.add_argument("--min-buy-share", type=float, default=None,
+                    help="require buys to be this share of m5 trades, e.g. 0.8")
+    ap.add_argument("--take-profit", type=float, default=None,
+                    help="override the take-profit multiple (default 6.0)")
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--replay", action="store_true",
                     help="replay an old film: price entries from the film row "
@@ -516,6 +552,11 @@ def main() -> None:
     ap.add_argument("--live", action="store_true",
                     help="place REAL orders (default: simulate fills)")
     args = ap.parse_args()
+
+    if args.take_profit:
+        # Module-level so exit_reason sees it; the pairing of target and filter
+        # is what was measured, so changing one without the other is untested.
+        globals()["TAKE_PROFIT_MULTIPLE"] = args.take_profit
 
     executors = rpc_pool = wallet = None
     if args.live:
@@ -544,7 +585,8 @@ def main() -> None:
         TraderConfig(size_usd=args.size_usd, max_concurrent=args.max_concurrent,
                      bankroll_usd=args.bankroll,
                      max_total_loss_usd=args.max_loss,
-                     use_live_quote=not args.replay),
+                     use_live_quote=not args.replay,
+                     min_buy_share=args.min_buy_share),
         executors, dry_run=not args.live, once=args.once, rpc_pool=rpc_pool,
         start_at_end=not args.replay, wallet_address=wallet)
 
