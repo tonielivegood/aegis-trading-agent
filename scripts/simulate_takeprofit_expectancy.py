@@ -373,8 +373,10 @@ def main() -> None:
             for slots in (3, 5, 10):
                 hist = _terminal(rows, cfg, args.bankroll, slots)
                 d = ruin_distribution(rows, cfg, args.bankroll, slots)
-                print(f"{size:>5.0f}$ {slots:>6} {hist:>11.0f} "
-                      f"{d['p05']:>9.0f} {d['median']:>9.0f} {d['p95']:>10.0f} "
+                # 2dp, not 0: rounding turned $0.50 and $1.50 into "0$" and "2$"
+                # in the one table whose whole purpose is choosing a size.
+                print(f"{size:>6.2f} {slots:>6} {hist:>11.2f} "
+                      f"{d['p05']:>9.2f} {d['median']:>9.2f} {d['p95']:>10.2f} "
                       f"{d['ruin_rate']:>6.1%}")
         return
 
