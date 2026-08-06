@@ -333,6 +333,8 @@ def main() -> None:
     ap.add_argument("--risk", type=float, metavar="TARGET",
                     help="bankroll walk at this take-profit target instead")
     ap.add_argument("--bankroll", type=float, default=500.0)
+    ap.add_argument("--sizes", default="5,10,25,50,100",
+                    help="comma-separated per-trade sizes for --risk")
     ap.add_argument("--walkforward", action="store_true",
                     help="choose the target on the first half of the data, "
                          "then apply it blind to the second")
@@ -363,7 +365,7 @@ def main() -> None:
               f"{len(by_token)} tokens filmed over the collected window\n")
         print(f"{'size':>6} {'slots':>6} {'historical':>11} "
               f"{'p05':>9} {'median':>9} {'p95':>10} {'ruin':>7}")
-        for size in (5.0, 10.0, 25.0, 50.0, 100.0):
+        for size in (float(s) for s in args.sizes.split(",")):
             cfg = Config(size_usd=size, fill_delay=1)
             rows = [r for r in
                     (simulate_token(s, goplus.get(t), args.risk, cfg, args.dominance)
