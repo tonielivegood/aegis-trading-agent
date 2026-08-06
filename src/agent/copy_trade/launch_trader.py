@@ -49,6 +49,7 @@ ROOT = Path(__file__).resolve().parents[3]
 ENTRY_MULTIPLE = 2.0
 TAKE_PROFIT_MULTIPLE = 6.0
 MAX_HOLD_S = 4 * 3600
+SWEEP_EVERY_S = 60.0     # how far the clock may advance between timeout sweeps
 # A pool this thin cannot absorb the position without moving hard against it.
 # The arm floor is $20k, so this only ever rejects a pool already draining.
 MIN_ENTRY_LIQ_USD = 10_000.0
@@ -63,6 +64,11 @@ class LaunchPosition:
     token_amount: float
     opened_at: float
     decimals: int = 18
+    # Last price seen for this token. The 4h exit needs a price, and the film
+    # stream goes silent at exactly 4h because the collector disarms there —
+    # without this the timeout books a total loss on a position that still had
+    # value, which is what the first full replay did to every max_hold close.
+    last_price: float | None = None
     closed_at: float | None = None
     exit_price: float | None = None
     reason: str | None = None
@@ -258,6 +264,8 @@ class LaunchTrader:
 
         pos = self._state.open_positions.get(token)
         if pos is not None:
+            if row.get("price"):
+                pos.last_price = row["price"]
             reason = exit_reason(pos, row.get("price"), row.get("liq"), now)
             return self.close(pos, row.get("price"), reason, now) if reason else None
 
@@ -323,8 +331,12 @@ class LaunchTrader:
             stats = (get_pair_stats(pos.token_address) or {}
                      if self._cfg.use_live_quote else {})
             liq = stats.get("liquidity_usd")
+            # Fall back to the last price the film showed. A live quote that
+            # fails, or a replay with no quote at all, must not silently value
+            # the position at zero.
+            price = stats.get("price_usd") or pos.last_price
             reason = "dead" if (liq is not None and liq < DEAD_LIQ_USD) else "max_hold"
-            self.close(pos, stats.get("price_usd"), reason, now)
+            self.close(pos, price, reason, now)
             closed += 1
         return closed
 
@@ -354,7 +366,7 @@ def run(films_path: Path, state_path: Path, journal_path: Path,
     while True:
         rows, state.film_offset = read_new_film_rows(films_path,
                                                      state.film_offset)
-        clock = None
+        clock = swept_at = None
         for row in rows:
             # The sample's own timestamp is the clock. Live it is seconds old, so
             # this is simply more accurate than time.time(); replaying an old
@@ -362,6 +374,13 @@ def run(films_path: Path, state_path: Path, journal_path: Path,
             # replayed position is instantly past the 4h hold limit.
             clock = row.get("ts") or clock
             trader.on_sample(row, now=clock)
+            # Sweep AS the clock advances, not once at the end. A batch that
+            # spans days would otherwise hold its first positions open for the
+            # whole span, and every later signal is refused for "no_slot" — the
+            # first full replay took 7 trades instead of ~1000 that way.
+            if clock and (swept_at is None or clock - swept_at >= SWEEP_EVERY_S):
+                trader.sweep_timeouts(now=clock)
+                swept_at = clock
         trader.sweep_timeouts(now=clock)
         save_state(state_path, state)
         if once:

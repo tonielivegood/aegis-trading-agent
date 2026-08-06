@@ -249,6 +249,40 @@ def test_replay_runs_on_the_films_clock_not_the_wall_clock(tmp_path):
     assert list(state.open_positions) == [T1]      # still open, not timed out
 
 
+def test_slots_are_freed_as_the_clock_advances_through_one_batch(tmp_path):
+    """A batch spanning days would otherwise hold its first positions open for
+    the whole span and refuse every later signal for "no_slot" — the first full
+    replay took 7 trades instead of ~1000 that way."""
+    rows = [{"event": "arm", "token_address": T1, "price": 1.0, "ts": NOW},
+            {"event": "sample", "token_address": T1, "price": 2.0,
+             "liq": 50_000.0, "ts": NOW + 30}]
+    # A second token arriving long after the first must still find a free slot.
+    later = NOW + 3 * lt.MAX_HOLD_S
+    rows += [{"event": "arm", "token_address": T2, "price": 1.0, "ts": later},
+             {"event": "sample", "token_address": T2, "price": 2.0,
+              "liq": 50_000.0, "ts": later + 30}]
+    films = tmp_path / "films.jsonl"
+    films.write_text("\n".join(json.dumps(r) for r in rows) + "\n",
+                     encoding="utf-8")
+    lt.run(films, tmp_path / "s.json", tmp_path / "j.jsonl",
+           TraderConfig(size_usd=2.0, max_concurrent=1, use_live_quote=False),
+           None, dry_run=True, once=True)
+    state = load_state(tmp_path / "s.json")
+    assert state.traded_tokens == {T1, T2}      # T1 timed out, freeing the slot
+
+
+def test_a_timed_out_position_is_sold_at_its_last_price_not_written_off(tmp_path):
+    """The film goes silent at exactly 4h because the collector disarms there.
+    Valuing the position at zero booked a total loss on every max_hold close."""
+    t = _trader(tmp_path, cfg=TraderConfig(size_usd=2.0, use_live_quote=False))
+    t.on_sample({"event": "arm", "token_address": T1, "price": 1.0}, now=NOW)
+    t.on_sample(_sample(price=2.0), now=NOW)
+    t.on_sample(_sample(price=3.0), now=NOW + 60)          # last seen price
+    assert t.sweep_timeouts(now=NOW + lt.MAX_HOLD_S + 1) == 1
+    # bought 1 token at $2, sold at $3
+    assert t._state.realised_pnl_usd == pytest.approx(1.0)
+
+
 def test_a_missing_film_stream_is_fatal_not_silent(tmp_path):
     """A missing film file reads identically to "no new samples yet". The first
     live run pointed one directory too high and sat there reading nothing, fully
