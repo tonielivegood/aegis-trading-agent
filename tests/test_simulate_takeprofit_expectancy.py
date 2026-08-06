@@ -7,12 +7,36 @@ from scripts.simulate_takeprofit_expectancy import (
 FREE = Config(size_usd=100.0, fill_delay=0, dex_fee=0.0, gas_usd=0.0)
 
 
-def _samples(prices, liqs=None, dominance=None):
+def _samples(prices, liqs=None, dominance=None, t0=1_000_000.0):
     liqs = liqs if liqs is not None else [1e9] * len(prices)
     dominance = dominance or [True] * len(prices)
-    return [{"price": p, "liq": l,
+    return [{"price": p, "liq": l, "ts": t0 + 30.0 * i,
              "buys_m5": 10 if d else 0, "sells_m5": 0 if d else 10}
-            for p, l, d in zip(prices, liqs, dominance)]
+            for i, (p, l, d) in enumerate(zip(prices, liqs, dominance))]
+
+
+def test_every_outcome_carries_both_timestamps():
+    """The bankroll walk sorts on entry_ts. When the total-loss paths omitted it
+    they sorted to the front, stacking ~75% of the losses ahead of every winner
+    and reporting -100% at every position size — a bug that reads exactly like a
+    finding."""
+    cases = [
+        (_samples([1.0, 2.0, 3.0]), None),                       # win
+        (_samples([1.0, 2.0, 0.1], liqs=[1e9, 1e9, 0.5]), None),  # rugged
+        (_samples([1.0, 2.0, 2.1]), None),                       # open at end
+        (_samples([1.0, 2.0, 2.1], liqs=[1e9, 0.5, 0.5]), None),  # dead on arrival
+        (_samples([1.0, 2.0, 9.0]), {"is_honeypot": "1"}),       # unsellable
+    ]
+    seen = set()
+    for samples, goplus in cases:
+        r = simulate_token(samples, goplus, target=1.5, cfg=FREE)
+        assert r is not None
+        assert r["entry_ts"] is not None, r["outcome"]
+        assert r["exit_ts"] is not None, r["outcome"]
+        assert r["exit_ts"] >= r["entry_ts"], r["outcome"]
+        seen.add(r["outcome"])
+    assert seen == {"win", "rugged", "open_closed_at_end", "dead_on_arrival",
+                    "unsellable"}
 
 
 def test_find_entry_is_the_first_sample_at_or_above_2x_arm_price():

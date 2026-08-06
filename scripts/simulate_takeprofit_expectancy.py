@@ -129,12 +129,21 @@ def simulate_token(samples: list[dict], goplus: dict | None, target: float,
     if not buy.get("price"):
         return None
 
+    # EVERY return below carries entry_ts and exit_ts. The bankroll walk sorts on
+    # entry_ts, so a path that omitted them sorted its trades to the very front —
+    # and since the omitting paths were the total losses, that stacked ~75% of
+    # the losses ahead of every winner and reported -100% at every position size.
+    def _done(outcome, net, exit_ts):
+        return {"outcome": outcome, "net_multiple": net,
+                "entry_ts": buy.get("ts"), "exit_ts": exit_ts}
+
     # Bought into a pool that had already drained: the position is worthless.
     if buy.get("liq") is not None and buy["liq"] < DEAD_LIQ_USD:
-        return {"outcome": "dead_on_arrival", "net_multiple": 0.0}
-    # A token that cannot be sold is a total loss no matter what the price does.
+        return _done("dead_on_arrival", 0.0, buy.get("ts"))
+    # A token that cannot be sold is a total loss no matter what the price does,
+    # and the capital never comes back — hold the slot to the end of the film.
     if is_unsellable(goplus):
-        return {"outcome": "unsellable", "net_multiple": 0.0}
+        return _done("unsellable", 0.0, after[-1].get("ts"))
 
     buy_px = buy["price"] * (1 + _impact(cfg.size_usd, buy.get("liq")))
     spent = cfg.size_usd + cfg.gas_usd
@@ -150,20 +159,19 @@ def simulate_token(samples: list[dict], goplus: dict | None, target: float,
     if hit_i is not None and (death_i is None or hit_i <= death_i):
         sell_i, outcome = min(hit_i + cfg.fill_delay, len(rest) - 1), "win"
     elif death_i is not None:
-        return {"outcome": "rugged", "net_multiple": 0.0}
+        return _done("rugged", 0.0, rest[death_i].get("ts"))
     else:
         sell_i, outcome = len(rest) - 1, "open_closed_at_end"
 
     sell = rest[sell_i]
     if not sell.get("price") or (sell.get("liq") is not None
                                  and sell["liq"] < DEAD_LIQ_USD):
-        return {"outcome": "rugged", "net_multiple": 0.0}
+        return _done("rugged", 0.0, sell.get("ts"))
 
     sell_px = sell["price"] * (1 - _impact(cfg.size_usd, sell.get("liq")))
     proceeds = (tokens * sell_px * (1 - cfg.dex_fee)
                 * (1 - _tax(goplus, "sell_tax")) - cfg.gas_usd)
-    return {"outcome": outcome, "net_multiple": max(proceeds, 0.0) / spent,
-            "entry_ts": buy.get("ts"), "exit_ts": sell.get("ts")}
+    return _done(outcome, max(proceeds, 0.0) / spent, sell.get("ts"))
 
 
 def _terminal(rows: list[dict], cfg: Config, bankroll: float,
