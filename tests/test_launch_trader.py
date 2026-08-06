@@ -444,6 +444,116 @@ def test_realised_pnl_uses_the_usdt_ACTUALLY_received(tmp_path):
     assert row["proceeds_usd"] == 3.0
 
 
+class _Rpc:
+    """Answers each eth_call by SELECTOR.
+
+    A mock that returned the same word for every call fed a balance figure to
+    decimals(), and `10 ** that` hangs the interpreter — the test suite froze
+    rather than failed.
+    """
+    BALANCE_OF, DECIMALS, SYMBOL = "0x70a08231", "0x313ce567", "0x95d89b41"
+
+    def __init__(self, raw, decimals=18):
+        self.raw = raw
+        self.decimals = decimals
+        self.calls = []
+
+    def call(self, method, params):
+        data = params[0]["data"]
+        self.calls.append(data)
+        if data.startswith(self.DECIMALS):
+            return hex(self.decimals)
+        if data.startswith(self.SYMBOL):
+            return None                      # falls back to the short address
+        if data.startswith(self.BALANCE_OF):
+            return hex(self.raw)
+        return None
+
+
+def test_the_recorded_fill_comes_from_the_chain_not_the_quote(tmp_path):
+    """`expected_out_wei` is a QUOTE. Measured live: the bot recorded 22,503.85
+    tokens against 22,321.41 really received. entry_price = size/amount sets the
+    6x target, so the quote makes the target wrong — and a token that taxes
+    transfers widens the gap far past 0.8%."""
+    class Result:
+        expected_out_wei = 22_503 * 10 ** 18      # the quote
+
+    class Exec:
+        def swap(self, *a, **k):
+            return Result()
+
+    rpc = _Rpc(22_321 * 10 ** 18)                  # what really arrived
+    t = LaunchTrader(TraderConfig(size_usd=0.5), TraderState(), {"x": Exec()},
+                     tmp_path / "s.json", tmp_path / "j.jsonl", dry_run=False,
+                     rpc_pool=rpc, wallet_address="0x" + "a" * 40)
+    import src.agent.copy_trade.launch_trader as mod
+    keep = mod.rank_backends
+    mod.rank_backends = lambda ex, a, b, s: ["x"]
+    try:
+        pos = t._buy(T1, "TKN", price=1.0, now=NOW)
+    finally:
+        mod.rank_backends = keep
+    assert pos.token_amount == 22_321.0
+    assert pos.entry_price == pytest.approx(0.5 / 22_321.0)
+
+
+def test_the_sell_offers_the_balance_held_not_the_amount_recorded(tmp_path):
+    """Selling a quantity above the real balance REVERTS. The recorded amount
+    came from a quote that runs high, which is a standing cause of failed exits."""
+    offered = []
+
+    class Exec:
+        def swap(self, sym_in, sym_out, amount):
+            offered.append(amount)
+            class R:
+                received_out_wei = 10 ** 18
+            return R()
+
+    rpc = _Rpc(900 * 10 ** 18)                     # wallet really holds 900
+    t = LaunchTrader(TraderConfig(size_usd=0.5), TraderState(), {"x": Exec()},
+                     tmp_path / "s.json", tmp_path / "j.jsonl", dry_run=False,
+                     rpc_pool=rpc, wallet_address="0x" + "a" * 40)
+    pos = LaunchPosition(T1, "TKN", entry_price=1.0, usd_size=0.5,
+                         token_amount=1000.0, opened_at=NOW)   # stale record
+    import src.agent.copy_trade.launch_trader as mod
+    keep = mod.rank_backends
+    mod.rank_backends = lambda ex, a, b, s: ["x"]
+    try:
+        proceeds = t._sell(pos, price=1.0)
+    finally:
+        mod.rank_backends = keep
+    assert offered == [900.0]                      # not the recorded 1000
+    assert proceeds == 1.0
+
+
+def test_a_failed_balance_read_falls_back_to_the_recorded_amount(tmp_path):
+    class Boom:
+        def call(self, *a, **k):
+            raise RuntimeError("rpc down")
+
+    offered = []
+
+    class Exec:
+        def swap(self, sym_in, sym_out, amount):
+            offered.append(amount)
+            class R:
+                received_out_wei = 10 ** 18
+            return R()
+
+    t = LaunchTrader(TraderConfig(), TraderState(), {"x": Exec()},
+                     tmp_path / "s.json", tmp_path / "j.jsonl", dry_run=False,
+                     rpc_pool=Boom(), wallet_address="0x" + "a" * 40)
+    pos = LaunchPosition(T1, "TKN", 1.0, 0.5, 1000.0, NOW)
+    import src.agent.copy_trade.launch_trader as mod
+    keep = mod.rank_backends
+    mod.rank_backends = lambda ex, a, b, s: ["x"]
+    try:
+        t._sell(pos, price=1.0)
+    finally:
+        mod.rank_backends = keep
+    assert offered == [1000.0]
+
+
 def test_dry_run_never_touches_an_executor(tmp_path):
     class Boom:
         def swap(self, *a, **k):

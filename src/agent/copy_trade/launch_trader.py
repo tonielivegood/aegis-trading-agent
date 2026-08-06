@@ -185,7 +185,8 @@ def exit_reason(pos: LaunchPosition, price: float | None, liq: float | None,
 class LaunchTrader:
     def __init__(self, cfg: TraderConfig, state: TraderState,
                  executors: dict | None, state_path: Path, journal_path: Path,
-                 dry_run: bool = True, rpc_pool=None) -> None:
+                 dry_run: bool = True, rpc_pool=None,
+                 wallet_address: str | None = None) -> None:
         self._cfg = cfg
         self._state = state
         self._executors = executors
@@ -193,7 +194,31 @@ class LaunchTrader:
         self._journal_path = journal_path
         self._dry_run = dry_run
         self._rpc = rpc_pool
+        self._wallet = wallet_address
         self._arm_prices: dict[str, float] = {}
+
+    def _token_balance(self, token: str, decimals: int) -> float | None:
+        """What the wallet ACTUALLY holds, straight from the chain.
+
+        The swap result reports `expected_out_wei` — a quote — whenever
+        `received_out_wei` is absent, and the two differ: measured live, the bot
+        recorded 22,503.85 tokens against 22,321.41 really received (0.81%
+        slippage), and 40,713bn against 40,509bn on an earlier trade. Selling a
+        quantity larger than the balance REVERTS, so every exit built on the
+        quote fails. Tokens that tax transfers make the gap far wider.
+        """
+        if self._rpc is None or not self._wallet:
+            return None
+        data = "0x70a08231" + "0" * 24 + self._wallet[2:].lower()   # balanceOf
+        try:
+            raw = self._rpc.call("eth_call", [{"to": token, "data": data},
+                                              "latest"])
+        except Exception as e:      # noqa: BLE001 — never block a trade on this
+            log.warning("launch_balance_read_failed", token=token, error=str(e))
+            return None
+        if not raw or raw == "0x":
+            return None
+        return int(raw, 16) / (10 ** decimals)
 
     def _token_meta(self, token: str) -> tuple[str, int]:
         """symbol() and decimals() from the chain.
@@ -246,6 +271,15 @@ class LaunchTrader:
             wei = (getattr(result, "received_out_wei", 0)
                    or getattr(result, "expected_out_wei", 0))
             amount = wei / (10 ** decimals)
+            # The chain outranks the quote. entry_price = size / amount sets the
+            # 6x target, and token_amount is what the exit tries to sell — both
+            # must reflect what was really received, taxes and slippage included.
+            actual = self._token_balance(token, decimals)
+            if actual and actual > 0:
+                if amount and abs(actual - amount) / amount > 0.001:
+                    log.info("launch_fill_differs_from_quote", token=symbol,
+                             quoted=amount, actual=actual)
+                amount = actual
             if amount <= 0:
                 log.warning("launch_buy_zero_fill", token=symbol)
                 return None
@@ -270,12 +304,17 @@ class LaunchTrader:
         """
         if self._dry_run or not self._executors:
             return (price or pos.last_price or 0.0) * pos.token_amount
-        ranked = rank_backends(self._executors, pos.symbol, "USDT",
-                               pos.token_amount)
+        # Sell what the wallet HOLDS, not what was recorded at entry. A stored
+        # amount even a fraction above the real balance reverts the swap, and
+        # the recorded figure came from a quote that is routinely 0.8% high.
+        amount = self._token_balance(pos.token_address, pos.decimals)
+        if not amount or amount <= 0:
+            amount = pos.token_amount
+        ranked = rank_backends(self._executors, pos.symbol, "USDT", amount)
         for backend in ranked:
             try:
                 result = self._executors[backend].swap(pos.symbol, "USDT",
-                                                       pos.token_amount)
+                                                       amount)
                 wei = (getattr(result, "received_out_wei", 0)
                        or getattr(result, "expected_out_wei", 0))
                 return wei / (10 ** USDT_DECIMALS)
@@ -394,7 +433,7 @@ class LaunchTrader:
 def run(films_path: Path, state_path: Path, journal_path: Path,
         cfg: TraderConfig, executors: dict | None, dry_run: bool,
         once: bool = False, interval_s: float = 5.0, rpc_pool=None,
-        start_at_end: bool = True) -> None:
+        start_at_end: bool = True, wallet_address: str | None = None) -> None:
     state = load_state(state_path)
     # A missing film file is indistinguishable from "no new samples yet", so the
     # trader would run forever on zero signals looking healthy. Fail loudly.
@@ -410,7 +449,8 @@ def run(films_path: Path, state_path: Path, journal_path: Path,
         state.film_offset = films_path.stat().st_size
         log.info("launch_trader_seek_end", offset=state.film_offset)
     trader = LaunchTrader(cfg, state, executors, state_path, journal_path,
-                          dry_run=dry_run, rpc_pool=rpc_pool)
+                          dry_run=dry_run, rpc_pool=rpc_pool,
+                          wallet_address=wallet_address)
     # An open position from before a restart has no arm price in memory, but it
     # does not need one — only entries consult _arm_prices.
     log.info("launch_trader_start", dry_run=dry_run, size_usd=cfg.size_usd,
@@ -477,7 +517,7 @@ def main() -> None:
                     help="place REAL orders (default: simulate fills)")
     args = ap.parse_args()
 
-    executors = rpc_pool = None
+    executors = rpc_pool = wallet = None
     if args.live:
         from eth_account import Account
 
@@ -492,6 +532,7 @@ def main() -> None:
         # non-18-decimal token would be sized catastrophically wrong.
         rpc_pool = RpcPool(chain_cfg["rpc_endpoints"])
         account = Account.from_key(settings.agent_private_key)
+        wallet = account.address
         executors = {
             "1inch": OneInch(account=account, dry_run=False),
             "openocean": OpenOcean(account=account, dry_run=False),
@@ -505,7 +546,7 @@ def main() -> None:
                      max_total_loss_usd=args.max_loss,
                      use_live_quote=not args.replay),
         executors, dry_run=not args.live, once=args.once, rpc_pool=rpc_pool,
-        start_at_end=not args.replay)
+        start_at_end=not args.replay, wallet_address=wallet)
 
 
 if __name__ == "__main__":
