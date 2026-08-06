@@ -178,14 +178,31 @@ def exit_reason(pos: LaunchPosition, price: float | None, liq: float | None,
 class LaunchTrader:
     def __init__(self, cfg: TraderConfig, state: TraderState,
                  executors: dict | None, state_path: Path, journal_path: Path,
-                 dry_run: bool = True) -> None:
+                 dry_run: bool = True, rpc_pool=None) -> None:
         self._cfg = cfg
         self._state = state
         self._executors = executors
         self._state_path = state_path
         self._journal_path = journal_path
         self._dry_run = dry_run
+        self._rpc = rpc_pool
         self._arm_prices: dict[str, float] = {}
+
+    def _token_meta(self, token: str) -> tuple[str, int]:
+        """symbol() and decimals() from the chain.
+
+        Film samples carry NEITHER. Defaulting decimals to 18 is not a cosmetic
+        shortcut: token_amount is computed as wei / 10**decimals, so a 6-decimal
+        token would be recorded a TRILLION times too small, making the entry
+        price and therefore the 6x target meaningless and the sell quantity
+        wrong. Never guess this with real money on the line.
+        """
+        if self._rpc is None:
+            return token[:10], 18
+        # Reuses the monitor's decoder rather than re-implementing ABI parsing,
+        # which has a graceful fallback for tokens with non-standard symbol().
+        from .monitor import _token_meta
+        return _token_meta(self._rpc, token)
 
     # ---------- gates ----------
 
@@ -208,10 +225,12 @@ class LaunchTrader:
     def _buy(self, token: str, symbol: str, price: float,
              now: float) -> LaunchPosition | None:
         size = self._cfg.size_usd
+        decimals = 18
         if self._dry_run or not self._executors:
             amount = size / price
         else:
-            register_discovered(symbol, token, 18)
+            symbol, decimals = self._token_meta(token)
+            register_discovered(symbol, token, decimals)
             ranked = rank_backends(self._executors, "USDT", symbol, size)
             if not ranked:
                 log.warning("launch_buy_no_route", token=symbol)
@@ -219,7 +238,7 @@ class LaunchTrader:
             result = self._executors[ranked[0]].swap("USDT", symbol, size)
             wei = (getattr(result, "received_out_wei", 0)
                    or getattr(result, "expected_out_wei", 0))
-            amount = wei / (10 ** 18)
+            amount = wei / (10 ** decimals)
             if amount <= 0:
                 log.warning("launch_buy_zero_fill", token=symbol)
                 return None
@@ -231,7 +250,8 @@ class LaunchTrader:
         # exit fire against a different timeline than the one that opened it.
         return LaunchPosition(token_address=token, symbol=symbol,
                               entry_price=size / amount, usd_size=size,
-                              token_amount=amount, opened_at=now)
+                              token_amount=amount, opened_at=now,
+                              decimals=decimals, last_price=price)
 
     def _sell(self, pos: LaunchPosition) -> bool:
         if self._dry_run or not self._executors:
@@ -348,7 +368,7 @@ class LaunchTrader:
 
 def run(films_path: Path, state_path: Path, journal_path: Path,
         cfg: TraderConfig, executors: dict | None, dry_run: bool,
-        once: bool = False, interval_s: float = 5.0) -> None:
+        once: bool = False, interval_s: float = 5.0, rpc_pool=None) -> None:
     state = load_state(state_path)
     # A missing film file is indistinguishable from "no new samples yet", so the
     # trader would run forever on zero signals looking healthy. Fail loudly.
@@ -357,7 +377,7 @@ def run(films_path: Path, state_path: Path, journal_path: Path,
             f"no film stream at {films_path} — the collector writes it, and "
             f"without it this trader can never see a signal")
     trader = LaunchTrader(cfg, state, executors, state_path, journal_path,
-                          dry_run=dry_run)
+                          dry_run=dry_run, rpc_pool=rpc_pool)
     # An open position from before a restart has no arm price in memory, but it
     # does not need one — only entries consult _arm_prices.
     log.info("launch_trader_start", dry_run=dry_run, size_usd=cfg.size_usd,
@@ -412,13 +432,20 @@ def main() -> None:
                     help="place REAL orders (default: simulate fills)")
     args = ap.parse_args()
 
-    executors = None
+    executors = rpc_pool = None
     if args.live:
         from eth_account import Account
 
         from ..execution.oneinch import OneInch
         from ..execution.openocean import OpenOcean
         from ..execution.pancakeswap import PancakeSwap
+        from .rpc_pool import RpcPool
+        chain_cfg = json.loads(
+            (ROOT / "data" / "copy_trade" / "config.json").read_text(
+                encoding="utf-8"))["copy_settings"]
+        # Required, not optional: without it decimals fall back to 18 and a
+        # non-18-decimal token would be sized catastrophically wrong.
+        rpc_pool = RpcPool(chain_cfg["rpc_endpoints"])
         account = Account.from_key(settings.agent_private_key)
         executors = {
             "1inch": OneInch(account=account, dry_run=False),
@@ -432,7 +459,7 @@ def main() -> None:
                      bankroll_usd=args.bankroll,
                      max_total_loss_usd=args.max_loss,
                      use_live_quote=not args.replay),
-        executors, dry_run=not args.live, once=args.once)
+        executors, dry_run=not args.live, once=args.once, rpc_pool=rpc_pool)
 
 
 if __name__ == "__main__":

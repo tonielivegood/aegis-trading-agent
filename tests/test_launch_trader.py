@@ -309,6 +309,39 @@ def test_every_close_is_journalled(tmp_path):
 
 # ---------- live-money safety ----------
 
+def test_a_live_buy_sizes_the_position_with_the_tokens_real_decimals(tmp_path):
+    """token_amount = wei / 10**decimals. Film samples carry no decimals, and
+    defaulting to 18 would record a 6-decimal token a TRILLION times too small —
+    entry price, the 6x target and the sell quantity all wrong."""
+    class Result:
+        received_out_wei = 5_000_000            # 5.0 tokens at 6 decimals
+
+    class Exec:
+        def swap(self, *a, **k):
+            return Result()
+
+    class Rpc:
+        def call(self, method, params):
+            sig = params[0]["data"]
+            if sig == "0x313ce567":             # decimals()
+                return hex(6)
+            return None                          # symbol() falls back
+
+    t = LaunchTrader(TraderConfig(size_usd=2.0), TraderState(), {"x": Exec()},
+                     tmp_path / "s.json", tmp_path / "j.jsonl",
+                     dry_run=False, rpc_pool=Rpc())
+    import src.agent.copy_trade.launch_trader as mod
+    monkey = mod.rank_backends
+    mod.rank_backends = lambda ex, a, b, s: ["x"]
+    try:
+        pos = t._buy(T1, "IGNORED", price=1.0, now=NOW)
+    finally:
+        mod.rank_backends = monkey
+    assert pos.decimals == 6
+    assert pos.token_amount == 5.0              # not 5e-12
+    assert pos.entry_price == pytest.approx(0.4)
+
+
 def test_dry_run_never_touches_an_executor(tmp_path):
     class Boom:
         def swap(self, *a, **k):
