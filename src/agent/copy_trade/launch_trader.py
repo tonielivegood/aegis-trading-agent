@@ -76,6 +76,11 @@ class TraderConfig:
     # Refuses to open anything once realised losses reach this. A hard floor the
     # strategy's own maths cannot argue past.
     max_total_loss_usd: float = 25.0
+    # Live runs price the entry off a fresh quote, because a film row can be 30s
+    # stale. Replaying an OLD film must not do that: it would pair a historical
+    # exit price against an entry quoted at today's price. The first replay did
+    # exactly that and reported $26 of profit on a $2 position capped at $10.
+    use_live_quote: bool = True
 
 
 @dataclass
@@ -268,9 +273,12 @@ class LaunchTrader:
     def open(self, token: str, sample: dict, now: float) -> str | None:
         # Price the trade off a LIVE quote, never the film row — a sample can be
         # up to 30s stale and this is the moment real money commits.
-        stats = get_pair_stats(token) or {}
-        price = stats.get("price_usd") or sample.get("price")
-        liq = stats.get("liquidity_usd")
+        if self._cfg.use_live_quote:
+            stats = get_pair_stats(token) or {}
+            price = stats.get("price_usd") or sample.get("price")
+            liq = stats.get("liquidity_usd")
+        else:
+            price, liq = sample.get("price"), sample.get("liq")
         if not price or (liq is not None and liq < MIN_ENTRY_LIQ_USD):
             log.info("launch_entry_aborted_stale", token=token, liq=liq)
             return None
@@ -312,7 +320,8 @@ class LaunchTrader:
         for pos in list(self._state.open_positions.values()):
             if now - pos.opened_at < MAX_HOLD_S:
                 continue
-            stats = get_pair_stats(pos.token_address) or {}
+            stats = (get_pair_stats(pos.token_address) or {}
+                     if self._cfg.use_live_quote else {})
             liq = stats.get("liquidity_usd")
             reason = "dead" if (liq is not None and liq < DEAD_LIQ_USD) else "max_hold"
             self.close(pos, stats.get("price_usd"), reason, now)
@@ -345,9 +354,15 @@ def run(films_path: Path, state_path: Path, journal_path: Path,
     while True:
         rows, state.film_offset = read_new_film_rows(films_path,
                                                      state.film_offset)
+        clock = None
         for row in rows:
-            trader.on_sample(row)
-        trader.sweep_timeouts()
+            # The sample's own timestamp is the clock. Live it is seconds old, so
+            # this is simply more accurate than time.time(); replaying an old
+            # film it is the only coherent choice — on wall-clock time every
+            # replayed position is instantly past the 4h hold limit.
+            clock = row.get("ts") or clock
+            trader.on_sample(row, now=clock)
+        trader.sweep_timeouts(now=clock)
         save_state(state_path, state)
         if once:
             return
@@ -369,6 +384,9 @@ def main() -> None:
     ap.add_argument("--bankroll", type=float, default=50.0)
     ap.add_argument("--max-loss", type=float, default=25.0)
     ap.add_argument("--once", action="store_true")
+    ap.add_argument("--replay", action="store_true",
+                    help="replay an old film: price entries from the film row "
+                         "instead of a live quote, and run on the film's clock")
     # Live money is opt-IN. Every other flag defaults to the safe value, so a
     # mistyped command records instead of spending.
     ap.add_argument("--live", action="store_true",
@@ -393,7 +411,8 @@ def main() -> None:
     run(Path(args.films), Path(args.state), Path(args.journal),
         TraderConfig(size_usd=args.size_usd, max_concurrent=args.max_concurrent,
                      bankroll_usd=args.bankroll,
-                     max_total_loss_usd=args.max_loss),
+                     max_total_loss_usd=args.max_loss,
+                     use_live_quote=not args.replay),
         executors, dry_run=not args.live, once=args.once)
 
 

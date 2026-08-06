@@ -220,6 +220,35 @@ def test_unparseable_lines_do_not_stop_the_stream(tmp_path):
     assert [r["token_address"] for r in rows] == ["0xa"]
 
 
+def test_replay_prices_the_entry_from_the_film_not_a_live_quote(tmp_path):
+    """Replaying an old film through a live quote pairs a historical exit price
+    against an entry quoted at TODAY's price. The first replay did that and
+    reported $26 of profit on a $2 position whose ceiling is $10."""
+    cfg = TraderConfig(size_usd=2.0, use_live_quote=False)
+    t = _trader(tmp_path, cfg=cfg)          # stubbed live quote says $2.00
+    t.on_sample({"event": "arm", "token_address": T1, "price": 1.0}, now=NOW)
+    t.on_sample(_sample(price=8.0), now=NOW)
+    assert t._state.open_positions[T1].entry_price == 8.0    # film, not $2.00
+
+
+def test_replay_runs_on_the_films_clock_not_the_wall_clock(tmp_path):
+    """Film timestamps are days old. On wall-clock time every replayed position
+    is instantly past the 4h hold limit and closes before it can do anything."""
+    films = tmp_path / "films.jsonl"
+    films.write_text("\n".join(json.dumps(r) for r in [
+        {"event": "arm", "token_address": T1, "price": 1.0, "ts": NOW},
+        {"event": "sample", "token_address": T1, "price": 2.0, "liq": 50_000.0,
+         "ts": NOW + 30},
+        {"event": "sample", "token_address": T1, "price": 3.0, "liq": 50_000.0,
+         "ts": NOW + 60},
+    ]) + "\n", encoding="utf-8")
+    lt.run(films, tmp_path / "s.json", tmp_path / "j.jsonl",
+           TraderConfig(size_usd=2.0, use_live_quote=False), None,
+           dry_run=True, once=True)
+    state = load_state(tmp_path / "s.json")
+    assert list(state.open_positions) == [T1]      # still open, not timed out
+
+
 def test_a_missing_film_stream_is_fatal_not_silent(tmp_path):
     """A missing film file reads identically to "no new samples yet". The first
     live run pointed one directory too high and sat there reading nothing, fully
