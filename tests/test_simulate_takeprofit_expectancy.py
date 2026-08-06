@@ -254,6 +254,23 @@ def test_ruin_distribution_is_deterministic_for_a_given_seed():
     assert a == b
 
 
+def test_walk_forward_splits_by_time_and_hides_the_second_half(tmp_path):
+    """Scanning every target over the whole dataset and reporting the best is
+    how a backtest flatters itself. The choice must be made blind to the data it
+    is then judged on."""
+    from scripts.simulate_takeprofit_expectancy import walk_forward
+
+    early = {f"0xe{i}": _samples([1.0, 2.0, 20.0], t0=1_000.0 + i)
+             for i in range(6)}                      # early tokens all run hard
+    late = {f"0xl{i}": _samples([1.0, 2.0, 2.0], t0=9_000.0 + i)
+            for i in range(6)}                       # late tokens go nowhere
+    wf = walk_forward(early | late, {}, Config(fill_delay=0, dex_fee=0.0,
+                                               gas_usd=0.0))
+    assert wf["in_sample"]["n"] == 6 and wf["out_of_sample"]["n"] == 6
+    # The good half must not leak into the held-out numbers.
+    assert wf["in_sample"]["expectancy"] > wf["out_of_sample"]["expectancy"]
+
+
 def test_summarize_averages_every_position_including_the_zeros():
     rows = ([{"outcome": "win", "net_multiple": 6.0}] * 2
             + [{"outcome": "rugged", "net_multiple": 0.0}] * 8)

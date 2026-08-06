@@ -296,6 +296,32 @@ def summarize(results: list[dict], target: float) -> dict:
     }
 
 
+def walk_forward(by_token: dict[str, list[dict]], goplus: dict[str, dict],
+                 cfg: Config) -> dict:
+    """Pick the target on the FIRST half, then apply it blind to the second.
+
+    Scanning every target over the whole dataset and reporting the best one is
+    how a backtest flatters itself. The only honest question is whether a target
+    chosen without seeing the later data still pays on it.
+    """
+    ordered = sorted(((s[0].get("ts") or 0.0, t, s)
+                      for t, s in by_token.items() if s))
+    cut = len(ordered) // 2
+    halves = (ordered[:cut], ordered[cut:])
+
+    def run_half(half, target):
+        rows = [r for r in (simulate_token(s, goplus.get(t), target, cfg)
+                            for _, t, s in half) if r]
+        return summarize(rows, target)
+
+    in_sample = {t: run_half(halves[0], t) for t in TARGETS}
+    best = max(TARGETS, key=lambda t: in_sample[t]["expectancy"])
+    return {"chosen_target": best,
+            "in_sample": in_sample[best],
+            "out_of_sample": run_half(halves[1], best),
+            "all_out_of_sample": {t: run_half(halves[1], t) for t in TARGETS}}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     root = Path(__file__).resolve().parents[1] / "data" / "launch_collector"
@@ -307,12 +333,30 @@ def main() -> None:
     ap.add_argument("--risk", type=float, metavar="TARGET",
                     help="bankroll walk at this take-profit target instead")
     ap.add_argument("--bankroll", type=float, default=500.0)
+    ap.add_argument("--walkforward", action="store_true",
+                    help="choose the target on the first half of the data, "
+                         "then apply it blind to the second")
     args = ap.parse_args()
 
     by_token, rejected = load_token_samples(Path(args.films))
     goplus = load_goplus(Path(args.snapshots))
     print(f"excluded: {rejected['re_armed']} re-armed (only first film kept), "
           f"{rejected['bad_print']} with a bad price print")
+
+    if args.walkforward:
+        cfg = Config(size_usd=args.size_usd, fill_delay=1)
+        wf = walk_forward(by_token, goplus, cfg)
+        ins, oos = wf["in_sample"], wf["out_of_sample"]
+        print(f"\ntarget chosen on the FIRST half only: {wf['chosen_target']}x")
+        print(f"  in-sample     : {ins['n']:>5} trades  "
+              f"{ins['profit_rate']:>6.1%} profitable  {ins['expectancy']:>+7.3f}")
+        print(f"  OUT-OF-SAMPLE : {oos['n']:>5} trades  "
+              f"{oos['profit_rate']:>6.1%} profitable  {oos['expectancy']:>+7.3f}")
+        print("\nevery target on the held-out half (was the choice a knife edge?)")
+        for t, st in wf["all_out_of_sample"].items():
+            print(f"  {t:>5.1f}x  {st['n']:>5} trades  "
+                  f"{st['profit_rate']:>6.1%}  {st['expectancy']:>+7.3f}")
+        return
 
     if args.risk:
         print(f"bankroll walk @ {args.risk}x target, start ${args.bankroll:.0f}, "
