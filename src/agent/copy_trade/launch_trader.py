@@ -50,6 +50,10 @@ ENTRY_MULTIPLE = 2.0
 TAKE_PROFIT_MULTIPLE = 6.0
 MAX_HOLD_S = 4 * 3600
 SWEEP_EVERY_S = 60.0     # how far the clock may advance between timeout sweeps
+# Silence is ambiguous: a trader waiting patiently and a trader wedged on a dead
+# film path look identical in the log, and that exact confusion already cost a
+# live run. The heartbeat states what it is tracking so the two can be told apart.
+HEARTBEAT_S = 300.0
 # A pool this thin cannot absorb the position without moving hard against it.
 # The arm floor is $20k, so this only ever rejects a pool already draining.
 MIN_ENTRY_LIQ_USD = 10_000.0
@@ -396,9 +400,21 @@ def run(films_path: Path, state_path: Path, journal_path: Path,
     log.info("launch_trader_start", dry_run=dry_run, size_usd=cfg.size_usd,
              max_concurrent=cfg.max_concurrent,
              resumed_positions=len(state.open_positions))
+    beat_at = 0.0
+    seen_rows = 0
     while True:
         rows, state.film_offset = read_new_film_rows(films_path,
                                                      state.film_offset)
+        seen_rows += len(rows)
+        if time.time() - beat_at >= HEARTBEAT_S:
+            beat_at = time.time()
+            log.info("launch_trader_heartbeat", rows_seen=seen_rows,
+                     film_offset=state.film_offset,
+                     film_size=films_path.stat().st_size,
+                     tokens_tracked=len(trader._arm_prices),
+                     open_positions=len(state.open_positions),
+                     traded=len(state.traded_tokens),
+                     realised_usd=round(state.realised_pnl_usd, 4))
         clock = swept_at = None
         for row in rows:
             # The sample's own timestamp is the clock. Live it is seconds old, so
