@@ -244,7 +244,7 @@ def test_replay_runs_on_the_films_clock_not_the_wall_clock(tmp_path):
     ]) + "\n", encoding="utf-8")
     lt.run(films, tmp_path / "s.json", tmp_path / "j.jsonl",
            TraderConfig(size_usd=2.0, use_live_quote=False), None,
-           dry_run=True, once=True)
+           dry_run=True, once=True, start_at_end=False)
     state = load_state(tmp_path / "s.json")
     assert list(state.open_positions) == [T1]      # still open, not timed out
 
@@ -266,7 +266,7 @@ def test_slots_are_freed_as_the_clock_advances_through_one_batch(tmp_path):
                      encoding="utf-8")
     lt.run(films, tmp_path / "s.json", tmp_path / "j.jsonl",
            TraderConfig(size_usd=2.0, max_concurrent=1, use_live_quote=False),
-           None, dry_run=True, once=True)
+           None, dry_run=True, once=True, start_at_end=False)
     state = load_state(tmp_path / "s.json")
     assert state.traded_tokens == {T1, T2}      # T1 timed out, freeing the slot
 
@@ -281,6 +281,60 @@ def test_a_timed_out_position_is_sold_at_its_last_price_not_written_off(tmp_path
     assert t.sweep_timeouts(now=NOW + lt.MAX_HOLD_S + 1) == 1
     # bought 1 token at $2, sold at $3
     assert t._state.realised_pnl_usd == pytest.approx(1.0)
+
+
+def test_a_fresh_live_start_skips_the_whole_film_history(tmp_path):
+    """A fresh state starts at offset 0. Reading from there replays every
+    historical sample as if it were happening now — on a live run that is an
+    instant basket of tokens that died days ago, bought at today's prices."""
+    films = tmp_path / "films.jsonl"
+    films.write_text("\n".join(json.dumps(r) for r in [
+        {"event": "arm", "token_address": T1, "price": 1.0, "ts": NOW},
+        {"event": "sample", "token_address": T1, "price": 9.0, "liq": 50_000.0,
+         "ts": NOW + 30},
+    ]) + "\n", encoding="utf-8")
+    lt.run(films, tmp_path / "s.json", tmp_path / "j.jsonl", TraderConfig(),
+           None, dry_run=True, once=True)
+    state = load_state(tmp_path / "s.json")
+    assert state.open_positions == {} and state.traded_tokens == set()
+    assert state.film_offset == films.stat().st_size
+
+
+def test_replay_deliberately_reads_from_the_beginning(tmp_path):
+    films = tmp_path / "films.jsonl"
+    films.write_text("\n".join(json.dumps(r) for r in [
+        {"event": "arm", "token_address": T1, "price": 1.0, "ts": NOW},
+        {"event": "sample", "token_address": T1, "price": 9.0, "liq": 50_000.0,
+         "ts": NOW + 30},
+    ]) + "\n", encoding="utf-8")
+    lt.run(films, tmp_path / "s.json", tmp_path / "j.jsonl",
+           TraderConfig(use_live_quote=False), None, dry_run=True, once=True,
+           start_at_end=False)
+    assert load_state(tmp_path / "s.json").traded_tokens == {T1}
+
+
+def test_an_interrupted_run_resumes_instead_of_jumping_to_the_end(tmp_path):
+    """Seeking to the end applies only to a genuinely fresh start. A restart
+    with a stored offset must still process the samples it had not reached, or
+    an open position's take-profit could be skipped over."""
+    first = json.dumps({"event": "arm", "token_address": T1, "price": 1.0,
+                        "ts": NOW}) + "\n"
+    second = json.dumps({"event": "arm", "token_address": T2, "price": 1.0,
+                         "ts": NOW + 1}) + "\n"
+    third = json.dumps({"event": "sample", "token_address": T2, "price": 2.0,
+                        "liq": 50_000.0, "ts": NOW + 30}) + "\n"
+    films = tmp_path / "films.jsonl"
+    films.write_text(first + second + third, encoding="utf-8")
+    # Stopped just after the first line.
+    save_state(tmp_path / "s.json",
+               TraderState(film_offset=len(first.encode("utf-8"))))
+    lt.run(films, tmp_path / "s.json", tmp_path / "j.jsonl",
+           TraderConfig(size_usd=2.0, use_live_quote=False), None,
+           dry_run=True, once=True)
+    state = load_state(tmp_path / "s.json")
+    # T2's arm and its 2x sample were both still ahead of the offset, so the
+    # entry must have been taken rather than skipped by a jump to EOF.
+    assert state.traded_tokens == {T2}
 
 
 def test_a_missing_film_stream_is_fatal_not_silent(tmp_path):

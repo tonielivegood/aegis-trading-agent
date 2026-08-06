@@ -368,7 +368,8 @@ class LaunchTrader:
 
 def run(films_path: Path, state_path: Path, journal_path: Path,
         cfg: TraderConfig, executors: dict | None, dry_run: bool,
-        once: bool = False, interval_s: float = 5.0, rpc_pool=None) -> None:
+        once: bool = False, interval_s: float = 5.0, rpc_pool=None,
+        start_at_end: bool = True) -> None:
     state = load_state(state_path)
     # A missing film file is indistinguishable from "no new samples yet", so the
     # trader would run forever on zero signals looking healthy. Fail loudly.
@@ -376,6 +377,13 @@ def run(films_path: Path, state_path: Path, journal_path: Path,
         raise FileNotFoundError(
             f"no film stream at {films_path} — the collector writes it, and "
             f"without it this trader can never see a signal")
+    # A fresh state starts at offset 0, which means replaying the WHOLE film
+    # history as if it were happening now — on a live run that is an instant
+    # basket of tokens that died days ago. Start at the end of the file unless
+    # deliberately replaying.
+    if start_at_end and not state.film_offset and not state.open_positions:
+        state.film_offset = films_path.stat().st_size
+        log.info("launch_trader_seek_end", offset=state.film_offset)
     trader = LaunchTrader(cfg, state, executors, state_path, journal_path,
                           dry_run=dry_run, rpc_pool=rpc_pool)
     # An open position from before a restart has no arm price in memory, but it
@@ -459,7 +467,8 @@ def main() -> None:
                      bankroll_usd=args.bankroll,
                      max_total_loss_usd=args.max_loss,
                      use_live_quote=not args.replay),
-        executors, dry_run=not args.live, once=args.once, rpc_pool=rpc_pool)
+        executors, dry_run=not args.live, once=args.once, rpc_pool=rpc_pool,
+        start_at_end=not args.replay)
 
 
 if __name__ == "__main__":
