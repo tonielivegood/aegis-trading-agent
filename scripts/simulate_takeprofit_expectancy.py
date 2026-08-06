@@ -37,9 +37,14 @@ TARGETS = [3.0, 4.0, 5.0, 6.0, 8.0, 10.0]
 # PancakeSwap V2 charges 0.25% per swap; the GoPlus records confirm pool_fee
 # "0.0025" on these pairs.
 DEX_FEE = 0.0025
-# BSC gas for a swap, generously rounded up. Measured receipts put it far lower,
-# but it is charged twice (in and out) and it is noise against a 5x payout.
-GAS_USD = 0.30
+# MEASURED on BSC 2026-08-06, not estimated: gas price 0.0500 Gwei, BNB $594.57,
+# so a 200k-gas swap costs $0.0059. Rounded up ~2x for headroom.
+#
+# This was 0.30 — fifty times too high — and at a $2 position that single wrong
+# constant cut measured expectancy from +0.31 to +0.113, which would have argued
+# against a small live test on nothing but a guess. BSC gas is not Ethereum gas;
+# take it from a receipt or the chain, never from intuition.
+GAS_USD = 0.012
 
 
 @dataclass(frozen=True)
