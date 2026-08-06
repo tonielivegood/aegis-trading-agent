@@ -192,13 +192,29 @@ def test_a_film_with_an_impossible_price_jump_is_thrown_out(tmp_path):
     assert rejected["bad_print"] == 1
 
 
-def test_a_crash_print_is_rejected_the_same_as_a_spike(tmp_path):
+def test_a_large_but_believable_climb_is_kept(tmp_path):
+    """Real 30s moves in this data reach x12. The threshold sits two orders
+    above that so it only ever catches the corrupt class."""
     tok = "0xaaa"
     path = _write_film(tmp_path, [
-        _arm(tok), _s(tok, 100, 1000.0), _s(tok, 130, 0.001),
+        _arm(tok), _s(tok, 100, 1.0), _s(tok, 130, 12.45), _s(tok, 160, 14.0),
     ])
     by_token, rejected = load_token_samples(path)
-    assert tok not in by_token and rejected["bad_print"] == 1
+    assert tok in by_token and rejected["bad_print"] == 0
+
+
+def test_a_rug_is_KEPT_however_violently_the_price_falls(tmp_path):
+    """24 of 25 deaths go from healthy liquidity to under $1k inside one 30s
+    sample, so a violent fall is the strategy's real loss mode. Rejecting those
+    as bad prints removed 80% of the dataset — almost all of it losers — and
+    lifted expectancy from +0.32 to +0.79. A filter that deletes the losing half
+    is more dangerous than the glitch it was written to remove."""
+    tok = "0xaaa"
+    path = _write_film(tmp_path, [
+        _arm(tok), _s(tok, 100, 1000.0), _s(tok, 130, 0.001, liq=0.5),
+    ])
+    by_token, rejected = load_token_samples(path)
+    assert tok in by_token and rejected["bad_print"] == 0
 
 
 def test_samples_before_any_arm_row_are_ignored(tmp_path):

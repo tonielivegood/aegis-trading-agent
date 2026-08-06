@@ -52,12 +52,22 @@ class Config:
     gas_usd: float = GAS_USD
 
 
-# A price that moves more than this between two consecutive 30s samples is a bad
-# print, not a trade. Real winners climb far more gradually — the median biggest
-# single-sample jump across winners is x1.18. Measured 5/8: one "winner" jumped
-# x22,996 in one sample, and DexScreener has separately returned $1.7 BILLION
-# liquidity for a $30k pool, so bad prints in this feed are established fact.
-MAX_SANE_SAMPLE_JUMP = 10.0
+# An UPWARD price move larger than this between two consecutive 30s samples is a
+# bad print, not a trade: measured 5/8, one "winner" jumped x22,996 in a single
+# sample, and DexScreener separately reported $1.7 BILLION liquidity for a $30k
+# pool, so corrupt readings in this feed are established fact.
+#
+# Only upward moves are tested. A large DOWNWARD move in one sample is the
+# strategy's actual loss mode — 24 of 25 deaths go from healthy liquidity to
+# under $1k inside one 30s sample — so rejecting those threw out 80% of the
+# dataset, almost all of it losers, and lifted expectancy from +0.32 to +0.79.
+# A filter that deletes the losing half is far more dangerous than the glitch it
+# was written to remove.
+#
+# ponytail: a flat threshold, not spike-and-revert detection. Legitimate 30s
+# moves seen in this data reach x12; x100 is two orders above that and only ever
+# catches the corrupt class. Tighten if real prints ever approach it.
+MAX_SANE_UPWARD_JUMP = 100.0
 
 
 def load_token_samples(path: Path) -> tuple[dict[str, list[dict]], dict[str, int]]:
@@ -96,8 +106,7 @@ def load_token_samples(path: Path) -> tuple[dict[str, list[dict]], dict[str, int
 
 def _has_bad_print(samples: list[dict]) -> bool:
     prices = [s["price"] for s in samples if s.get("price")]
-    return any(prices[i + 1] / prices[i] > MAX_SANE_SAMPLE_JUMP
-               or prices[i] / prices[i + 1] > MAX_SANE_SAMPLE_JUMP
+    return any(prices[i + 1] / prices[i] > MAX_SANE_UPWARD_JUMP
                for i in range(len(prices) - 1))
 
 
