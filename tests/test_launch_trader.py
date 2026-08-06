@@ -220,6 +220,20 @@ def test_unparseable_lines_do_not_stop_the_stream(tmp_path):
     assert [r["token_address"] for r in rows] == ["0xa"]
 
 
+def test_a_missing_film_stream_is_fatal_not_silent(tmp_path):
+    """A missing film file reads identically to "no new samples yet". The first
+    live run pointed one directory too high and sat there reading nothing, fully
+    healthy-looking, with film_offset stuck at 0."""
+    with pytest.raises(FileNotFoundError):
+        lt.run(tmp_path / "absent.jsonl", tmp_path / "s.json",
+               tmp_path / "j.jsonl", TraderConfig(), None, dry_run=True,
+               once=True)
+
+
+def test_the_default_film_path_points_inside_the_project():
+    assert (lt.ROOT / "src" / "agent" / "copy_trade" / "launch_trader.py").exists()
+
+
 def test_every_close_is_journalled(tmp_path):
     t = _trader(tmp_path)
     t.on_sample({"event": "arm", "token_address": T1, "price": 1.0}, now=NOW)

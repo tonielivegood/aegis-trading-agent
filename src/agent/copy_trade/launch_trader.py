@@ -40,6 +40,12 @@ from .prices import get_pair_stats
 
 log = get_logger(__name__)
 
+# parents[3], the same anchor launch_collector and monitor use. parents[4] walks
+# one level ABOVE the project and silently produces a films path that does not
+# exist, which read_new_film_rows treats as "nothing new yet" — the trader then
+# runs forever reading zero signals and looking perfectly healthy.
+ROOT = Path(__file__).resolve().parents[3]
+
 ENTRY_MULTIPLE = 2.0
 TAKE_PROFIT_MULTIPLE = 6.0
 MAX_HOLD_S = 4 * 3600
@@ -323,6 +329,12 @@ def run(films_path: Path, state_path: Path, journal_path: Path,
         cfg: TraderConfig, executors: dict | None, dry_run: bool,
         once: bool = False, interval_s: float = 5.0) -> None:
     state = load_state(state_path)
+    # A missing film file is indistinguishable from "no new samples yet", so the
+    # trader would run forever on zero signals looking healthy. Fail loudly.
+    if not films_path.exists():
+        raise FileNotFoundError(
+            f"no film stream at {films_path} — the collector writes it, and "
+            f"without it this trader can never see a signal")
     trader = LaunchTrader(cfg, state, executors, state_path, journal_path,
                           dry_run=dry_run)
     # An open position from before a restart has no arm price in memory, but it
@@ -344,7 +356,7 @@ def run(films_path: Path, state_path: Path, journal_path: Path,
 
 def main() -> None:
     import argparse
-    root = Path(__file__).resolve().parents[4]
+    root = ROOT
     ap = argparse.ArgumentParser(description="Launch method trader")
     ap.add_argument("--films", default=str(root / "data" / "launch_collector"
                                            / "films.jsonl"))
