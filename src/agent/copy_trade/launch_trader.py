@@ -57,6 +57,9 @@ HEARTBEAT_S = 300.0
 # A pool this thin cannot absorb the position without moving hard against it.
 # The arm floor is $20k, so this only ever rejects a pool already draining.
 MIN_ENTRY_LIQ_USD = 10_000.0
+# BSC-USDT (0x55d3…7955) is an 18-decimal token, unlike USDT on Ethereum which
+# has 6. Getting this wrong misreads every sale by a factor of a trillion.
+USDT_DECIMALS = 18
 
 
 @dataclass
@@ -257,21 +260,30 @@ class LaunchTrader:
                               token_amount=amount, opened_at=now,
                               decimals=decimals, last_price=price)
 
-    def _sell(self, pos: LaunchPosition) -> bool:
+    def _sell(self, pos: LaunchPosition, price: float | None) -> float | None:
+        """USDT actually received, or None if every backend failed.
+
+        This used to return a bool and the caller valued the exit at
+        film_price * token_amount — an ESTIMATE. Realised P&L drives
+        max_total_loss_usd, the one hard stop on this strategy, and a safety
+        limit computed from a number nobody received is not a safety limit.
+        """
         if self._dry_run or not self._executors:
-            return True
+            return (price or pos.last_price or 0.0) * pos.token_amount
         ranked = rank_backends(self._executors, pos.symbol, "USDT",
                                pos.token_amount)
         for backend in ranked:
             try:
-                self._executors[backend].swap(pos.symbol, "USDT",
-                                              pos.token_amount)
-                return True
+                result = self._executors[backend].swap(pos.symbol, "USDT",
+                                                       pos.token_amount)
+                wei = (getattr(result, "received_out_wei", 0)
+                       or getattr(result, "expected_out_wei", 0))
+                return wei / (10 ** USDT_DECIMALS)
             except Exception as e:      # noqa: BLE001 — try every backend
                 log.warning("launch_sell_failed", token=pos.symbol,
                             backend=backend, error=str(e))
         log.error("launch_sell_all_backends_failed", token=pos.symbol)
-        return False
+        return None
 
     # ---------- the loop's two halves ----------
 
@@ -334,15 +346,19 @@ class LaunchTrader:
               now: float) -> str:
         # A dead pool has no buyer. Book the loss and stop — retrying a sell into
         # drained liquidity burns gas on every tick for nothing.
-        if reason != "dead" and not self._sell(pos):
-            return "sell_failed"        # keep it open; the next sample retries
-        proceeds = 0.0 if reason == "dead" else (price or 0.0) * pos.token_amount
+        if reason == "dead":
+            proceeds = 0.0
+        else:
+            proceeds = self._sell(pos, price)
+            if proceeds is None:
+                return "sell_failed"    # keep it open; the next sample retries
         pnl = proceeds - pos.usd_size
         self._state.realised_pnl_usd += pnl
         self._state.open_positions.pop(pos.token_address, None)
         pos.closed_at, pos.exit_price, pos.reason = now, price, reason
         save_state(self._state_path, self._state)
-        self._journal(vars(pos) | {"pnl_usd": round(pnl, 4)})
+        self._journal(vars(pos) | {"pnl_usd": round(pnl, 4),
+                                   "proceeds_usd": round(proceeds, 6)})
         log.info("launch_position_closed", token=pos.symbol, reason=reason,
                  pnl_usd=round(pnl, 4),
                  realised=round(self._state.realised_pnl_usd, 4))

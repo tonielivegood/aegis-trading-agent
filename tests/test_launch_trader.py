@@ -137,7 +137,7 @@ def test_a_position_opens_then_takes_profit_through_the_sample_stream(tmp_path):
 def test_a_dead_pool_books_a_total_loss_and_never_tries_to_sell(tmp_path):
     sold = []
     t = _trader(tmp_path)
-    t._sell = lambda pos: sold.append(pos) or True
+    t._sell = lambda pos, price: sold.append(pos) or 0.0
     t.on_sample({"event": "arm", "token_address": T1, "price": 1.0}, now=NOW)
     t.on_sample(_sample(price=2.0), now=NOW)
     assert t.on_sample(_sample(price=1e-9, liq=0.5), now=NOW + 60) == "dead"
@@ -147,7 +147,7 @@ def test_a_dead_pool_books_a_total_loss_and_never_tries_to_sell(tmp_path):
 
 def test_a_failed_sell_keeps_the_position_open_for_a_retry(tmp_path):
     t = _trader(tmp_path)
-    t._sell = lambda pos: False
+    t._sell = lambda pos, price: None
     t.on_sample({"event": "arm", "token_address": T1, "price": 1.0}, now=NOW)
     t.on_sample(_sample(price=2.0), now=NOW)
     assert t.on_sample(_sample(price=12.0), now=NOW + 60) == "sell_failed"
@@ -413,6 +413,35 @@ def test_a_live_buy_sizes_the_position_with_the_tokens_real_decimals(tmp_path):
     assert pos.decimals == 6
     assert pos.token_amount == 5.0              # not 5e-12
     assert pos.entry_price == pytest.approx(0.4)
+
+
+def test_realised_pnl_uses_the_usdt_ACTUALLY_received(tmp_path):
+    """P&L drove max_total_loss_usd — the one hard stop on this strategy — off
+    film_price * token_amount, an estimate nobody received. A safety limit
+    computed from a number that never existed is not a safety limit."""
+    class Result:
+        received_out_wei = 3 * 10 ** 18          # $3.00 really came back
+
+    class Exec:
+        def swap(self, *a, **k):
+            return Result()
+
+    t = LaunchTrader(TraderConfig(size_usd=2.0), TraderState(), {"x": Exec()},
+                     tmp_path / "s.json", tmp_path / "j.jsonl", dry_run=False)
+    pos = LaunchPosition(T1, "TKN", entry_price=2.0, usd_size=2.0,
+                         token_amount=1.0, opened_at=NOW, last_price=99.0)
+    t._state.open_positions[T1] = pos
+    import src.agent.copy_trade.launch_trader as mod
+    keep = mod.rank_backends
+    mod.rank_backends = lambda ex, a, b, s: ["x"]
+    try:
+        # The film says the position is worth $99; the chain returned $3.
+        t.close(pos, price=99.0, reason="take_profit", now=NOW + 60)
+    finally:
+        mod.rank_backends = keep
+    assert t._state.realised_pnl_usd == pytest.approx(1.0)      # 3.00 - 2.00
+    row = json.loads((tmp_path / "j.jsonl").read_text(encoding="utf-8"))
+    assert row["proceeds_usd"] == 3.0
 
 
 def test_dry_run_never_touches_an_executor(tmp_path):
