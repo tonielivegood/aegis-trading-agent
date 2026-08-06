@@ -2,7 +2,7 @@ import json
 
 from scripts.simulate_takeprofit_expectancy import (
     Config, _terminal, find_entry, is_unsellable, load_token_samples,
-    simulate_token, summarize,
+    ruin_distribution, simulate_token, summarize,
 )
 
 # Fill immediately and charge nothing, so each test isolates the behaviour it
@@ -224,6 +224,34 @@ def test_samples_before_any_arm_row_are_ignored(tmp_path):
     ])
     by_token, _ = load_token_samples(path)
     assert [s["price"] for s in by_token[tok]] == [1.0, 1.1]
+
+
+def test_ruin_rises_with_position_size_on_the_same_edge():
+    """The historical order is one path decided largely by early luck — removing
+    31 corrupt films flipped the $100 result from -84% to +5288% without
+    touching per-trade expectancy. Sizing has to be chosen off the spread."""
+    # 25% of trades pay 6x, 75% pay nothing: positive expectancy, brutal shape.
+    rows = []
+    for i in range(200):
+        mult = 6.0 if i % 4 == 0 else 0.0
+        rows.append({"outcome": "x", "net_multiple": mult,
+                     "entry_ts": i * 100.0, "exit_ts": i * 100.0 + 50.0})
+    small = ruin_distribution(rows, Config(size_usd=10.0, fill_delay=0),
+                              bankroll=500.0, max_concurrent=3, trials=100)
+    large = ruin_distribution(rows, Config(size_usd=250.0, fill_delay=0),
+                              bankroll=500.0, max_concurrent=3, trials=100)
+    assert small["ruin_rate"] < large["ruin_rate"]
+    assert small["p05"] > large["p05"]
+
+
+def test_ruin_distribution_is_deterministic_for_a_given_seed():
+    rows = [{"outcome": "x", "net_multiple": 6.0 if i % 4 == 0 else 0.0,
+             "entry_ts": i * 100.0, "exit_ts": i * 100.0 + 50.0}
+            for i in range(80)]
+    cfg = Config(size_usd=25.0, fill_delay=0)
+    a = ruin_distribution(rows, cfg, 500.0, 3, trials=50, seed=1)
+    b = ruin_distribution(rows, cfg, 500.0, 3, trials=50, seed=1)
+    assert a == b
 
 
 def test_summarize_averages_every_position_including_the_zeros():

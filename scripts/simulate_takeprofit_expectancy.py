@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -220,6 +221,40 @@ def simulate_token(samples: list[dict], goplus: dict | None, target: float,
     return _done(outcome, max(proceeds, 0.0) / spent, sell.get("ts"))
 
 
+def ruin_distribution(rows: list[dict], cfg: Config, bankroll: float,
+                      max_concurrent: int, trials: int = 400,
+                      seed: int = 7) -> dict:
+    """Terminal bankroll over many reshuffles of the trade order.
+
+    The historical order is ONE path, and at larger position sizes it is decided
+    almost entirely by early luck: removing 31 corrupt films flipped the $100
+    result from -84% to +5288% without touching the per-trade expectancy. A
+    single path cannot answer "what size is safe"; the spread can.
+
+    ponytail: plain shuffling, which destroys any real time-clustering of rugs.
+    That makes ruin look LESS likely than reality if rugs arrive in bursts.
+    Upgrade to a block bootstrap if the sizing decision ends up near the edge.
+    """
+    rng = random.Random(seed)
+    order = list(rows)
+    ends = []
+    for _ in range(trials):
+        rng.shuffle(order)
+        # Re-time the shuffled trades onto the original schedule so holding
+        # periods and therefore slot contention stay realistic.
+        schedule = sorted((r.get("entry_ts") or 0.0, (r.get("exit_ts") or 0.0)
+                           - (r.get("entry_ts") or 0.0)) for r in rows)
+        walk = [{**r, "entry_ts": start, "exit_ts": start + held}
+                for r, (start, held) in zip(order, schedule)]
+        ends.append(_terminal(walk, cfg, bankroll, max_concurrent))
+    ends.sort()
+    return {
+        "p05": ends[int(trials * 0.05)], "median": ends[trials // 2],
+        "p95": ends[int(trials * 0.95)],
+        "ruin_rate": sum(1 for e in ends if e < bankroll * 0.5) / trials,
+    }
+
+
 def _terminal(rows: list[dict], cfg: Config, bankroll: float,
               max_concurrent: int) -> float:
     """Walk the trades in the order they actually happened, holding capital for
@@ -277,16 +312,19 @@ def main() -> None:
     if args.risk:
         print(f"bankroll walk @ {args.risk}x target, start ${args.bankroll:.0f}, "
               f"{len(by_token)} tokens filmed over the collected window\n")
-        print(f"{'size':>7} {'slots':>6} {'final':>10} {'return':>9}")
+        print(f"{'size':>6} {'slots':>6} {'historical':>11} "
+              f"{'p05':>9} {'median':>9} {'p95':>10} {'ruin':>7}")
         for size in (5.0, 10.0, 25.0, 50.0, 100.0):
             cfg = Config(size_usd=size, fill_delay=1)
             rows = [r for r in
                     (simulate_token(s, goplus.get(t), args.risk, cfg, args.dominance)
                      for t, s in by_token.items()) if r]
             for slots in (3, 5, 10):
-                end = _terminal(rows, cfg, args.bankroll, slots)
-                print(f"{size:>6.0f}$ {slots:>6} {end:>10.2f} "
-                      f"{end / args.bankroll - 1:>+8.1%}")
+                hist = _terminal(rows, cfg, args.bankroll, slots)
+                d = ruin_distribution(rows, cfg, args.bankroll, slots)
+                print(f"{size:>5.0f}$ {slots:>6} {hist:>11.0f} "
+                      f"{d['p05']:>9.0f} {d['median']:>9.0f} {d['p95']:>10.0f} "
+                      f"{d['ruin_rate']:>6.1%}")
         return
 
     print(f"tokens with film data: {len(by_token)}   size ${args.size_usd:.0f}/trade")
